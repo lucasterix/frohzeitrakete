@@ -1,4 +1,5 @@
 from app.clients.patti_client import PattiClient
+from app.models.user import User
 
 
 def map_service_history_to_mobile_patient(item: dict) -> dict:
@@ -48,3 +49,10 @@ def get_mobile_patients_for_person(person_id: int) -> list[dict]:
         result.append(map_service_history_to_mobile_patient(item))
 
     return result
+
+
+def get_patients_for_user(db, user: User) -> list[dict]:
+    if not user.patti_person_id:
+        return []
+
+    return get_mobile_patients_for_person(user.patti_person_id)
