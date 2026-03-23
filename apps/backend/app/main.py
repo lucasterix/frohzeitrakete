@@ -5,11 +5,18 @@ from app.api.admin_users import router as admin_users_router
 from app.api.auth import router as auth_router
 from app.api.mobile import router as mobile_router
 
+import os
+
 app = FastAPI(title="FrohZeitRakete Backend")
 
 origins = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    os.getenv("ADMIN_FRONTEND_URL", ""),
 ]
+
+# leere Einträge entfernen
+origins = [o for o in origins if o]
 
 app.add_middleware(
     CORSMiddleware,
