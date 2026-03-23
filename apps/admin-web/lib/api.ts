@@ -1,6 +1,10 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.froehlichdienste.de";
 
+/* =========================
+   TYPES
+========================= */
+
 export type User = {
   id: number;
   email: string;
@@ -64,8 +68,63 @@ export type SessionInfo = {
   is_current: boolean;
 };
 
+/* =========================
+   SIGNATURE TYPES
+========================= */
+
+export type SignatureAsset = {
+  id: number;
+  svg_content: string;
+  width?: number | null;
+  height?: number | null;
+};
+
+export type SignatureEvent = {
+  id: number;
+  patient_id: number;
+  document_type: string;
+  status: string;
+  signer_name: string;
+  info_text_version?: string | null;
+  source: string;
+  note?: string | null;
+  created_by_user_id?: number | null;
+  signed_at: string;
+  created_at: string;
+  updated_at: string;
+  asset?: SignatureAsset | null;
+};
+
+export type ActivityFeedItem = {
+  id: number;
+  event_type: string;
+  title: string;
+  subtitle: string;
+  created_at: string;
+  signature_event_id: number;
+};
+
+export type CreateTestSignaturePayload = {
+  patient_id: number;
+  document_type:
+    | "leistungsnachweis"
+    | "vp_antrag"
+    | "pflegeumwandlung";
+  signer_name: string;
+  info_text_version?: string | null;
+  svg_content: string;
+  width?: number | null;
+  height?: number | null;
+  note?: string | null;
+};
+
+/* =========================
+   HELPERS
+========================= */
+
 function getDeviceName(): string {
   if (typeof window === "undefined") return "unknown-device";
+
   return `${navigator.platform} · ${navigator.userAgent}`.slice(0, 180);
 }
 
@@ -76,16 +135,27 @@ function buildHeaders(): HeadersInit {
   };
 }
 
-async function parseError(response: Response, fallback: string): Promise<string> {
+async function parseError(
+  response: Response,
+  fallback: string
+): Promise<string> {
   try {
     const data = await response.json();
-    return typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
+
+    if (typeof data?.detail === "string") {
+      return data.detail;
+    }
+
+    return JSON.stringify(data);
   } catch {
     return fallback;
   }
 }
 
-async function fetchWithRefresh(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+async function fetchWithRefresh(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
   let response = await fetch(input, {
     credentials: "include",
     ...init,
@@ -95,11 +165,14 @@ async function fetchWithRefresh(input: RequestInfo | URL, init?: RequestInit): P
     return response;
   }
 
-  const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers: buildHeaders(),
-  });
+  const refreshResponse = await fetch(
+    `${API_BASE_URL}/auth/refresh`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: buildHeaders(),
+    }
+  );
 
   if (!refreshResponse.ok) {
     return response;
@@ -113,16 +186,27 @@ async function fetchWithRefresh(input: RequestInfo | URL, init?: RequestInit): P
   return response;
 }
 
-export async function login(payload: LoginPayload): Promise<AuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    credentials: "include",
-    headers: buildHeaders(),
-    body: JSON.stringify(payload),
-  });
+/* =========================
+   AUTH
+========================= */
+
+export async function login(
+  payload: LoginPayload
+): Promise<AuthResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/login`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Login fehlgeschlagen"));
+    throw new Error(
+      await parseError(response, "Login fehlgeschlagen")
+    );
   }
 
   return response.json();
@@ -137,66 +221,120 @@ export async function logout(): Promise<void> {
 }
 
 export async function getMe(): Promise<User> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/auth/me`, {
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/auth/me`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Laden des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden des Users"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function getMySessions(): Promise<SessionInfo[]> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/auth/sessions`, {
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
+/* =========================
+   SESSIONS
+========================= */
+
+export async function getMySessions(): Promise<
+  SessionInfo[]
+> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/auth/sessions`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Laden der Sessions"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Sessions"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function revokeMySession(sessionId: number): Promise<SessionInfo> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/auth/sessions/${sessionId}/revoke`, {
-    method: "POST",
-    headers: buildHeaders(),
-  });
+export async function revokeMySession(
+  sessionId: number
+): Promise<SessionInfo> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/auth/sessions/${sessionId}/revoke`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Widerrufen der Session"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Widerrufen der Session"
+      )
+    );
   }
 
   return response.json();
 }
+
+/* =========================
+   USERS (ADMIN)
+========================= */
 
 export async function getUsers(): Promise<User[]> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users`, {
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Laden der User"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der User"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function createUser(payload: CreateUserPayload): Promise<User> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users`, {
-    method: "POST",
-    headers: buildHeaders(),
-    body: JSON.stringify(payload),
-  });
+export async function createUser(
+  payload: CreateUserPayload
+): Promise<User> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Erstellen des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Erstellen des Users"
+      )
+    );
   }
 
   return response.json();
@@ -206,64 +344,112 @@ export async function updateUser(
   userId: number,
   payload: UpdateUserPayload
 ): Promise<User> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users/${userId}`, {
-    method: "PATCH",
-    headers: buildHeaders(),
-    body: JSON.stringify(payload),
-  });
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}`,
+    {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Aktualisieren des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Aktualisieren des Users"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function activateUser(userId: number): Promise<User> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users/${userId}/activate`, {
-    method: "POST",
-    headers: buildHeaders(),
-  });
+export async function activateUser(
+  userId: number
+): Promise<User> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/activate`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Aktivieren des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Aktivieren des Users"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function deactivateUser(userId: number): Promise<User> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users/${userId}/deactivate`, {
-    method: "POST",
-    headers: buildHeaders(),
-  });
+export async function deactivateUser(
+  userId: number
+): Promise<User> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/deactivate`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Deaktivieren des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Deaktivieren des Users"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function deleteUser(userId: number): Promise<void> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users/${userId}`, {
-    method: "DELETE",
-    headers: buildHeaders(),
-  });
+export async function deleteUser(
+  userId: number
+): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}`,
+    {
+      method: "DELETE",
+      headers: buildHeaders(),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Löschen des Users"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Löschen des Users"
+      )
+    );
   }
 }
 
-export async function getUserSessions(userId: number): Promise<SessionInfo[]> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/users/${userId}/sessions`, {
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
+export async function getUserSessions(
+  userId: number
+): Promise<SessionInfo[]> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/sessions`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Laden der User-Sessions"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der User-Sessions"
+      )
+    );
   }
 
   return response.json();
@@ -282,20 +468,136 @@ export async function revokeUserSession(
   );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Widerrufen der Session"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Widerrufen der Session"
+      )
+    );
   }
 
   return response.json();
 }
 
-export async function getMyPatients(): Promise<Patient[]> {
-  const response = await fetchWithRefresh(`${API_BASE_URL}/mobile/patients`, {
-    headers: buildHeaders(),
-    cache: "no-store",
-  });
+/* =========================
+   PATIENTS (MOBILE)
+========================= */
+
+export async function getMyPatients(): Promise<
+  Patient[]
+> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/mobile/patients`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(await parseError(response, "Fehler beim Laden der Patienten"));
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Patienten"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+/* =========================
+   SIGNATURES (ADMIN)
+========================= */
+
+export async function getSignatures(): Promise<
+  SignatureEvent[]
+> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/signatures`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Signaturen"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+export async function getSignature(
+  signatureId: number
+): Promise<SignatureEvent> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/signatures/${signatureId}`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Signatur"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+export async function getActivityFeed(): Promise<
+  ActivityFeedItem[]
+> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/activity-feed`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden des Activity-Feeds"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+export async function createTestSignature(
+  payload: CreateTestSignaturePayload
+): Promise<SignatureEvent> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/test-signatures`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Speichern der Test-Signatur"
+      )
+    );
   }
 
   return response.json();
