@@ -5,6 +5,7 @@ import os
 from app.api.admin_users import router as admin_users_router
 from app.api.auth import router as auth_router
 from app.api.mobile import router as mobile_router
+from app.api.admin_signatures import router as admin_signatures_router
 
 app = FastAPI(title="FrohZeitRakete Backend")
 
@@ -29,6 +30,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(mobile_router, prefix="/mobile", tags=["mobile"])
 app.include_router(admin_users_router, prefix="/admin", tags=["admin"])
+app.include_router(admin_signatures_router, prefix="/admin", tags=["admin-signatures"])
 
 
 @app.get("/health")
