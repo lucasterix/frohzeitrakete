@@ -24,3 +24,15 @@ node_modules/
 
 # Logs
 *.log
+
+# Next.js
+.next
+node_modules
+
+# env
+.env
+.env.local
+
+# python
+.venv
+__pycache__
