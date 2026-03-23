@@ -36,3 +36,7 @@ node_modules
 # python
 .venv
 __pycache__
+
+apps/admin-web/.next
+apps/admin-web/.env.local
+infra/staging/.env
