@@ -1,17 +1,20 @@
+import "./globals.css";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import AdminSidebar from "@/components/admin-sidebar";
 
-export default function AdminLayout({
+export const metadata: Metadata = {
+  title: "FrohZeitRakete Admin",
+  description: "Admin UI für Backend Tests",
+};
+
+export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: ReactNode;
-}) {
+}>) {
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[260px_1fr]">
-        <AdminSidebar />
-        <div>{children}</div>
-      </div>
-    </main>
+    <html lang="de">
+      <body className="bg-slate-50 text-slate-900">{children}</body>
+    </html>
   );
 }
