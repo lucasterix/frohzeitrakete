@@ -40,3 +40,22 @@ __pycache__
 apps/admin-web/.next
 apps/admin-web/.env.local
 infra/staging/.env
+
+# Claude Code local config
+.claude/
+
+# Flutter (mobile app)
+apps/mobile/build/
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.metadata
+apps/mobile/ios/Pods/
+apps/mobile/macos/Pods/
+apps/mobile/ios/.symlinks/
+apps/mobile/macos/.symlinks/
+apps/mobile/*.iml
+apps/mobile/**/GeneratedPluginRegistrant.*
+apps/mobile/ios/Flutter/Flutter.framework
+apps/mobile/ios/Flutter/Flutter.podspec
+apps/mobile/macos/Flutter/ephemeral/
