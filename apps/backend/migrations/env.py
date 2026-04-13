@@ -9,6 +9,7 @@ import app.models.user  # noqa: F401
 import app.models.refresh_token  # noqa: F401
 import app.models.signature_event  # noqa: F401
 import app.models.signature_asset  # noqa: F401
+import app.models.entry  # noqa: F401
 
 from app.db.base import Base
 from app.core.settings import settings
