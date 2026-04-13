@@ -99,10 +99,13 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
             activities: _selectedActivities.toList(),
           );
 
-      // Hours-Summary + Entries Cache invalidieren
+      // Alle Provider die jetzt stale sind invalidieren, damit PatientDetail
+      // und Home nach Rückkehr die echten neuen Zahlen aus Patti ziehen.
       ref.invalidate(hoursSummaryProvider);
       ref.invalidate(patientEntriesProvider);
       ref.invalidate(myEntriesProvider);
+      ref.invalidate(pattiBudgetProvider);
+      ref.invalidate(mySignaturesProvider);
 
       if (!mounted) return;
 

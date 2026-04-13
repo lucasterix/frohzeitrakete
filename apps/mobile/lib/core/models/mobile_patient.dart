@@ -12,6 +12,7 @@ class MobilePatient {
   final String? city;
   final String? postalCode;
   final String? phone;
+  final String? phoneLandline;
   final String? birthday; // "YYYY-MM-DD"
   final String? careDegree; // "pg1"-"pg5" vom Patti
   final int careDegreeInt; // vom Backend geparsed, 0 wenn unbekannt
@@ -30,6 +31,7 @@ class MobilePatient {
     this.city,
     this.postalCode,
     this.phone,
+    this.phoneLandline,
     this.birthday,
     this.careDegree,
     this.careDegreeInt = 0,
@@ -50,6 +52,7 @@ class MobilePatient {
       city: json['city'] as String?,
       postalCode: json['postal_code'] as String?,
       phone: json['phone'] as String?,
+      phoneLandline: json['phone_landline'] as String?,
       birthday: json['birthday'] as String?,
       careDegree: json['care_degree'] as String?,
       careDegreeInt: (json['care_degree_int'] as int?) ?? 0,

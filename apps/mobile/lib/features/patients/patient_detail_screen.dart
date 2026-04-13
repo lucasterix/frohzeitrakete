@@ -143,11 +143,27 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(0, 0, 0, 100),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(pattiBudgetProvider);
+            ref.invalidate(hoursSummaryProvider);
+            ref.invalidate(patientEntriesProvider);
+            ref.invalidate(mySignaturesProvider);
+            try {
+              await ref.read(pattiBudgetProvider(
+                PattiBudgetParams(
+                  patientId: patient.patientId,
+                  year: now.year,
+                ),
+              ).future);
+            } catch (_) {}
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 child: Row(
@@ -265,24 +281,35 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _documentCard(
-                  icon: Icons.folder_outlined,
-                  title: 'Pflegeumwandlung',
-                  subtitle: 'Antrag auf Umwandlung von Pflegeleistungen',
-                  statusColor: Colors.black54,
-                  statusLabel: 'VERFÜGBAR',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DocumentDetailScreen(
-                          title: 'Pflegeumwandlung',
-                          status: 'bereit',
-                          patient: patient,
-                        ),
+                child: pflegegrad < 2
+                    ? _documentCard(
+                        icon: Icons.folder_outlined,
+                        title: 'Pflegeumwandlung',
+                        subtitle: 'Nur ab Pflegegrad 2 verfügbar',
+                        statusColor: Colors.black38,
+                        statusLabel: 'NICHT VERFÜGBAR',
+                        onTap: () {},
+                        disabled: true,
+                      )
+                    : _documentCard(
+                        icon: Icons.folder_outlined,
+                        title: 'Pflegeumwandlung',
+                        subtitle:
+                            'Antrag auf Umwandlung von Pflegeleistungen',
+                        statusColor: Colors.black54,
+                        statusLabel: 'VERFÜGBAR',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => DocumentDetailScreen(
+                                title: 'Pflegeumwandlung',
+                                status: 'bereit',
+                                patient: patient,
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
 
               const SizedBox(height: 28),
@@ -318,6 +345,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
               _buildRecentEntries(entriesAsync, lockAsync),
             ],
+          ),
           ),
         ),
       ),
@@ -623,14 +651,26 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
           if (address != null) const Divider(height: 1, indent: 56),
           if (phone != null)
             _contactTile(
-              icon: Icons.phone_outlined,
-              label: 'Telefon',
+              icon: Icons.phone_iphone_outlined,
+              label: patient.phoneLandline != null ? 'Mobil' : 'Telefon',
               value: phone,
               trailing: const Icon(Icons.call, color: green, size: 20),
               onTap: () => _callPhone(phone),
               onLongPress: () => _copyToClipboard(phone, 'Telefonnummer'),
             ),
           if (phone != null) const Divider(height: 1, indent: 56),
+          if (patient.phoneLandline != null) ...[
+            _contactTile(
+              icon: Icons.phone_outlined,
+              label: 'Festnetz',
+              value: patient.phoneLandline!,
+              trailing: const Icon(Icons.call, color: green, size: 20),
+              onTap: () => _callPhone(patient.phoneLandline!),
+              onLongPress: () =>
+                  _copyToClipboard(patient.phoneLandline!, 'Festnetz'),
+            ),
+            const Divider(height: 1, indent: 56),
+          ],
           _contactTile(
             icon: Icons.cake_outlined,
             label: 'Geburtstag',

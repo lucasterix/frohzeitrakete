@@ -17,7 +17,8 @@ class MobilePatient(BaseModel):
     address_line: str | None = None
     city: str | None = None
     postal_code: str | None = None
-    phone: str | None = None
+    phone: str | None = None  # Mobile first, sonst Festnetz
+    phone_landline: str | None = None  # Separate Festnetz-Nummer wenn vorhanden
     birthday: str | None = None  # ISO date "YYYY-MM-DD"
     care_degree: str | None = None
     care_degree_int: int = 0

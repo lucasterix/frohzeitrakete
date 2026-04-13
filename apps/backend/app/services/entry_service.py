@@ -50,47 +50,67 @@ def _month_is_locked(
     return exists is not None
 
 
-def _sync_entry_to_patti(entry: Entry, user: User) -> None:
-    """Best-effort: legt den Einsatz auch in Patti an, damit die Reststunden-
-    berechnung in Patti korrekt bleibt.
+def _sync_entry_to_patti(
+    db: Session,
+    entry: Entry,
+    *,
+    delta_hours: float,
+) -> None:
+    """Legt die (Delta-) Stunden in Patti an, damit die Reststunden-Berechnung
+    dort sofort stimmt.
 
-    WICHTIG: Das exakte Field-Mapping für Patti's POST /api/v1/service-entries
-    ist noch nicht validiert (Patti liefert keinen list-Endpoint und ich habe
-    noch keine Live-Exploration eines bestehenden service-entry gemacht).
-    Dieser Hook läuft deshalb non-blocking: Fehler werden nur geloggt, der
-    User sieht einen erfolgreichen Entry-Save.
+    Confirmed Patti shape (live-tested):
+        POST /api/v1/service-entries
+        {
+          "patient_id": int,
+          "type": "careService",
+          "kind": "serviced",
+          "year": YYYY,
+          "month": M,
+          "hours": float
+        }
 
-    TODO: Sobald das genaue Schema bekannt ist, diese Methode anpassen und
-    ggf. in der DB `entry.patti_service_entry_id` speichern für Updates.
+    Beim Update (same-day-hours-addition) wollen wir nur das *Delta* an Patti
+    schicken, nicht die neue Gesamtsumme — sonst würde Patti doppelt zählen.
+
+    Fehler werden als Warning geloggt aber nicht hochgeschickt. Die Mobile
+    App zeigt dem User den Einsatz als gespeichert, auch wenn der Patti-Sync
+    fehlschlägt — das Büro kann ihn dann manuell nacharbeiten.
     """
-    if not user.patti_person_id:
-        logger.info(
-            "Skip Patti sync: user %s has no patti_person_id", user.id
-        )
+    if delta_hours <= 0:
         return
 
     try:
         client = PattiClient()
         client.login()
 
-        # Best-effort payload – angelehnt an Patti's service-history shape.
-        # Die tatsächlichen Feldnamen können abweichen; dies ist der Ausgangspunkt.
-        payload = {
-            "patient_id": entry.patient_id,
-            "person_id": user.patti_person_id,
-            "date": entry.entry_date.isoformat(),
-            "hours": entry.hours,
-            "type": "careService",  # MVP: alle Einsätze laufen auf Pflegesachleistung
-        }
-        response = client.create_service_entry(payload)
-        logger.info(
-            "Patti sync ok for entry %s: %s",
-            entry.id,
-            response.get("id") if isinstance(response, dict) else response,
+        response = client.create_service_entry(
+            patient_id=entry.patient_id,
+            year=entry.entry_date.year,
+            month=entry.entry_date.month,
+            hours=round(delta_hours, 4),
         )
+
+        new_patti_id = response.get("id") if isinstance(response, dict) else None
+        if new_patti_id:
+            # Nur beim allerersten Sync die ID speichern – für addierte
+            # Einsätze erzeugen wir separate service-entries in Patti, das
+            # ist konsistent mit Patti's eigener kind="serviced"-Aggregation.
+            if entry.patti_service_entry_id is None:
+                entry.patti_service_entry_id = new_patti_id
+                db.commit()
+            logger.info(
+                "Patti sync ok for entry %s: patti_id=%s delta=%sh",
+                entry.id,
+                new_patti_id,
+                delta_hours,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "Patti sync failed for entry %s: %s", entry.id, exc
+            "Patti sync failed for entry %s (delta %sh): %s",
+            entry.id,
+            delta_hours,
+            exc,
         )
 
 
@@ -144,7 +164,8 @@ def create_or_update_entry(
         db.add(entry)
         db.commit()
         db.refresh(entry)
-        _sync_entry_to_patti(entry, user)
+        # Erstaufnahme → komplette Stunden nach Patti
+        _sync_entry_to_patti(db, entry, delta_hours=entry.hours)
         return entry
 
     # Stunden addieren, aber Deckel bei 8.0
@@ -172,7 +193,8 @@ def create_or_update_entry(
 
     db.commit()
     db.refresh(existing)
-    _sync_entry_to_patti(existing, user)
+    # Nur das Delta nach Patti, sonst doppelt gezählt
+    _sync_entry_to_patti(db, existing, delta_hours=payload.hours)
     return existing
 
 

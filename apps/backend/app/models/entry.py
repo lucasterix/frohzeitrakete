@@ -58,6 +58,13 @@ class Entry(Base):
         nullable=True,
     )
 
+    # Wenn der Einsatz erfolgreich in Patti synchronisiert wurde, merken wir uns
+    # die Patti-service-entry-ID damit wir bei Delete/Update auch dort syncen
+    # können.
+    patti_service_entry_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

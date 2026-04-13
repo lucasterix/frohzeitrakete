@@ -61,6 +61,21 @@ class PattiClient:
         if "laravel_session" not in self.session.cookies:
             raise RuntimeError("Patti login failed: laravel_session cookie missing.")
 
+        # Nach dem Login einmal die Root-Seite aufrufen damit ein frischer
+        # XSRF-TOKEN Cookie gesetzt wird. Patti vergibt einen neuen Token beim
+        # ersten authenticated request – ohne den werden POSTs mit 419 abgewiesen.
+        self.session.get(f"{self.base_url}/", timeout=30)
+
+    def _post_headers(self) -> dict[str, str]:
+        """Header mit aktuellem XSRF-Token für schreibende Requests."""
+        xsrf = self.session.cookies.get("XSRF-TOKEN")
+        if xsrf:
+            # Laravel wrapped den XSRF token URL-encoded in das Cookie – wir
+            # müssen ihn dekodieren bevor wir ihn im Header setzen.
+            from urllib.parse import unquote
+            return {"X-XSRF-TOKEN": unquote(xsrf)}
+        return {}
+
     def get_service_histories_by_person_id(self, person_id: int, page: int = 1) -> Any:
         url = f"{self.base_url}/api/v1/service-histories"
         params = [
@@ -168,22 +183,55 @@ class PattiClient:
 
     # --- Service Entries (Einsätze) -----------------------------------------
 
-    def create_service_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST /api/v1/service-entries – legt einen Einsatz in Patti an.
+    def create_service_entry(
+        self,
+        *,
+        patient_id: int,
+        year: int,
+        month: int,
+        hours: float,
+        type_: str = "careService",
+        kind: str = "serviced",
+    ) -> dict[str, Any]:
+        """POST /api/v1/service-entries – legt geleistete Stunden in Patti an.
 
-        Wird nur aufgerufen wenn wir den Backend-Entry auch in Patti syncen
-        wollen. Für MVP ist Sync optional; Mobile schreibt erstmal nur in
-        unsere eigene entries-Tabelle.
+        Explored shape (confirmed live):
+            {
+              "patient_id": int,
+              "type": "careService" | "respiteCare" | "conversion" | ...,
+              "kind": "serviced" | "added" | "remainder" | "total",
+              "year": int,
+              "month": int (1..12),
+              "hours": float
+            }
+
+        For caretaker-logged hours we always use `kind="serviced"` and
+        `type="careService"` (MVP default). Patti recomputes the remaining-
+        budget immediately so `/helpers/remaining-care-service-budgets`
+        reflects the new total right after this call returns.
         """
-        # Patti erwartet CSRF-Token als X-XSRF-TOKEN Header bei POSTs
-        csrf = self.session.cookies.get("XSRF-TOKEN")
-        headers = {"X-XSRF-TOKEN": csrf} if csrf else {}
-
+        payload = {
+            "patient_id": patient_id,
+            "type": type_,
+            "kind": kind,
+            "year": year,
+            "month": month,
+            "hours": hours,
+        }
         response = self.session.post(
             f"{self.base_url}/api/v1/service-entries",
             json=payload,
-            headers=headers,
+            headers=self._post_headers(),
             timeout=30,
         )
         response.raise_for_status()
         return response.json()
+
+    def delete_service_entry(self, entry_id: int) -> None:
+        """DELETE /api/v1/service-entries/{id} – remove a service entry."""
+        response = self.session.delete(
+            f"{self.base_url}/api/v1/service-entries/{entry_id}",
+            headers=self._post_headers(),
+            timeout=30,
+        )
+        response.raise_for_status()

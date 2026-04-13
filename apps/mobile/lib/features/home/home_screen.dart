@@ -148,11 +148,25 @@ class HomeScreen extends ConsumerWidget {
         (now.year * 1000 + now.month * 31 + now.day) % _motivationalQuotes.length;
     final quoteOfDay = _motivationalQuotes[quoteIndex];
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(myEntriesProvider);
+        ref.invalidate(patientsProvider);
+        ref.invalidate(mySignaturesProvider);
+        try {
+          await ref.read(
+            myEntriesProvider(
+              MyEntriesParams(year: now.year, month: now.month),
+            ).future,
+          );
+        } catch (_) {}
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             children: [
               GestureDetector(
@@ -407,6 +421,7 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

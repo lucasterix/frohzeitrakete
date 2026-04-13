@@ -27,9 +27,20 @@ def _extract_zip_code(address: dict) -> str | None:
 
 
 def _extract_phone(patient_person: dict) -> str | None:
-    """Pref mobile > phone. Patti nennt es 'communication.mobile_number'."""
+    """Pref mobile > festnetz."""
     comm = patient_person.get("communication") or {}
     return comm.get("mobile_number") or comm.get("phone_number")
+
+
+def _extract_phone_landline(patient_person: dict) -> str | None:
+    """Festnetz-Nummer separat wenn vorhanden (um beide anzuzeigen)."""
+    comm = patient_person.get("communication") or {}
+    mobile = comm.get("mobile_number")
+    landline = comm.get("phone_number")
+    # Nur zurückgeben wenn's ne eigene Nummer ist (nicht gleich mobile)
+    if landline and landline != mobile:
+        return landline
+    return None
 
 
 def _extract_birthday(patient_person: dict) -> str | None:
@@ -60,6 +71,7 @@ def map_service_history_to_mobile_patient(item: dict) -> dict:
         "city": address.get("city"),
         "postal_code": _extract_zip_code(address),
         "phone": _extract_phone(patient_person),
+        "phone_landline": _extract_phone_landline(patient_person),
         "birthday": _extract_birthday(patient_person),
         "care_degree": care_degree_raw,
         "care_degree_int": _parse_care_degree(care_degree_raw),
@@ -145,6 +157,8 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
             address = person.get("address") or {}
             comm = person.get("communication") or {}
 
+            mobile = comm.get("mobile_number")
+            landline = comm.get("phone_number")
             results[patient["id"]] = {
                 "service_history_id": 0,
                 "patient_id": patient["id"],
@@ -155,7 +169,8 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
                 "address_line": address.get("address_line"),
                 "city": address.get("city"),
                 "postal_code": _extract_zip_code(address),
-                "phone": comm.get("mobile_number") or comm.get("phone_number"),
+                "phone": mobile or landline,
+                "phone_landline": landline if landline and landline != mobile else None,
                 "birthday": (person.get("born_at") or "").split("T")[0] or None,
                 "care_degree": patient.get("care_degree"),
                 "care_degree_int": _parse_care_degree(patient.get("care_degree")),
@@ -191,6 +206,7 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
                     "city": None,
                     "postal_code": None,
                     "phone": None,
+                    "phone_landline": None,
                     "birthday": None,
                     "care_degree": patient.get("care_degree"),
                     "care_degree_int": _parse_care_degree(
