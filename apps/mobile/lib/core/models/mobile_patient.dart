@@ -10,7 +10,9 @@ class MobilePatient {
   final String? lastName;
   final String? addressLine;
   final String? city;
-  final String? careDegree; // "1"-"5" als String vom Patti
+  final String? careDegree; // "pg1"-"pg5" vom Patti
+  final int careDegreeInt; // vom Backend geparsed, 0 wenn unbekannt
+  final String? insuranceNumber;
   final bool active;
   final bool isPrimary;
   final String? startedAt;
@@ -24,6 +26,8 @@ class MobilePatient {
     this.addressLine,
     this.city,
     this.careDegree,
+    this.careDegreeInt = 0,
+    this.insuranceNumber,
     required this.active,
     required this.isPrimary,
     this.startedAt,
@@ -39,14 +43,17 @@ class MobilePatient {
       addressLine: json['address_line'] as String?,
       city: json['city'] as String?,
       careDegree: json['care_degree'] as String?,
+      careDegreeInt: (json['care_degree_int'] as int?) ?? 0,
+      insuranceNumber: json['insurance_number'] as String?,
       active: json['active'] as bool,
       isPrimary: json['is_primary'] as bool,
       startedAt: json['started_at'] as String?,
     );
   }
 
-  /// Pflegegrad als int (1-5). Wenn der Patti-Wert nicht parsbar ist → 0.
+  /// Pflegegrad als int – bevorzugt backend-seitig geparsed, Fallback parse.
   int get pflegegradInt {
+    if (careDegreeInt > 0) return careDegreeInt;
     final cd = careDegree;
     if (cd == null) return 0;
     return int.tryParse(cd.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;

@@ -31,15 +31,6 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
-class MobilePatient(BaseModel):
-    service_history_id: int
-    patient_id: int
-    display_name: str
-    first_name: str | None = None
-    last_name: str | None = None
-    address_line: str | None = None
-    city: str | None = None
-    care_degree: str | None = None
-    active: bool
-    is_primary: bool
-    started_at: str | None = None
+# MobilePatient lives in schemas/patient.py now (with additional fields for
+# care_degree_int and insurance_number). This stub is kept to avoid breaking
+# old imports but should not be used.

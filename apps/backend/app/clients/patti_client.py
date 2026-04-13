@@ -75,3 +75,95 @@ class PattiClient:
         response = self.session.get(url, params=params, timeout=30)
         response.raise_for_status()
         return response.json()
+
+    # --- Patient endpoints ---------------------------------------------------
+
+    def get_patient(self, patient_id: int) -> dict[str, Any]:
+        """GET /api/v1/patients/{patient} – full patient profile incl. patientRates."""
+        response = self.session.get(
+            f"{self.base_url}/api/v1/patients/{patient_id}", timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # --- Helper endpoints (budgets) -----------------------------------------
+
+    def get_remaining_care_service_budget(
+        self, patient_id: int, year: int
+    ) -> dict[str, Any]:
+        """Pflegesachleistung / Entlastungsbetrag Restbudget für Jahr.
+
+        Response shape (tested):
+            {"remaining_budget": {
+                "money": <cent>,
+                "hours": <float>,
+                "used": <float>,
+                "expiration": <float>,
+            }}
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/helpers/remaining-care-service-budgets",
+            params={"patient_id": str(patient_id), "year": str(year)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_remaining_respite_care_budget(
+        self, patient_id: int, year: int
+    ) -> dict[str, Any]:
+        """Verhinderungspflege Restbudget für Jahr.
+
+        Response shape:
+            {"remaining_budget": {"money": <cent>, "hours": <float>}}
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/helpers/remaining-respite-care-budgets",
+            params={"patient_id": str(patient_id), "year": str(year)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_patient_date_rate(
+        self, patient_id: int, year: int, month: int, type: str
+    ) -> dict[str, Any]:
+        """Stundensatz für Patient+Monat+Leistungstyp.
+
+        `type` ist einer von: respiteCare, careService, conversion,
+        domesticHelp, counselling, travelFee.
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/helpers/patient-date-rate",
+            params={
+                "patient_id": str(patient_id),
+                "year": str(year),
+                "month": str(month),
+                "type": type,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    # --- Service Entries (Einsätze) -----------------------------------------
+
+    def create_service_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST /api/v1/service-entries – legt einen Einsatz in Patti an.
+
+        Wird nur aufgerufen wenn wir den Backend-Entry auch in Patti syncen
+        wollen. Für MVP ist Sync optional; Mobile schreibt erstmal nur in
+        unsere eigene entries-Tabelle.
+        """
+        # Patti erwartet CSRF-Token als X-XSRF-TOKEN Header bei POSTs
+        csrf = self.session.cookies.get("XSRF-TOKEN")
+        headers = {"X-XSRF-TOKEN": csrf} if csrf else {}
+
+        response = self.session.post(
+            f"{self.base_url}/api/v1/service-entries",
+            json=payload,
+            headers=headers,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()

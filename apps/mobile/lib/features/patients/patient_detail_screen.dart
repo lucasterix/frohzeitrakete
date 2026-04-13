@@ -23,11 +23,8 @@ class PatientDetailScreen extends ConsumerStatefulWidget {
 
 class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
   // MOCK: VP-Antrag-Status kommt weiterhin aus lokalem Mock-State.
-  // used_hours kommt jetzt echt vom Backend via hoursSummaryProvider.
-  // Reststunden-Kontingent (allocated) ist noch nicht konfigurierbar im Backend,
-  // deshalb nehmen wir einen festen Default von 30 h/Monat.
-  static const double _monthlyAllocation = 30.0;
-
+  // Reststunden + verbrauchte Stunden kommen jetzt live aus Patti via
+  // pattiBudgetProvider (Pflegesachleistung + Verhinderungspflege).
   late String _vpState; // none | signed | approved
   late String _vpMonth;
 
@@ -98,7 +95,15 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     final patient = widget.patient;
     final pflegegrad = patient.pflegegradInt;
     final now = DateTime.now();
-    final summaryAsync = ref.watch(
+    final budgetAsync = ref.watch(
+      pattiBudgetProvider(
+        PattiBudgetParams(
+          patientId: patient.patientId,
+          year: now.year,
+        ),
+      ),
+    );
+    final lockAsync = ref.watch(
       hoursSummaryProvider(
         HoursSummaryParams(
           patientId: patient.patientId,
@@ -218,10 +223,10 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
               const SizedBox(height: 20),
 
-              // Reststunden Hero (live vom Backend via /patients/:id/hours-summary)
+              // Reststunden Hero (live aus Patti via Backend)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _buildHoursHero(summaryAsync),
+                child: _buildBudgetHero(budgetAsync, lockAsync),
               ),
 
               const SizedBox(height: 24),
@@ -449,8 +454,11 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
   }
 
-  Widget _buildHoursHero(AsyncValue<dynamic> summaryAsync) {
-    return summaryAsync.when(
+  Widget _buildBudgetHero(
+    AsyncValue<dynamic> budgetAsync,
+    AsyncValue<dynamic> lockAsync,
+  ) {
+    return budgetAsync.when(
       loading: () => _heroShell(
         child: const SizedBox(
           height: 90,
@@ -475,7 +483,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                 Icon(Icons.cloud_off, color: Colors.white, size: 20),
                 SizedBox(width: 8),
                 Text(
-                  'Reststunden diesen Monat',
+                  'Reststunden',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
@@ -489,7 +497,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               'Offline',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -500,15 +508,20 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                 color: Colors.white.withValues(alpha: 0.75),
                 fontSize: 12,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
       ),
-      data: (summary) {
-        final used = summary.usedHours as double;
-        final remaining = (_monthlyAllocation - used).clamp(0.0, _monthlyAllocation);
-        final progress = used / _monthlyAllocation;
-        final locked = summary.isLocked as bool;
+      data: (budget) {
+        final remaining = budget.careServiceRemainingHours as double;
+        final used = budget.careServiceUsedHours as double;
+        final total = remaining + used;
+        final progress = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
+        final respiteHours = budget.respiteCareRemainingHours as double;
+        final respiteMoney = budget.respiteCareRemainingMoneyCents as int;
+        final locked = lockAsync.valueOrNull?.isLocked == true;
 
         return _heroShell(
           child: Column(
@@ -519,10 +532,10 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   const Icon(Icons.schedule, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   const Text(
-                    'Reststunden diesen Monat',
+                    'Reststunden · Pflegesachleistung',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -570,7 +583,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
+                  value: progress,
                   minHeight: 6,
                   backgroundColor: Colors.white.withValues(alpha: 0.25),
                   valueColor: const AlwaysStoppedAnimation(Colors.white),
@@ -578,17 +591,63 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '${_formatHours(used)} von ${_formatHours(_monthlyAllocation)} genutzt · ${summary.entriesCount} Einsätze',
+                '${_formatHours(used)} von ${_formatHours(total)} genutzt · Stand ${now()}',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.85),
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
+              if (respiteHours > 0) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.assignment_outlined,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Verhinderungspflege',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${_formatHours(respiteHours)} · ${(respiteMoney / 100).toStringAsFixed(0)} €',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         );
       },
     );
+  }
+
+  String now() {
+    final n = DateTime.now();
+    return '${n.day.toString().padLeft(2, '0')}.${n.month.toString().padLeft(2, '0')}.${n.year}';
   }
 
   Widget _heroShell({required Widget child}) {

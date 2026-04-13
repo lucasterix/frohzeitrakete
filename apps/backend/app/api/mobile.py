@@ -9,8 +9,8 @@ from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, EntryResponse, PatientHoursSummary
+from app.schemas.patient import MobilePatient, PatientBudget
 from app.schemas.signature import MobileSignatureCreate, SignatureEventResponse
-from app.schemas.user import MobilePatient
 from app.services.entry_service import (
     create_or_update_entry,
     delete_entry_for_user,
@@ -18,7 +18,7 @@ from app.services.entry_service import (
     get_patient_hours_summary,
     list_entries_for_user,
 )
-from app.services.patient_service import get_patients_for_user
+from app.services.patient_service import get_patient_budget, get_patients_for_user
 
 router = APIRouter()
 
@@ -203,3 +203,24 @@ def mobile_patient_hours_summary(
         year=year,
         month=month,
     )
+
+
+@router.get(
+    "/patients/{patient_id}/patti-budget",
+    response_model=PatientBudget,
+)
+def mobile_patient_patti_budget(
+    patient_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    current_user: User = Depends(get_current_user),
+):
+    """Live-Budget aus Patti für einen Patient + Jahr.
+
+    Liefert Reststunden und Restbudget für:
+    - Pflegesachleistung / Entlastungsbetrag (`care_service_*`)
+    - Verhinderungspflege (`respite_care_*`)
+
+    Authorisierung: User muss diesem Patienten als primary caretaker in Patti
+    zugeordnet sein.
+    """
+    return get_patient_budget(patient_id=patient_id, year=year, user=current_user)

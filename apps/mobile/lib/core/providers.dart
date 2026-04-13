@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api/api_client.dart';
 import 'models/entry.dart';
 import 'models/mobile_patient.dart';
+import 'models/patient_budget.dart';
 import 'models/user.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/entry_repository.dart';
@@ -151,6 +152,40 @@ final hoursSummaryProvider =
       patientId: params.patientId,
       year: params.year,
       month: params.month,
+    );
+  },
+);
+
+// ---------------- Patti Budget ----------------
+
+/// Live-Budget aus Patti (Pflegesachleistung + Verhinderungspflege).
+class PattiBudgetParams {
+  final int patientId;
+  final int year;
+
+  const PattiBudgetParams({required this.patientId, required this.year});
+
+  @override
+  bool operator ==(Object other) =>
+      other is PattiBudgetParams &&
+      other.patientId == patientId &&
+      other.year == year;
+
+  @override
+  int get hashCode => Object.hash(patientId, year);
+}
+
+final pattiBudgetProvider =
+    FutureProvider.family<PatientBudget, PattiBudgetParams>(
+  (ref, params) async {
+    final auth = ref.watch(authControllerProvider);
+    if (auth.valueOrNull == null) {
+      throw StateError('Not authenticated');
+    }
+    final repo = ref.watch(patientRepositoryProvider);
+    return repo.getPattiBudget(
+      patientId: params.patientId,
+      year: params.year,
     );
   },
 );

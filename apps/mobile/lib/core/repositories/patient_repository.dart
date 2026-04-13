@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../models/mobile_patient.dart';
+import '../models/patient_budget.dart';
 
 class PatientRepository {
   final ApiClient _client;
@@ -22,6 +23,28 @@ class PatientRepository {
         message: 'Patienten konnten nicht geladen werden',
         statusCode: response.statusCode,
       );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<PatientBudget> getPattiBudget({
+    required int patientId,
+    required int year,
+  }) async {
+    try {
+      final response = await _client.dio.get(
+        '/mobile/patients/$patientId/patti-budget',
+        queryParameters: {'year': year},
+      );
+      if (response.statusCode == 200) {
+        return PatientBudget.fromJson(response.data as Map<String, dynamic>);
+      }
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Budget konnte nicht geladen werden';
+      throw ApiException(message: detail, statusCode: response.statusCode);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
