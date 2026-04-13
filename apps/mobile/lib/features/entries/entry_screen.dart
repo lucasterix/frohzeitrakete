@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
 import '../../core/providers.dart';
+import '../signatures/signature_screen.dart';
 
 class EntryScreen extends ConsumerStatefulWidget {
   final MobilePatient? preselectedPatient;
@@ -22,16 +24,9 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   ];
 
   static const List<String> _activities = [
-    'Hauswirtschaft',
-    'Körperpflege',
-    'Arztbegleitung',
-    'Gedächtnistraining',
-    'Vorlesen',
-    'Spaziergang',
-    'Gesellschaft',
-    'Einkaufen',
-    'Kochen',
-    'Wäsche',
+    'Alltagshilfe',
+    'Gespräche/Aktivierung',
+    'Begleitung',
   ];
 
   MobilePatient? _selectedPatient;
@@ -104,20 +99,32 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
             activities: _selectedActivities.toList(),
           );
 
-      // Hours-Summary Cache invalidieren, damit PatientDetail neu lädt
+      // Hours-Summary + Entries Cache invalidieren
       ref.invalidate(hoursSummaryProvider);
       ref.invalidate(patientEntriesProvider);
+      ref.invalidate(myEntriesProvider);
 
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Einsatz gespeichert: ${_formatHours(_hours!)} bei ${_selectedPatient!.displayName}',
+
+      // Direkt zur Unterschrift – der Patient unterschreibt jeden einzelnen Einsatz.
+      final patient = _selectedPatient!;
+      final dateStr =
+          '${_selectedDate.day.toString().padLeft(2, '0')}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.year}';
+      final signed = await Navigator.of(context).pushReplacement<bool, void>(
+        MaterialPageRoute(
+          builder: (_) => SignatureScreen(
+            patient: patient,
+            documentType: DocumentType.leistungsnachweis,
+            documentTitle:
+                'Einsatz vom $dateStr · ${_formatHours(_hours!)}',
           ),
         ),
       );
-      Navigator.of(context).pop();
+
+      if (signed == true) {
+        ref.invalidate(mySignaturesProvider);
+      }
+      return;
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);

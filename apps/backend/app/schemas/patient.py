@@ -16,6 +16,9 @@ class MobilePatient(BaseModel):
     last_name: str | None = None
     address_line: str | None = None
     city: str | None = None
+    postal_code: str | None = None
+    phone: str | None = None
+    birthday: str | None = None  # ISO date "YYYY-MM-DD"
     care_degree: str | None = None
     care_degree_int: int = 0
     insurance_number: str | None = None

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
@@ -8,7 +10,6 @@ import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
-import '../entries/month_overview_screen.dart';
 import '../requests/document_detail_screen.dart';
 import '../settings/settings_screen.dart';
 import '../vp_antrag/vp_antrag_screen.dart';
@@ -245,39 +246,17 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
               const SizedBox(height: 24),
 
-              // Dokumente
+              // Anträge
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Dokumente',
+                  'Anträge',
                   style:
                       TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 12),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _documentCard(
-                  icon: Icons.description_outlined,
-                  title: 'Leistungsnachweis',
-                  subtitle: 'Aktueller Monat · bereit zur Unterschrift',
-                  statusColor: green,
-                  statusLabel: 'OFFEN',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => MonthOverviewScreen(
-                          patient: patient,
-                          monthLabel: 'April 2026',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _vpAntragCard(vp.state, vp.month),
@@ -321,39 +300,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.black12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _kvRow(
-                        label: 'Adresse',
-                        value: patient.addressLine ?? '—',
-                      ),
-                      if (patient.city != null) ...[
-                        const SizedBox(height: 8),
-                        _kvRow(label: 'Stadt', value: patient.city!),
-                      ],
-                      const SizedBox(height: 8),
-                      _kvRow(
-                        label: 'Patient-ID',
-                        value: '${patient.patientId}',
-                      ),
-                      if (patient.startedAt != null) ...[
-                        const SizedBox(height: 8),
-                        _kvRow(
-                          label: 'Betreuung seit',
-                          value: patient.startedAt!.split('T').first,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                child: _buildContactCard(),
               ),
 
               const SizedBox(height: 28),
@@ -455,7 +402,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   const Icon(Icons.schedule, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   const Text(
-                    'Reststunden · Pflegesachleistung',
+                    'Reststunden · Betreuungsleistung',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13,
@@ -590,28 +537,170 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
   }
 
-  Widget _kvRow({required String label, required String value}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
+  Future<void> _launch(Uri uri) async {
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Konnte nicht öffnen: ${uri.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _callPhone(String phone) async {
+    final cleaned = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    await _launch(Uri.parse('tel:$cleaned'));
+  }
+
+  Future<void> _openMaps(String address) async {
+    // Universal Maps-Link: Apple Maps versteht maps.apple.com,
+    // Google Maps versteht google.com/maps. Wir nehmen den universellen
+    // "https://maps.apple.com/?q=..." auf iOS/macOS und google.com/maps
+    // sonst. Flutter's url_launcher öffnet dann die bevorzugte App.
+    final encoded = Uri.encodeComponent(address);
+    final uri = Theme.of(context).platform == TargetPlatform.iOS ||
+            Theme.of(context).platform == TargetPlatform.macOS
+        ? Uri.parse('https://maps.apple.com/?q=$encoded')
+        : Uri.parse('https://www.google.com/maps/search/?api=1&query=$encoded');
+    await _launch(uri);
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label kopiert'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildContactCard() {
+    const green = Color(0xFF4F8A5B);
+    final patient = widget.patient;
+    final address = patient.fullAddress;
+    final phone = patient.phone;
+    final birthday = patient.birthdayDate;
+    final daysUntilBd = patient.daysUntilNextBirthday;
+    final age = patient.age;
+
+    String birthdayLabel = '—';
+    String? birthdaySubtitle;
+    if (birthday != null) {
+      birthdayLabel =
+          '${birthday.day.toString().padLeft(2, '0')}.${birthday.month.toString().padLeft(2, '0')}.${birthday.year}';
+      if (daysUntilBd != null) {
+        if (daysUntilBd == 0) {
+          birthdaySubtitle = '🎉 Hat heute Geburtstag!';
+        } else if (daysUntilBd == 1) {
+          birthdaySubtitle = 'Morgen ist Geburtstag 🎂';
+        } else if (daysUntilBd <= 30) {
+          birthdaySubtitle = 'In $daysUntilBd Tagen Geburtstag 🎂';
+        } else {
+          birthdaySubtitle = age != null ? '$age Jahre alt' : null;
+        }
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        children: [
+          if (address != null)
+            _contactTile(
+              icon: Icons.location_on_outlined,
+              label: 'Adresse',
+              value: address,
+              trailing: const Icon(Icons.map_outlined,
+                  color: green, size: 20),
+              onTap: () => _openMaps(address),
+              onLongPress: () => _copyToClipboard(address, 'Adresse'),
             ),
+          if (address != null) const Divider(height: 1, indent: 56),
+          if (phone != null)
+            _contactTile(
+              icon: Icons.phone_outlined,
+              label: 'Telefon',
+              value: phone,
+              trailing: const Icon(Icons.call, color: green, size: 20),
+              onTap: () => _callPhone(phone),
+              onLongPress: () => _copyToClipboard(phone, 'Telefonnummer'),
+            ),
+          if (phone != null) const Divider(height: 1, indent: 56),
+          _contactTile(
+            icon: Icons.cake_outlined,
+            label: 'Geburtstag',
+            value: birthdayLabel,
+            subtitle: birthdaySubtitle,
           ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 15, color: Colors.black87),
+          const Divider(height: 1, indent: 56),
+          _contactTile(
+            icon: Icons.medical_services_outlined,
+            label: 'Versicherung',
+            value: patient.insuranceNumber ?? '—',
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contactTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.black54),
+      title: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          color: Colors.black54,
         ),
-      ],
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                color: onTap != null
+                    ? const Color(0xFF4F8A5B)
+                    : Colors.black87,
+                fontWeight: FontWeight.w500,
+                decoration: onTap != null
+                    ? TextDecoration.underline
+                    : TextDecoration.none,
+                decorationColor: const Color(0xFF4F8A5B),
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      trailing: trailing,
+      onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 

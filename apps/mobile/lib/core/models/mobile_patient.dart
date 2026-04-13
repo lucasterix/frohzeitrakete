@@ -10,6 +10,9 @@ class MobilePatient {
   final String? lastName;
   final String? addressLine;
   final String? city;
+  final String? postalCode;
+  final String? phone;
+  final String? birthday; // "YYYY-MM-DD"
   final String? careDegree; // "pg1"-"pg5" vom Patti
   final int careDegreeInt; // vom Backend geparsed, 0 wenn unbekannt
   final String? insuranceNumber;
@@ -25,6 +28,9 @@ class MobilePatient {
     this.lastName,
     this.addressLine,
     this.city,
+    this.postalCode,
+    this.phone,
+    this.birthday,
     this.careDegree,
     this.careDegreeInt = 0,
     this.insuranceNumber,
@@ -42,6 +48,9 @@ class MobilePatient {
       lastName: json['last_name'] as String?,
       addressLine: json['address_line'] as String?,
       city: json['city'] as String?,
+      postalCode: json['postal_code'] as String?,
+      phone: json['phone'] as String?,
+      birthday: json['birthday'] as String?,
       careDegree: json['care_degree'] as String?,
       careDegreeInt: (json['care_degree_int'] as int?) ?? 0,
       insuranceNumber: json['insurance_number'] as String?,
@@ -49,6 +58,47 @@ class MobilePatient {
       isPrimary: json['is_primary'] as bool,
       startedAt: json['started_at'] as String?,
     );
+  }
+
+  /// Ganze Adresse inkl. PLZ.
+  String? get fullAddress {
+    final parts = <String>[];
+    if (addressLine != null && addressLine!.isNotEmpty) parts.add(addressLine!);
+    final cityLine = [
+      if (postalCode != null && postalCode!.isNotEmpty) postalCode,
+      if (city != null && city!.isNotEmpty) city,
+    ].whereType<String>().join(' ');
+    if (cityLine.isNotEmpty) parts.add(cityLine);
+    return parts.isEmpty ? null : parts.join(', ');
+  }
+
+  DateTime? get birthdayDate {
+    if (birthday == null) return null;
+    return DateTime.tryParse(birthday!);
+  }
+
+  /// Tage bis zum nächsten Geburtstag. Null wenn kein Geburtstag hinterlegt.
+  int? get daysUntilNextBirthday {
+    final bd = birthdayDate;
+    if (bd == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    var next = DateTime(today.year, bd.month, bd.day);
+    if (next.isBefore(today)) {
+      next = DateTime(today.year + 1, bd.month, bd.day);
+    }
+    return next.difference(today).inDays;
+  }
+
+  int? get age {
+    final bd = birthdayDate;
+    if (bd == null) return null;
+    final now = DateTime.now();
+    var years = now.year - bd.year;
+    if (now.month < bd.month || (now.month == bd.month && now.day < bd.day)) {
+      years -= 1;
+    }
+    return years;
   }
 
   /// Pflegegrad als int – bevorzugt backend-seitig geparsed, Fallback parse.

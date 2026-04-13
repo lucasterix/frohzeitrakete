@@ -28,6 +28,30 @@ class PatientRepository {
     }
   }
 
+  /// Globale Patienten-Suche für den Vertretungs-Fall.
+  /// Findet auch Patienten die nicht dem aktuellen User zugewiesen sind.
+  Future<List<MobilePatient>> searchPatients(String query) async {
+    if (query.trim().length < 2) return [];
+    try {
+      final response = await _client.dio.get(
+        '/mobile/patients/search',
+        queryParameters: {'q': query},
+      );
+      if (response.statusCode == 200) {
+        final list = response.data as List;
+        return list
+            .map((item) => MobilePatient.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      throw ApiException(
+        message: 'Suche fehlgeschlagen',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   Future<PatientBudget> getPattiBudget({
     required int patientId,
     required int year,

@@ -2,11 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
-import '../../shared/widgets/info_card.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
-import '../settings/settings_screen.dart';
 import '../profile/profile_screen.dart';
+import '../settings/settings_screen.dart';
+
+/// Motivierende Sprüche, die zufällig auf der Startseite rotieren.
+const List<String> _motivationalQuotes = [
+  'Jede Minute deiner Arbeit macht den Tag eines Menschen heller. ☀️',
+  'Kleine Gesten, große Wirkung — du machst das großartig!',
+  'Heute ist ein guter Tag um etwas Gutes zu tun.',
+  'Du bist das Lächeln im Alltag von jemandem.',
+  'Wer anderen hilft, wächst mit jeder Stunde.',
+  'Kaffee ☕ intus? Dann kann der Tag starten!',
+  'Warmherzigkeit kann man nicht messen — aber man spürt sie.',
+  'Ein Einsatz mehr = ein Lächeln mehr.',
+  'Dein Job ist kein Job, er ist eine Haltung.',
+  'Heute ist ein perfekter Tag um jemanden glücklich zu machen.',
+  'Wer Pflege macht, macht die Welt etwas besser — und das bist du.',
+  'Alltagshilfe heute, Dankbarkeit für immer.',
+  'Manchmal ist ein Gespräch die beste Medizin.',
+  'Wenn du den Tag gut anfängst, wird alles andere leichter.',
+  'Ein Spaziergang mit dir ist oft das Highlight des Tages.',
+  'Zeit ist Gold — die, die du schenkst, sogar Platin.',
+  'Selbst der beste Kaffee ersetzt dein Lächeln nicht.',
+  'Pflege ist Liebe in Arbeitskleidung.',
+  'Du bringst Licht in jedes Wohnzimmer das du betrittst.',
+  'Danke, dass du da bist — auch wenn das Wetter mies ist.',
+];
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -50,13 +73,13 @@ class HomeScreen extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
             SizedBox(height: 4),
-            Text('Frau Schmidt'),
+            Text('FrohZeit Büro'),
             SizedBox(height: 12),
             Row(
               children: [
                 Icon(Icons.phone_outlined, size: 18),
                 SizedBox(width: 8),
-                Text('+49 30 9876543'),
+                Text('+49 551 28879514'),
               ],
             ),
             SizedBox(height: 8),
@@ -64,7 +87,7 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Icon(Icons.mail_outline, size: 18),
                 SizedBox(width: 8),
-                Text('buero@frohzeit.de'),
+                Text('daniel.rupp@froehlichdienste.de'),
               ],
             ),
             SizedBox(height: 12),
@@ -91,7 +114,7 @@ class HomeScreen extends ConsumerWidget {
     final dateStr =
         '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
 
-    // Eins\u00e4tze des aktuellen Monats laden und clientseitig filtern
+    // Einsätze des aktuellen Monats
     final entriesAsync = ref.watch(
       myEntriesProvider(
         MyEntriesParams(year: now.year, month: now.month),
@@ -119,6 +142,11 @@ class HomeScreen extends ConsumerWidget {
       final half = (h - full) >= 0.5;
       return '$full,${half ? '5' : '0'} h';
     }
+
+    // Deterministischer Spruch des Tages (wechselt jeden Tag)
+    final quoteIndex =
+        (now.year * 1000 + now.month * 31 + now.day) % _motivationalQuotes.length;
+    final quoteOfDay = _motivationalQuotes[quoteIndex];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -158,10 +186,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           const Text(
             'FrohZeit Aktuell',
-            style: TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
           Text(
@@ -170,7 +195,7 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // Heute-Zusammenfassung
+          // Dein Tag – Hero
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -178,25 +203,22 @@ class HomeScreen extends ConsumerWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  green,
-                  green.withValues(alpha: 0.75),
-                ],
+                colors: [green, green.withValues(alpha: 0.75)],
               ),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.wb_sunny_outlined,
                       color: Colors.white,
                       size: 22,
                     ),
-                    const SizedBox(width: 8),
-                    const Text(
+                    SizedBox(width: 8),
+                    Text(
                       'Dein Tag',
                       style: TextStyle(
                         color: Colors.white,
@@ -254,7 +276,7 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 18),
 
-          // Schnellzugriff: Neuer Einsatz
+          // Neuer Einsatz
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -281,20 +303,63 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 20),
 
-          InfoCard(
-            title: 'Nachrichten und Informationen',
-            subtitle: 'Nächster Fortbildungstermin oder wichtige Hinweise.',
-            accentColor: green,
-            icon: Icons.article_outlined,
+          // Spruch des Tages
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: green.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: green.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: green,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Spruch des Tages',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  quoteOfDay,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
           ),
+
           const SizedBox(height: 14),
-          InfoCard(
-            title: 'Erinnerungen',
-            subtitle: 'Eigene Erinnerungen aus dem Kalender oder System.',
-            accentColor: green,
-            icon: Icons.alarm,
-          ),
-          const SizedBox(height: 14),
+
+          // Ansprechpartner Büro
           Card(
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
@@ -304,39 +369,39 @@ class HomeScreen extends ConsumerWidget {
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 30,
+                      radius: 26,
                       backgroundColor: green.withValues(alpha: 0.15),
                       child: const Icon(
-                        Icons.person_outline,
-                        size: 30,
+                        Icons.support_agent,
+                        size: 26,
                         color: green,
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 14),
                     const Expanded(
-                      child: Text(
-                        'Ansprechpartner\nBüro / Einsatzleitung',
-                        style: TextStyle(
-                          fontSize: 18,
-                          height: 1.4,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ansprechpartner Büro',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Mo–Fr, 08:00–17:00 Uhr',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const Icon(Icons.chevron_right, color: Colors.black38),
                   ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(18),
-              child: Text(
-                '„Witziger Spruch des heutigen Kontakts"\noder ein motivierender Tageshinweis.',
-                style: TextStyle(
-                  fontSize: 18,
-                  height: 1.5,
                 ),
               ),
             ),

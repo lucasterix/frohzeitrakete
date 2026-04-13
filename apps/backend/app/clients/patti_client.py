@@ -86,6 +86,26 @@ class PattiClient:
         response.raise_for_status()
         return response.json()
 
+    def list_patients(self, page: int = 1, per_page: int = 50) -> dict[str, Any]:
+        """GET /api/v1/patients – list all patients of the organisation."""
+        response = self.session.get(
+            f"{self.base_url}/api/v1/patients",
+            params={"page": str(page), "per_page": str(per_page)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def search(self, query: str) -> dict[str, Any]:
+        """GET /api/v1/search?q=... – globale Patti-Suche über people/patients."""
+        response = self.session.get(
+            f"{self.base_url}/api/v1/search",
+            params={"q": query},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     # --- Helper endpoints (budgets) -----------------------------------------
 
     def get_remaining_care_service_budget(

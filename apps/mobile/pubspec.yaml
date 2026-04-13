@@ -44,6 +44,9 @@ dependencies:
   # Local Settings (base url, last-login etc.)
   shared_preferences: ^2.3.2
 
+  # Launcher for tel:, https:, maps: URLs
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

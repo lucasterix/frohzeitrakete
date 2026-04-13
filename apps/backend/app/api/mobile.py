@@ -18,7 +18,11 @@ from app.services.entry_service import (
     get_patient_hours_summary,
     list_entries_for_user,
 )
-from app.services.patient_service import get_patient_budget, get_patients_for_user
+from app.services.patient_service import (
+    get_patient_budget,
+    get_patients_for_user,
+    search_patients,
+)
 
 router = APIRouter()
 
@@ -29,6 +33,20 @@ def mobile_get_patients(
     db: Session = Depends(get_db),
 ):
     return get_patients_for_user(db=db, user=current_user)
+
+
+@router.get("/patients/search", response_model=list[MobilePatient])
+def mobile_search_patients(
+    q: str = Query(..., min_length=2, max_length=100),
+    current_user: User = Depends(get_current_user),
+):
+    """Globale Patti-Patientensuche für den Vertretungsfall.
+
+    Liefert alle Patienten der Organisation, nicht nur die eigenen.
+    Wird von der App genutzt wenn der User einen Patienten betreuen muss,
+    für den er nicht als primärer Caretaker in Patti eingetragen ist.
+    """
+    return search_patients(q)
 
 
 @router.post("/signatures", response_model=SignatureEventResponse, status_code=status.HTTP_201_CREATED)
@@ -136,8 +154,11 @@ def mobile_create_entry(
 
     Locked-Check: Wenn der Leistungsnachweis für diesen Monat bereits unterschrieben
     wurde → 409 Conflict.
+
+    Nach dem Speichern wird der Einsatz best-effort auch in Patti angelegt,
+    damit die Reststunden-Berechnung dort aktuell bleibt.
     """
-    entry = create_or_update_entry(db, user_id=current_user.id, payload=payload)
+    entry = create_or_update_entry(db, user=current_user, payload=payload)
     return EntryResponse.from_orm_entry(entry)
 
 

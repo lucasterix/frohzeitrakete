@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
@@ -17,11 +20,62 @@ class PatientsScreen extends ConsumerStatefulWidget {
 class _PatientsScreenState extends ConsumerState<PatientsScreen> {
   final _searchController = TextEditingController();
   String _query = '';
+  bool _globalSearch = false;
+  Timer? _debounce;
+  List<MobilePatient>? _globalResults;
+  bool _globalLoading = false;
+  String? _globalError;
 
   @override
   void dispose() {
     _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void _onQueryChanged(String v) {
+    setState(() => _query = v);
+    if (_globalSearch) {
+      _debounce?.cancel();
+      if (v.trim().length < 2) {
+        setState(() {
+          _globalResults = null;
+          _globalError = null;
+        });
+        return;
+      }
+      _debounce = Timer(const Duration(milliseconds: 400), () {
+        _runGlobalSearch(v);
+      });
+    }
+  }
+
+  Future<void> _runGlobalSearch(String query) async {
+    setState(() {
+      _globalLoading = true;
+      _globalError = null;
+    });
+    try {
+      final repo = ref.read(patientRepositoryProvider);
+      final results = await repo.searchPatients(query);
+      if (!mounted) return;
+      setState(() {
+        _globalResults = results;
+        _globalLoading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _globalError = e.message;
+        _globalLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _globalError = 'Suche fehlgeschlagen: $e';
+        _globalLoading = false;
+      });
+    }
   }
 
   List<MobilePatient> _filter(List<MobilePatient> all) {
@@ -32,6 +86,39 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
           (p.city?.toLowerCase().contains(q) ?? false) ||
           (p.addressLine?.toLowerCase().contains(q) ?? false);
     }).toList();
+  }
+
+  Widget _buildGlobalResults() {
+    if (_query.trim().length < 2) {
+      return const _EmptyState(
+        icon: Icons.travel_explore,
+        title: 'Vertretungs-Suche',
+        subtitle:
+            'Tippe mindestens 2 Buchstaben um alle Patienten der Organisation zu durchsuchen.',
+      );
+    }
+    if (_globalLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_globalError != null) {
+      return _ErrorState(
+        message: _globalError!,
+        onRetry: () => _runGlobalSearch(_query),
+      );
+    }
+    final results = _globalResults ?? const <MobilePatient>[];
+    if (results.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.search_off,
+        title: 'Keine Treffer',
+        subtitle: 'Kein Patient mit diesem Namen gefunden.',
+      );
+    }
+    return ListView.separated(
+      itemCount: results.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) => _PatientCard(patient: results[index]),
+    );
   }
 
   @override
@@ -60,9 +147,9 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Meine Patienten',
-            style: TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
+          Text(
+            _globalSearch ? 'Alle Patienten' : 'Meine Patienten',
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 18),
           Container(
@@ -74,14 +161,19 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.search, color: Colors.black54),
+                Icon(
+                  _globalSearch ? Icons.travel_explore : Icons.search,
+                  color: Colors.black54,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) => setState(() => _query = v),
-                    decoration: const InputDecoration(
-                      hintText: 'Patientensuche',
+                    onChanged: _onQueryChanged,
+                    decoration: InputDecoration(
+                      hintText: _globalSearch
+                          ? 'Alle Patienten durchsuchen…'
+                          : 'Patientensuche',
                       border: InputBorder.none,
                     ),
                   ),
@@ -90,55 +182,130 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
                   IconButton(
                     onPressed: () {
                       _searchController.clear();
-                      setState(() => _query = '');
+                      setState(() {
+                        _query = '';
+                        _globalResults = null;
+                        _globalError = null;
+                      });
                     },
                     icon: const Icon(Icons.close, color: Colors.black54),
                   ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
-          Expanded(
-            child: patientsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => _ErrorState(
-                message: error.toString(),
-                onRetry: () => ref.invalidate(patientsProvider),
+          const SizedBox(height: 10),
+
+          // Vertretungs-Toggle
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _globalSearch
+                    ? const Color(0xFF4F8A5B).withValues(alpha: 0.12)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _globalSearch
+                      ? const Color(0xFF4F8A5B)
+                      : Colors.black12,
+                ),
               ),
-              data: (patients) {
-                final filtered = _filter(patients);
-
-                if (patients.isEmpty) {
-                  return const _EmptyState(
-                    icon: Icons.people_outline,
-                    title: 'Keine Patienten zugeordnet',
-                    subtitle:
-                        'Du hast aktuell keine Patienten.\nDas Büro muss dich einem Patienten zuweisen.',
-                  );
-                }
-
-                if (filtered.isEmpty) {
-                  return const _EmptyState(
-                    icon: Icons.search_off,
-                    title: 'Keine Patienten gefunden',
-                    subtitle: 'Probier einen anderen Suchbegriff.',
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(patientsProvider);
-                    await ref.read(patientsProvider.future);
-                  },
-                  child: ListView.separated(
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) =>
-                        _PatientCard(patient: filtered[index]),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () {
+                  setState(() {
+                    _globalSearch = !_globalSearch;
+                    _globalResults = null;
+                    _globalError = null;
+                    if (_query.isNotEmpty && _globalSearch) {
+                      _runGlobalSearch(_query);
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                );
-              },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _globalSearch
+                            ? Icons.groups
+                            : Icons.groups_outlined,
+                        size: 18,
+                        color: _globalSearch
+                            ? const Color(0xFF4F8A5B)
+                            : Colors.black54,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _globalSearch
+                            ? 'Vertretungs-Modus aktiv'
+                            : 'Vertretungs-Modus',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _globalSearch
+                              ? const Color(0xFF4F8A5B)
+                              : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
+          ),
+
+          const SizedBox(height: 12),
+          Expanded(
+            child: _globalSearch
+                ? _buildGlobalResults()
+                : patientsAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (error, _) => _ErrorState(
+                      message: error.toString(),
+                      onRetry: () => ref.invalidate(patientsProvider),
+                    ),
+                    data: (patients) {
+                      final filtered = _filter(patients);
+
+                      if (patients.isEmpty) {
+                        return const _EmptyState(
+                          icon: Icons.people_outline,
+                          title: 'Keine Patienten zugeordnet',
+                          subtitle:
+                              'Du hast aktuell keine Patienten.\nDas Büro muss dich einem Patienten zuweisen.',
+                        );
+                      }
+
+                      if (filtered.isEmpty) {
+                        return const _EmptyState(
+                          icon: Icons.search_off,
+                          title: 'Keine Patienten gefunden',
+                          subtitle:
+                              'Probier einen anderen Suchbegriff oder wechsle in den Vertretungs-Modus.',
+                        );
+                      }
+
+                      return RefreshIndicator(
+                        onRefresh: () async {
+                          ref.invalidate(patientsProvider);
+                          await ref.read(patientsProvider.future);
+                        },
+                        child: ListView.separated(
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) =>
+                              _PatientCard(patient: filtered[index]),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

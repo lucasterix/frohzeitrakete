@@ -9,6 +9,7 @@ MVP-Fachregeln (aus docs/MVP-Scope):
 - 0.5-Schritte (wird im Schema geprüft).
 """
 
+import logging
 from calendar import monthrange
 from datetime import date
 
@@ -16,10 +17,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
+from app.clients.patti_client import PattiClient
 from app.models.entry import Entry
 from app.models.signature_event import SignatureEvent
+from app.models.user import User
 from app.schemas.entry import EntryCreate, PatientHoursSummary
 
+
+logger = logging.getLogger(__name__)
 
 MAX_HOURS_PER_DAY = 8.0
 
@@ -45,11 +50,61 @@ def _month_is_locked(
     return exists is not None
 
 
+def _sync_entry_to_patti(entry: Entry, user: User) -> None:
+    """Best-effort: legt den Einsatz auch in Patti an, damit die Reststunden-
+    berechnung in Patti korrekt bleibt.
+
+    WICHTIG: Das exakte Field-Mapping für Patti's POST /api/v1/service-entries
+    ist noch nicht validiert (Patti liefert keinen list-Endpoint und ich habe
+    noch keine Live-Exploration eines bestehenden service-entry gemacht).
+    Dieser Hook läuft deshalb non-blocking: Fehler werden nur geloggt, der
+    User sieht einen erfolgreichen Entry-Save.
+
+    TODO: Sobald das genaue Schema bekannt ist, diese Methode anpassen und
+    ggf. in der DB `entry.patti_service_entry_id` speichern für Updates.
+    """
+    if not user.patti_person_id:
+        logger.info(
+            "Skip Patti sync: user %s has no patti_person_id", user.id
+        )
+        return
+
+    try:
+        client = PattiClient()
+        client.login()
+
+        # Best-effort payload – angelehnt an Patti's service-history shape.
+        # Die tatsächlichen Feldnamen können abweichen; dies ist der Ausgangspunkt.
+        payload = {
+            "patient_id": entry.patient_id,
+            "person_id": user.patti_person_id,
+            "date": entry.entry_date.isoformat(),
+            "hours": entry.hours,
+            "type": "careService",  # MVP: alle Einsätze laufen auf Pflegesachleistung
+        }
+        response = client.create_service_entry(payload)
+        logger.info(
+            "Patti sync ok for entry %s: %s",
+            entry.id,
+            response.get("id") if isinstance(response, dict) else response,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Patti sync failed for entry %s: %s", entry.id, exc
+        )
+
+
 def create_or_update_entry(
-    db: Session, user_id: int, payload: EntryCreate
+    db: Session, user: User, payload: EntryCreate
 ) -> Entry:
     """Wenn für (user, patient, date) schon ein Eintrag existiert: Stunden
-    addieren (bis max 8.0), Tätigkeiten mergen. Sonst neu anlegen."""
+    addieren (bis max 8.0), Tätigkeiten mergen. Sonst neu anlegen.
+
+    Nach dem Speichern in unserer DB wird best-effort in Patti synchronisiert
+    (nicht-blockierend – Patti-Fehler sollen den Mobile-Flow nicht aufhalten).
+    """
+
+    user_id = user.id
 
     # Lock-Check
     if _month_is_locked(
@@ -89,6 +144,7 @@ def create_or_update_entry(
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        _sync_entry_to_patti(entry, user)
         return entry
 
     # Stunden addieren, aber Deckel bei 8.0
@@ -116,6 +172,7 @@ def create_or_update_entry(
 
     db.commit()
     db.refresh(existing)
+    _sync_entry_to_patti(existing, user)
     return existing
 
 
