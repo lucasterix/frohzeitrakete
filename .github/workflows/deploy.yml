@@ -1,0 +1,22 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 46.224.7.46
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/deploy/apps/frohzeitrakete
+            git pull
+            cd infra/staging
+            docker compose up -d --build
