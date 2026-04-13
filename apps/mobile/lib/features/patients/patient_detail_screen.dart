@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
@@ -22,44 +24,13 @@ class PatientDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
-  // MOCK: VP-Antrag-Status kommt weiterhin aus lokalem Mock-State.
-  // Reststunden + verbrauchte Stunden kommen jetzt live aus Patti via
-  // pattiBudgetProvider (Pflegesachleistung + Verhinderungspflege).
-  late String _vpState; // none | signed | approved
-  late String _vpMonth;
+  // VP-Antrag-Status: wird live aus mySignaturesProvider abgeleitet.
+  // Lokaler Override nach erfolgreichem Antrag bis der Provider neu gelädt.
+  String? _vpStateOverride; // 'signed' wenn gerade signiert
+  String? _vpMonthOverride;
 
-  static const List<Map<String, dynamic>> _mockEntries = [
-    {
-      'date': '13.04.2026',
-      'hours': 2.0,
-      'activities': ['Spaziergänge', 'Gedächtnistraining'],
-      'signed': false,
-    },
-    {
-      'date': '12.04.2026',
-      'hours': 2.5,
-      'activities': ['Hauswirtschaft', 'Vorlesen'],
-      'signed': true,
-    },
-    {
-      'date': '09.04.2026',
-      'hours': 1.5,
-      'activities': ['Körperpflege', 'Gesellschaft leisten'],
-      'signed': false,
-    },
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    // Deterministisches VP-State-Mock aus patient_id (bis Backend diese Info liefert)
-    final seed = widget.patient.patientId;
-    final vpStates = ['none', 'signed', 'approved', 'none'];
-    _vpState = widget.patient.pflegegradInt >= 2
-        ? vpStates[seed % vpStates.length]
-        : 'none';
-    _vpMonth = _vpState != 'none' ? 'April 2026' : '';
-  }
+  String _formatDateDe(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 
   String _formatHours(double h) {
     final full = h.truncate();
@@ -82,11 +53,43 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
         'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
       ];
+      // Signatur-Cache invalidieren damit Provider neu lädt
+      ref.invalidate(mySignaturesProvider);
       setState(() {
-        _vpState = 'signed';
-        _vpMonth = '${monthNames[now.month - 1]} ${now.year}';
+        _vpStateOverride = 'signed';
+        _vpMonthOverride = '${monthNames[now.month - 1]} ${now.year}';
       });
     }
+  }
+
+  /// Ermittelt aus den Signaturen des Users ob ein VP-Antrag für diesen
+  /// Patienten im aktuellen Monat läuft.
+  ({String state, String month}) _resolveVpState(
+    List<SignatureEvent> signatures,
+  ) {
+    if (_vpStateOverride != null) {
+      return (state: _vpStateOverride!, month: _vpMonthOverride ?? '');
+    }
+
+    const monthNames = [
+      'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+    ];
+
+    final myVpSignatures = signatures
+        .where((s) =>
+            s.patientId == widget.patient.patientId &&
+            s.documentType == DocumentType.vpAntrag)
+        .toList()
+      ..sort((a, b) => b.signedAt.compareTo(a.signedAt));
+
+    if (myVpSignatures.isEmpty) {
+      return (state: 'none', month: '');
+    }
+
+    final latest = myVpSignatures.first;
+    final label = '${monthNames[latest.signedAt.month - 1]} ${latest.signedAt.year}';
+    return (state: 'signed', month: label);
   }
 
   @override
@@ -112,6 +115,17 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         ),
       ),
     );
+    final entriesAsync = ref.watch(
+      patientEntriesProvider(
+        EntryListParams(
+          patientId: patient.patientId,
+          year: now.year,
+          month: now.month,
+        ),
+      ),
+    );
+    final signaturesAsync = ref.watch(mySignaturesProvider);
+    final vp = _resolveVpState(signaturesAsync.valueOrNull ?? const []);
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -266,7 +280,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _vpAntragCard(),
+                child: _vpAntragCard(vp.state, vp.month),
               ),
 
               const SizedBox(height: 10),
@@ -355,98 +369,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               ),
               const SizedBox(height: 12),
 
-              ..._mockEntries.map((entry) {
-                final hours = entry['hours'] as double;
-                final activities =
-                    (entry['activities'] as List).cast<String>();
-                final signed = entry['signed'] as bool;
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                  child: Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => EntryDetailScreen(
-                              patientName: patient.displayName,
-                              date: entry['date'] as String,
-                              hours: hours,
-                              activities: activities,
-                              isSigned: signed,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.black12),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor:
-                                  green.withValues(alpha: 0.12),
-                              child: Icon(
-                                signed ? Icons.verified : Icons.event,
-                                color: green,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        entry['date'] as String,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        _formatHours(hours),
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    activities.join(', '),
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black54,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: Colors.black26,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
+              _buildRecentEntries(entriesAsync, lockAsync),
             ],
           ),
         ),
@@ -788,7 +711,157 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
   }
 
-  Widget _vpAntragCard() {
+  Widget _buildRecentEntries(
+    AsyncValue<List<Entry>> entriesAsync,
+    AsyncValue<dynamic> lockAsync,
+  ) {
+    const green = Color(0xFF4F8A5B);
+
+    return entriesAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(20),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.cloud_off, color: Colors.black38, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  e.toString(),
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (entries) {
+        if (entries.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.event_busy, size: 32, color: Colors.black26),
+                  SizedBox(height: 8),
+                  Text(
+                    'Noch keine Einsätze erfasst',
+                    style: TextStyle(fontSize: 14, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final locked = lockAsync.valueOrNull?.isLocked == true;
+
+        return Column(
+          children: entries.take(5).map((entry) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => EntryDetailScreen(
+                          entry: entry,
+                          patientName: widget.patient.displayName,
+                          monthLocked: locked,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: green.withValues(alpha: 0.12),
+                          child: Icon(
+                            locked ? Icons.verified : Icons.event,
+                            color: green,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    _formatDateDe(entry.entryDate),
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _formatHours(entry.hours),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                entry.activities.join(', '),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: Colors.black26,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _vpAntragCard(String vpState, String vpMonth) {
     const green = Color(0xFF4F8A5B);
 
     if (widget.patient.pflegegradInt < 2) {
@@ -803,7 +876,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
       );
     }
 
-    if (_vpState == 'signed') {
+    if (vpState == 'signed') {
       return Material(
         color: green.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
@@ -853,7 +926,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Antrag für $_vpMonth',
+                      'Antrag für $vpMonth',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -868,7 +941,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
       );
     }
 
-    if (_vpState == 'approved') {
+    if (vpState == 'approved') {
       return Material(
         color: green.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
@@ -912,7 +985,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Antrag für $_vpMonth',
+                      'Antrag für $vpMonth',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,

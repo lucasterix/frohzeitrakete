@@ -4,6 +4,7 @@ import 'api/api_client.dart';
 import 'models/entry.dart';
 import 'models/mobile_patient.dart';
 import 'models/patient_budget.dart';
+import 'models/signature_event.dart';
 import 'models/user.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/entry_repository.dart';
@@ -60,6 +61,11 @@ class AuthController extends StateNotifier<AsyncValue<User?>> {
 final authControllerProvider =
     StateNotifierProvider<AuthController, AsyncValue<User?>>(
   (ref) => AuthController(ref.watch(authRepositoryProvider)),
+);
+
+/// Convenience: aktueller User oder null.
+final currentUserProvider = Provider<User?>(
+  (ref) => ref.watch(authControllerProvider).valueOrNull,
 );
 
 // ---------------- Patient List ----------------
@@ -189,3 +195,40 @@ final pattiBudgetProvider =
     );
   },
 );
+
+// ---------------- Signatures ----------------
+
+/// Alle Signaturen die der aktuelle User selbst aufgenommen hat.
+/// Quelle: GET /mobile/signatures
+final mySignaturesProvider = FutureProvider<List<SignatureEvent>>((ref) async {
+  final auth = ref.watch(authControllerProvider);
+  if (auth.valueOrNull == null) return [];
+  final repo = ref.watch(signatureRepositoryProvider);
+  return repo.getMySignatures();
+});
+
+// ---------------- My Recent Entries ----------------
+
+/// Alle Eins\u00e4tze des aktuellen Users (optional gefiltert nach year/month).
+/// Genutzt f\u00fcr HomeScreen-Stats und CalendarScreen.
+class MyEntriesParams {
+  final int? year;
+  final int? month;
+
+  const MyEntriesParams({this.year, this.month});
+
+  @override
+  bool operator ==(Object other) =>
+      other is MyEntriesParams && other.year == year && other.month == month;
+
+  @override
+  int get hashCode => Object.hash(year, month);
+}
+
+final myEntriesProvider =
+    FutureProvider.family<List<Entry>, MyEntriesParams>((ref, params) async {
+  final auth = ref.watch(authControllerProvider);
+  if (auth.valueOrNull == null) return [];
+  final repo = ref.watch(entryRepositoryProvider);
+  return repo.listEntries(year: params.year, month: params.month);
+});

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers.dart';
 import '../../shared/widgets/info_card.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../settings/settings_screen.dart';
 import '../profile/profile_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   Widget _heroStat({required String value, required String label}) {
@@ -82,11 +85,40 @@ class HomeScreen extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
     final now = DateTime.now();
     final dateStr =
         '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
+
+    // Eins\u00e4tze des aktuellen Monats laden und clientseitig filtern
+    final entriesAsync = ref.watch(
+      myEntriesProvider(
+        MyEntriesParams(year: now.year, month: now.month),
+      ),
+    );
+
+    int monthEntriesCount = 0;
+    int todayEntriesCount = 0;
+    double todayHours = 0;
+
+    final today = DateTime(now.year, now.month, now.day);
+    entriesAsync.whenData((entries) {
+      monthEntriesCount = entries.length;
+      for (final e in entries) {
+        final d = DateTime(e.entryDate.year, e.entryDate.month, e.entryDate.day);
+        if (d == today) {
+          todayEntriesCount += 1;
+          todayHours += e.hours;
+        }
+      }
+    });
+
+    String formatHours(double h) {
+      final full = h.truncate();
+      final half = (h - full) >= 0.5;
+      return '$full,${half ? '5' : '0'} h';
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -175,23 +207,47 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _heroStat(value: '2', label: 'Einsätze'),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: Colors.white.withValues(alpha: 0.3),
+                if (entriesAsync.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      ),
                     ),
-                    _heroStat(value: '4,0 h', label: 'Geplant'),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: Colors.white.withValues(alpha: 0.3),
-                    ),
-                    _heroStat(value: '1', label: 'Offen'),
-                  ],
-                ),
+                  )
+                else
+                  Row(
+                    children: [
+                      _heroStat(
+                        value: '$todayEntriesCount',
+                        label: 'Heute',
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      _heroStat(
+                        value: formatHours(todayHours),
+                        label: 'Heute h',
+                      ),
+                      Container(
+                        width: 1,
+                        height: 40,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      _heroStat(
+                        value: '$monthEntriesCount',
+                        label: 'Diesen Monat',
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),

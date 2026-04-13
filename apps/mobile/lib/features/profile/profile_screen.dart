@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ProfileScreen extends StatelessWidget {
+import '../../core/providers.dart';
+
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
+    final user = ref.watch(currentUserProvider);
+
+    final displayName = user?.fullName ?? 'Nicht eingeloggt';
+    final roleLabel = switch (user?.role) {
+      'admin' => 'Administrator',
+      'caretaker' => 'Betreuungskraft',
+      _ => user?.role ?? '',
+    };
+    final email = user?.email ?? '—';
+    final initials = _initials(displayName);
 
     return Scaffold(
       appBar: AppBar(
@@ -23,24 +36,28 @@ class ProfileScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 56,
                     backgroundColor: green.withValues(alpha: 0.15),
-                    child: const Icon(
-                      Icons.person,
-                      size: 64,
-                      color: green,
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        fontSize: 36,
+                        color: green,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Maria Musterfrau',
-                    style: TextStyle(
+                  Text(
+                    displayName,
+                    style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Betreuungskraft',
-                    style: TextStyle(
+                  Text(
+                    roleLabel,
+                    style: const TextStyle(
                       fontSize: 16,
                       color: Colors.black54,
                     ),
@@ -57,38 +74,36 @@ class ProfileScreen extends StatelessWidget {
                 _infoTile(
                   icon: Icons.mail_outline,
                   label: 'E-Mail',
-                  value: 'maria.musterfrau@frohzeit.de',
+                  value: email,
                 ),
                 const Divider(height: 1, indent: 56),
                 _infoTile(
-                  icon: Icons.phone_outlined,
-                  label: 'Telefon',
-                  value: '+49 170 1234567',
+                  icon: Icons.badge_outlined,
+                  label: 'User-ID',
+                  value: user != null ? '#${user.id}' : '—',
                 ),
-                const Divider(height: 1, indent: 56),
-                _infoTile(
-                  icon: Icons.location_on_outlined,
-                  label: 'Einsatzgebiet',
-                  value: 'Berlin und Umgebung',
-                ),
+                if (user?.pattiPersonId != null) ...[
+                  const Divider(height: 1, indent: 56),
+                  _infoTile(
+                    icon: Icons.link,
+                    label: 'Patti-Verknüpfung',
+                    value: 'Person #${user!.pattiPersonId}',
+                  ),
+                ],
               ],
             ),
 
             const SizedBox(height: 24),
 
-            _sectionTitle('Anstellung'),
+            _sectionTitle('Status'),
             _card(
               children: [
                 _infoTile(
-                  icon: Icons.badge_outlined,
-                  label: 'Personalnummer',
-                  value: 'FZ-1042',
-                ),
-                const Divider(height: 1, indent: 56),
-                _infoTile(
-                  icon: Icons.calendar_today_outlined,
-                  label: 'Eintrittsdatum',
-                  value: '01.09.2023',
+                  icon: user?.isActive == true
+                      ? Icons.check_circle_outline
+                      : Icons.block,
+                  label: 'Konto',
+                  value: user?.isActive == true ? 'Aktiv' : 'Deaktiviert',
                 ),
               ],
             ),
@@ -116,6 +131,13 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 
   Widget _sectionTitle(String text) {
