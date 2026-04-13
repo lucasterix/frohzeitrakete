@@ -1,55 +1,29 @@
 import 'package:flutter/material.dart';
-import '../../shared/widgets/detail_line.dart';
+
+import '../../core/models/mobile_patient.dart';
 import '../../shared/widgets/notification_bell.dart';
-import '../requests/document_detail_screen.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
 import '../entries/month_overview_screen.dart';
+import '../requests/document_detail_screen.dart';
 import '../settings/settings_screen.dart';
 import '../vp_antrag/vp_antrag_screen.dart';
 
 class PatientDetailScreen extends StatefulWidget {
-  final String name;
-  final String address;
-  final String birthday;
-  final String insuranceNumber;
-  final String careInsurance;
-  final String phone;
-  final double remainingHours;
-  final double usedHours;
-  final int pflegegrad;
-  final String vpState; // none | signed | approved
-  final String vpMonth;
+  final MobilePatient patient;
 
-  const PatientDetailScreen({
-    super.key,
-    required this.name,
-    required this.address,
-    required this.birthday,
-    required this.insuranceNumber,
-    required this.careInsurance,
-    required this.phone,
-    required this.remainingHours,
-    required this.usedHours,
-    required this.pflegegrad,
-    required this.vpState,
-    required this.vpMonth,
-  });
+  const PatientDetailScreen({super.key, required this.patient});
 
   @override
   State<PatientDetailScreen> createState() => _PatientDetailScreenState();
 }
 
 class _PatientDetailScreenState extends State<PatientDetailScreen> {
-  late String _vpState;
+  // MOCK: Backend liefert diese Felder noch nicht (keine Einsatz-API, keine VP-State-Tabelle)
+  late double _remainingHours;
+  late double _usedHours;
+  late String _vpState; // none | signed | approved
   late String _vpMonth;
-
-  @override
-  void initState() {
-    super.initState();
-    _vpState = widget.vpState;
-    _vpMonth = widget.vpMonth;
-  }
 
   static const List<Map<String, dynamic>> _mockEntries = [
     {
@@ -72,27 +46,33 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    // Deterministische Mock-Daten aus patient_id
+    final seed = widget.patient.patientId;
+    _remainingHours = 4.0 + (seed % 15) + ((seed % 2) * 0.5);
+    _usedHours = 6.0 + (seed % 12);
+
+    final vpStates = ['none', 'signed', 'approved', 'none'];
+    _vpState = widget.patient.pflegegradInt >= 2
+        ? vpStates[seed % vpStates.length]
+        : 'none';
+    _vpMonth = _vpState != 'none' ? 'April 2026' : '';
+  }
+
   String _formatHours(double h) {
     final full = h.truncate();
     final half = (h - full) >= 0.5;
     return '$full,${half ? '5' : '0'} h';
   }
 
-  String _initials() {
-    return widget.name
-        .split(' ')
-        .map((w) => w.isNotEmpty ? w[0] : '')
-        .take(2)
-        .join();
-  }
-
   Future<void> _openVpAntrag() async {
-    if (widget.pflegegrad < 2) return;
+    if (widget.patient.pflegegradInt < 2) return;
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => VpAntragScreen(
-          patientName: widget.name,
-          pflegegrad: widget.pflegegrad,
+          patient: widget.patient,
         ),
       ),
     );
@@ -112,16 +92,18 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   @override
   Widget build(BuildContext context) {
     const green = Color(0xFF4F8A5B);
-    final totalHours = widget.remainingHours + widget.usedHours;
+    final totalHours = _remainingHours + _usedHours;
     final progress =
-        totalHours == 0 ? 0.0 : widget.usedHours / totalHours;
+        totalHours == 0 ? 0.0 : _usedHours / totalHours;
+    final patient = widget.patient;
+    final pflegegrad = patient.pflegegradInt;
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => EntryScreen(preselectedPatient: widget.name),
+              builder: (_) => EntryScreen(preselectedPatient: patient),
             ),
           );
         },
@@ -136,7 +118,6 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 child: Row(
@@ -158,11 +139,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                 ),
               ),
 
-              // Hero: Avatar + Name + Pflegegrad
+              // Hero Avatar + Name
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
                       width: 72,
@@ -177,7 +157,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          _initials(),
+                          patient.initials,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 26,
@@ -192,7 +172,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.name,
+                            patient.displayName,
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -200,39 +180,25 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: green.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Pflegegrad ${widget.pflegegrad}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: green,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          if (pflegegrad > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: green.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Pflegegrad $pflegegrad',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: green,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  '• ${widget.birthday}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.black54,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
                         ],
                       ),
                     ),
@@ -242,7 +208,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
 
               const SizedBox(height: 20),
 
-              // Reststunden-Hero
+              // Reststunden Hero (MOCK – Backend liefert noch keine Einsatz-Summen)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
@@ -259,15 +225,11 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      const Row(
                         children: [
-                          const Icon(
-                            Icons.schedule,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
+                          Icon(Icons.schedule, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text(
                             'Reststunden diesen Monat',
                             style: TextStyle(
                               color: Colors.white,
@@ -279,7 +241,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        _formatHours(widget.remainingHours),
+                        _formatHours(_remainingHours),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 38,
@@ -295,14 +257,13 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                           minHeight: 6,
                           backgroundColor:
                               Colors.white.withValues(alpha: 0.25),
-                          valueColor: const AlwaysStoppedAnimation(
-                            Colors.white,
-                          ),
+                          valueColor:
+                              const AlwaysStoppedAnimation(Colors.white),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '${_formatHours(widget.usedHours)} von ${_formatHours(totalHours)} genutzt',
+                        '${_formatHours(_usedHours)} von ${_formatHours(totalHours)} genutzt',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.85),
                           fontSize: 13,
@@ -320,10 +281,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Dokumente',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style:
+                      TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 12),
@@ -340,7 +299,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => MonthOverviewScreen(
-                          patientName: widget.name,
+                          patient: patient,
                           monthLabel: 'April 2026',
                         ),
                       ),
@@ -350,14 +309,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               ),
 
               const SizedBox(height: 10),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _vpAntragCard(),
               ),
 
               const SizedBox(height: 10),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _documentCard(
@@ -369,9 +326,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const DocumentDetailScreen(
+                        builder: (_) => DocumentDetailScreen(
                           title: 'Pflegeumwandlung',
                           status: 'bereit',
+                          patient: patient,
                         ),
                       ),
                     );
@@ -386,10 +344,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Kontaktdaten',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style:
+                      TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 12),
@@ -397,7 +353,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
@@ -406,28 +362,26 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DetailLine(
-                        'Adresse:',
-                        widget.address,
-                        copyable: true,
-                        icon: Icons.content_copy,
+                      _kvRow(
+                        label: 'Adresse',
+                        value: patient.addressLine ?? '—',
                       ),
-                      DetailLine(
-                        'Telefon:',
-                        widget.phone,
-                        copyable: true,
-                        icon: Icons.content_copy,
+                      if (patient.city != null) ...[
+                        const SizedBox(height: 8),
+                        _kvRow(label: 'Stadt', value: patient.city!),
+                      ],
+                      const SizedBox(height: 8),
+                      _kvRow(
+                        label: 'Patient-ID',
+                        value: '${patient.patientId}',
                       ),
-                      DetailLine(
-                        'Versicherung:',
-                        widget.careInsurance,
-                      ),
-                      DetailLine(
-                        'Versichertennr.:',
-                        widget.insuranceNumber,
-                        copyable: true,
-                        icon: Icons.content_copy,
-                      ),
+                      if (patient.startedAt != null) ...[
+                        const SizedBox(height: 8),
+                        _kvRow(
+                          label: 'Betreuung seit',
+                          value: patient.startedAt!.split('T').first,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -435,15 +389,13 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
 
               const SizedBox(height: 28),
 
-              // Letzte Einsätze
+              // Letzte Einsätze (MOCK)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   'Letzte Einsätze',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style:
+                      TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 12),
@@ -464,7 +416,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => EntryDetailScreen(
-                              patientName: widget.name,
+                              patientName: patient.displayName,
                               date: entry['date'] as String,
                               hours: hours,
                               activities: activities,
@@ -547,6 +499,31 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
     );
   }
 
+  Widget _kvRow({required String label, required String value}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 15, color: Colors.black87),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _documentCard({
     required IconData icon,
     required String title,
@@ -597,9 +574,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: disabled
-                                  ? Colors.black38
-                                  : Colors.black87,
+                              color:
+                                  disabled ? Colors.black38 : Colors.black87,
                             ),
                           ),
                         ),
@@ -647,7 +623,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   Widget _vpAntragCard() {
     const green = Color(0xFF4F8A5B);
 
-    if (widget.pflegegrad < 2) {
+    if (widget.patient.pflegegradInt < 2) {
       return _documentCard(
         icon: Icons.assignment_outlined,
         title: 'Verhinderungspflege',
@@ -696,11 +672,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                             ),
                           ),
                         ),
-                        Icon(
-                          Icons.verified,
-                          color: green,
-                          size: 20,
-                        ),
+                        Icon(Icons.verified, color: green, size: 20),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -747,10 +719,7 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   color: green,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.check_circle,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.check_circle, color: Colors.white),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -790,7 +759,6 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
       );
     }
 
-    // none
     return _documentCard(
       icon: Icons.assignment_outlined,
       title: 'Verhinderungspflege',

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/api/api_exception.dart';
+import '../../core/providers.dart';
 import '../../navigation/main_navigation.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _passwordFocusNode = FocusNode();
@@ -31,7 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text;
 
     setState(() {
-      _usernameError = username.isEmpty ? 'Benutzername erforderlich' : null;
+      _usernameError = username.isEmpty
+          ? 'E-Mail erforderlich'
+          : (!username.contains('@') ? 'Ungültige E-Mail' : null);
       _passwordError = password.isEmpty
           ? 'Passwort erforderlich'
           : (password.length < 4 ? 'Mindestens 4 Zeichen' : null);
@@ -42,23 +47,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // TODO: Ersetzen durch echten API-Aufruf POST /api/v1/auth/login
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      await ref.read(authControllerProvider.notifier).login(username, password);
 
-    if (!mounted) return;
-
-    // Mock: "falsch" als Passwort simuliert einen Server-Fehler
-    if (password == 'falsch') {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _generalError = 'Benutzername oder Passwort ist falsch.';
+        _generalError = e.message;
       });
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _generalError = 'Unerwarteter Fehler: $e';
+      });
     }
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainNavigation()),
-    );
   }
 
   void _showContactInfo() {
@@ -130,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 48),
                 const Text(
-                  'Benutzername',
+                  'E-Mail',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -142,6 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
                   enableSuggestions: false,
+                  keyboardType: TextInputType.emailAddress,
                   onSubmitted: (_) => _passwordFocusNode.requestFocus(),
                   onChanged: (_) {
                     if (_usernameError != null) {
@@ -149,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
                   },
                   decoration: InputDecoration(
-                    hintText: 'max.mustermann',
+                    hintText: 'name@frohzeit.de',
                     filled: true,
                     fillColor: Colors.white,
                     errorText: _usernameError,

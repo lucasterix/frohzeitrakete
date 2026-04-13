@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
 import '../signatures/signature_screen.dart';
 
 class MonthOverviewScreen extends StatefulWidget {
-  final String patientName;
+  final MobilePatient patient;
   final String monthLabel; // z.B. "April 2026"
 
   const MonthOverviewScreen({
     super.key,
-    required this.patientName,
+    required this.patient,
     required this.monthLabel,
   });
 
@@ -163,7 +165,7 @@ class _MonthOverviewScreenState extends State<MonthOverviewScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.patientName,
+                    widget.patient.displayName,
                     style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -352,8 +354,11 @@ class _MonthOverviewScreenState extends State<MonthOverviewScreen> {
                     : () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) =>
-                                SignatureScreen(documentTitle: title),
+                            builder: (_) => SignatureScreen(
+                              patient: widget.patient,
+                              documentType: DocumentType.leistungsnachweis,
+                              documentTitle: title,
+                            ),
                           ),
                         );
                       },

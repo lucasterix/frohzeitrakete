@@ -36,9 +36,7 @@ class EntryDetailScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
-                    builder: (_) => EntryScreen(
-                      preselectedPatient: patientName,
-                    ),
+                    builder: (_) => const EntryScreen(),
                   ),
                 );
               },

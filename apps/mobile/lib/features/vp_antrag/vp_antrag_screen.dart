@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_exception.dart';
+import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
+import '../../core/providers.dart';
+import '../../core/signature/svg_builder.dart';
 
 enum _Step { form, sign, success }
 
@@ -7,21 +14,19 @@ const List<String> _monthNames = [
   'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
 ];
 
-class VpAntragScreen extends StatefulWidget {
-  final String patientName;
-  final int pflegegrad;
+class VpAntragScreen extends ConsumerStatefulWidget {
+  final MobilePatient patient;
 
   const VpAntragScreen({
     super.key,
-    required this.patientName,
-    required this.pflegegrad,
+    required this.patient,
   });
 
   @override
-  State<VpAntragScreen> createState() => _VpAntragScreenState();
+  ConsumerState<VpAntragScreen> createState() => _VpAntragScreenState();
 }
 
-class _VpAntragScreenState extends State<VpAntragScreen> {
+class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
   _Step _step = _Step.form;
 
   // Form
@@ -34,6 +39,8 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
   final List<List<Offset>> _strokes = [];
   List<Offset> _currentStroke = [];
   bool _isProcessing = false;
+  String? _uploadError;
+  final GlobalKey _canvasKey = GlobalKey();
 
   @override
   void initState() {
@@ -105,19 +112,52 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
 
   Future<void> _submit() async {
     if (_strokes.isEmpty && _currentStroke.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte zuerst unterschreiben.')),
-      );
+      setState(() => _uploadError = 'Bitte zuerst unterschreiben.');
       return;
     }
-    setState(() => _isProcessing = true);
-    // TODO: POST /api/v1/vp-antrag
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
+
     setState(() {
-      _isProcessing = false;
-      _step = _Step.success;
+      _isProcessing = true;
+      _uploadError = null;
     });
+
+    final renderBox =
+        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    final size = renderBox?.size ?? const Size(400, 260);
+    final svg = SvgBuilder.buildSignatureSvg(
+      strokes: _strokes,
+      canvasSize: size,
+    );
+
+    try {
+      await ref.read(signatureRepositoryProvider).createSignature(
+            patientId: widget.patient.patientId,
+            documentType: DocumentType.vpAntrag,
+            signerName: _pflegepersonController.text.trim(),
+            svgContent: svg,
+            width: size.width.round(),
+            height: size.height.round(),
+            note: 'VP-Antrag für $_monthLabel',
+          );
+
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _step = _Step.success;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _uploadError = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _uploadError = 'Unerwarteter Fehler: $e';
+      });
+    }
   }
 
   @override
@@ -165,7 +205,7 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.patientName,
+                  widget.patient.displayName,
                   style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
@@ -182,7 +222,7 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'Pflegegrad ${widget.pflegegrad}',
+                    'Pflegegrad ${widget.patient.pflegegradInt}',
                     style: const TextStyle(
                       fontSize: 13,
                       color: green,
@@ -338,7 +378,7 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${widget.patientName}  •  Pflegeperson: ${_pflegepersonController.text.trim()}',
+            '${widget.patient.displayName}  •  Pflegeperson: ${_pflegepersonController.text.trim()}',
             style: const TextStyle(fontSize: 14, color: Colors.black54),
           ),
           const SizedBox(height: 16),
@@ -362,6 +402,7 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
                       onPanUpdate: _onPanUpdate,
                       onPanEnd: _onPanEnd,
                       child: CustomPaint(
+                        key: _canvasKey,
                         painter: _SignaturePainter(
                           strokes: _strokes,
                           currentStroke: _currentStroke,
@@ -395,6 +436,33 @@ class _VpAntragScreenState extends State<VpAntragScreen> {
               ),
             ),
           ),
+          if (_uploadError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline,
+                      color: Colors.red, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _uploadError!,
+                      style:
+                          const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [

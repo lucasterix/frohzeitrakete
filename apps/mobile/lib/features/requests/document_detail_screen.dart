@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
 import '../signatures/signature_screen.dart';
 
 class DocumentDetailScreen extends StatelessWidget {
   final String title;
   final String status;
+  final MobilePatient? patient;
+  final DocumentType documentType;
 
   const DocumentDetailScreen({
     super.key,
     required this.title,
     required this.status,
+    this.patient,
+    this.documentType = DocumentType.pflegeumwandlung,
   });
 
   @override
@@ -186,13 +192,19 @@ class DocumentDetailScreen extends StatelessWidget {
               width: double.infinity,
               height: 54,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SignatureScreen(documentTitle: title),
-                    ),
-                  );
-                },
+                onPressed: patient == null
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SignatureScreen(
+                              patient: patient!,
+                              documentType: documentType,
+                              documentTitle: title,
+                            ),
+                          ),
+                        );
+                      },
                 icon: const Icon(Icons.draw),
                 label: const Text(
                   'Unterschreiben',

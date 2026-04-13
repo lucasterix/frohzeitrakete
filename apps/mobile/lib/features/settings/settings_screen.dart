@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
 
     return Scaffold(
@@ -95,7 +98,7 @@ class SettingsScreen extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: OutlinedButton.icon(
-              onPressed: () => _confirmLogout(context),
+              onPressed: () => _confirmLogout(context, ref),
               icon: const Icon(Icons.logout, color: Colors.red),
               label: const Text(
                 'Abmelden',
@@ -118,7 +121,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmLogout(BuildContext context) async {
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -141,6 +144,8 @@ class SettingsScreen extends StatelessWidget {
     );
 
     if (confirmed == true && context.mounted) {
+      await ref.read(authControllerProvider.notifier).logout();
+      if (!context.mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (_) => false,

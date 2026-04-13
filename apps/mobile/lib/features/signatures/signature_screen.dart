@@ -1,34 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SignatureScreen extends StatefulWidget {
+import '../../core/api/api_exception.dart';
+import '../../core/models/mobile_patient.dart';
+import '../../core/models/signature_event.dart';
+import '../../core/providers.dart';
+import '../../core/signature/svg_builder.dart';
+
+/// Generischer Signature-Screen – lädt Signatur bei Erfolg zum Backend hoch
+/// via POST /mobile/signatures.
+///
+/// Verwendet für Leistungsnachweis und Pflegeumwandlung.
+/// Für VP-Antrag → siehe VpAntragScreen (eigener 3-Step-Flow wegen Pflegeperson-Feld).
+class SignatureScreen extends ConsumerStatefulWidget {
+  final MobilePatient patient;
+  final DocumentType documentType;
   final String documentTitle;
+
+  /// Wer unterschreibt. Standard: Patient selbst.
+  final String? signerNameOverride;
 
   const SignatureScreen({
     super.key,
+    required this.patient,
+    required this.documentType,
     required this.documentTitle,
+    this.signerNameOverride,
   });
 
   @override
-  State<SignatureScreen> createState() => _SignatureScreenState();
+  ConsumerState<SignatureScreen> createState() => _SignatureScreenState();
 }
 
-class _SignatureScreenState extends State<SignatureScreen> {
+class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   final List<List<Offset>> _strokes = [];
   List<Offset> _currentStroke = [];
   bool _isSaving = false;
+  String? _error;
+  final GlobalKey _canvasKey = GlobalKey();
 
   bool get _isEmpty => _strokes.isEmpty && _currentStroke.isEmpty;
 
   void _onPanStart(DragStartDetails d) {
-    setState(() {
-      _currentStroke = [d.localPosition];
-    });
+    setState(() => _currentStroke = [d.localPosition]);
   }
 
   void _onPanUpdate(DragUpdateDetails d) {
-    setState(() {
-      _currentStroke = [..._currentStroke, d.localPosition];
-    });
+    setState(() => _currentStroke = [..._currentStroke, d.localPosition]);
   }
 
   void _onPanEnd(DragEndDetails _) {
@@ -44,25 +62,58 @@ class _SignatureScreenState extends State<SignatureScreen> {
     setState(() {
       _strokes.clear();
       _currentStroke = [];
+      _error = null;
     });
   }
 
   Future<void> _save() async {
     if (_isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte zuerst unterschreiben.')),
-      );
+      setState(() => _error = 'Bitte zuerst unterschreiben.');
       return;
     }
-    setState(() => _isSaving = true);
-    // TODO: Convert canvas to image and POST /api/v1/signatures
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Unterschrift gespeichert!')),
+
+    final renderBox =
+        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    final size = renderBox?.size ?? const Size(400, 260);
+
+    final svg = SvgBuilder.buildSignatureSvg(
+      strokes: _strokes,
+      canvasSize: size,
     );
+
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(signatureRepositoryProvider).createSignature(
+            patientId: widget.patient.patientId,
+            documentType: widget.documentType,
+            signerName: widget.signerNameOverride ?? widget.patient.displayName,
+            svgContent: svg,
+            width: size.width.round(),
+            height: size.height.round(),
+          );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unterschrift gespeichert!')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _error = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _error = 'Unerwarteter Fehler: $e';
+      });
+    }
   }
 
   @override
@@ -70,9 +121,7 @@ class _SignatureScreenState extends State<SignatureScreen> {
     const green = Color(0xFF4F8A5B);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Unterschrift'),
-      ),
+      appBar: AppBar(title: const Text('Unterschrift')),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         child: Column(
@@ -86,9 +135,11 @@ class _SignatureScreenState extends State<SignatureScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Der Patient unterschreibt hier persönlich.',
-              style: TextStyle(fontSize: 15, color: Colors.black54),
+            Text(
+              widget.signerNameOverride != null
+                  ? 'Unterschrift von: ${widget.signerNameOverride}'
+                  : 'Der Patient unterschreibt hier persönlich.',
+              style: const TextStyle(fontSize: 15, color: Colors.black54),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -106,12 +157,12 @@ class _SignatureScreenState extends State<SignatureScreen> {
                   borderRadius: BorderRadius.circular(20),
                   child: Stack(
                     children: [
-                      // Drawing canvas
                       GestureDetector(
                         onPanStart: _onPanStart,
                         onPanUpdate: _onPanUpdate,
                         onPanEnd: _onPanEnd,
                         child: CustomPaint(
+                          key: _canvasKey,
                           painter: _SignaturePainter(
                             strokes: _strokes,
                             currentStroke: _currentStroke,
@@ -119,7 +170,6 @@ class _SignatureScreenState extends State<SignatureScreen> {
                           child: const SizedBox.expand(),
                         ),
                       ),
-                      // Placeholder hint
                       if (_isEmpty)
                         const Center(
                           child: Column(
@@ -146,6 +196,40 @@ class _SignatureScreenState extends State<SignatureScreen> {
                 ),
               ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
@@ -219,11 +303,7 @@ class _SignaturePainter extends CustomPainter {
   void _drawStroke(Canvas canvas, List<Offset> points, Paint paint) {
     if (points.isEmpty) return;
     if (points.length == 1) {
-      canvas.drawCircle(
-        points.first,
-        1.4,
-        paint..style = PaintingStyle.fill,
-      );
+      canvas.drawCircle(points.first, 1.4, paint..style = PaintingStyle.fill);
       paint.style = PaintingStyle.stroke;
       return;
     }

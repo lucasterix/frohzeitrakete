@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class EntryScreen extends StatefulWidget {
-  final String? preselectedPatient;
+import '../../core/models/mobile_patient.dart';
+import '../../core/providers.dart';
+
+class EntryScreen extends ConsumerStatefulWidget {
+  final MobilePatient? preselectedPatient;
 
   const EntryScreen({super.key, this.preselectedPatient});
 
   @override
-  State<EntryScreen> createState() => _EntryScreenState();
+  ConsumerState<EntryScreen> createState() => _EntryScreenState();
 }
 
-class _EntryScreenState extends State<EntryScreen> {
-  static const List<String> _patients = [
-    'Anna Berger',
-    'Heinrich Kaiser',
-    'Margarete Huber',
-    'Wilhelm Schäfer',
-  ];
+class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   // Häufigste Stundenwerte als Quick-Presets
   static const List<double> _hourPresets = [
@@ -35,7 +33,7 @@ class _EntryScreenState extends State<EntryScreen> {
     'Wäsche',
   ];
 
-  late String _selectedPatient;
+  MobilePatient? _selectedPatient;
   DateTime _selectedDate = DateTime.now();
   double? _hours;
   final Set<String> _selectedActivities = {};
@@ -44,7 +42,7 @@ class _EntryScreenState extends State<EntryScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedPatient = widget.preselectedPatient ?? _patients[0];
+    _selectedPatient = widget.preselectedPatient;
   }
 
   String _formatHours(double h) {
@@ -76,6 +74,12 @@ class _EntryScreenState extends State<EntryScreen> {
   }
 
   Future<void> _save() async {
+    if (_selectedPatient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte Patient wählen.')),
+      );
+      return;
+    }
     if (_hours == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte Stunden wählen.')),
@@ -89,20 +93,27 @@ class _EntryScreenState extends State<EntryScreen> {
       return;
     }
     setState(() => _isSaving = true);
+
+    // HINWEIS: Backend hat aktuell keine Einsatz-API.
+    // Sobald verfügbar: ref.read(entryRepositoryProvider).createEntry(...)
     await Future.delayed(const Duration(milliseconds: 600));
+
     if (!mounted) return;
     setState(() => _isSaving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Einsatz gespeichert: ${_formatHours(_hours!)} bei $_selectedPatient',
+          'Einsatz gespeichert (lokal): ${_formatHours(_hours!)} bei ${_selectedPatient!.displayName}',
         ),
       ),
     );
     Navigator.of(context).pop();
   }
 
-  bool get _canSave => _hours != null && _selectedActivities.isNotEmpty;
+  bool get _canSave =>
+      _selectedPatient != null &&
+      _hours != null &&
+      _selectedActivities.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -123,34 +134,7 @@ class _EntryScreenState extends State<EntryScreen> {
                   // Patient
                   _label('Patient'),
                   const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.black12),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: DropdownButton<String>(
-                      value: _selectedPatient,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        color: Colors.black87,
-                      ),
-                      items: _patients
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(p),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setState(() => _selectedPatient = v);
-                      },
-                    ),
-                  ),
+                  _buildPatientDropdown(),
 
                   const SizedBox(height: 20),
 
@@ -409,6 +393,94 @@ class _EntryScreenState extends State<EntryScreen> {
         fontWeight: FontWeight.w600,
         color: Colors.black54,
       ),
+    );
+  }
+
+  Widget _buildPatientDropdown() {
+    final patientsAsync = ref.watch(patientsProvider);
+
+    return patientsAsync.when(
+      loading: () => _selectBoxPlaceholder(
+        const SizedBox(
+          height: 20,
+          width: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (e, _) => _selectBoxPlaceholder(
+        Text(
+          'Patienten konnten nicht geladen werden',
+          style: TextStyle(color: Colors.red[700]),
+        ),
+      ),
+      data: (patients) {
+        if (patients.isEmpty) {
+          return _selectBoxPlaceholder(
+            const Text(
+              'Keine Patienten verfügbar',
+              style: TextStyle(color: Colors.black54),
+            ),
+          );
+        }
+
+        // Fallback: wenn preselected patient nicht in Liste ist, ersten nehmen
+        final selected = _selectedPatient != null &&
+                patients.any((p) => p.patientId == _selectedPatient!.patientId)
+            ? patients.firstWhere(
+                (p) => p.patientId == _selectedPatient!.patientId,
+              )
+            : patients.first;
+
+        // Einmalig synchronisieren
+        if (_selectedPatient?.patientId != selected.patientId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _selectedPatient = selected);
+          });
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.black12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButton<int>(
+            value: selected.patientId,
+            isExpanded: true,
+            underline: const SizedBox.shrink(),
+            style: const TextStyle(fontSize: 17, color: Colors.black87),
+            items: patients
+                .map(
+                  (p) => DropdownMenuItem(
+                    value: p.patientId,
+                    child: Text(p.displayName),
+                  ),
+                )
+                .toList(),
+            onChanged: (id) {
+              if (id != null) {
+                setState(() {
+                  _selectedPatient =
+                      patients.firstWhere((p) => p.patientId == id);
+                });
+              }
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _selectBoxPlaceholder(Widget child) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: child,
     );
   }
 }
