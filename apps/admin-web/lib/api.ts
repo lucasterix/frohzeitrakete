@@ -104,18 +104,29 @@ export type ActivityFeedItem = {
   signature_event_id: number;
 };
 
+export type DocumentType = "leistungsnachweis" | "vp_antrag" | "pflegeumwandlung";
+
 export type CreateTestSignaturePayload = {
   patient_id: number;
-  document_type:
-    | "leistungsnachweis"
-    | "vp_antrag"
-    | "pflegeumwandlung";
+  document_type: DocumentType;
   signer_name: string;
   info_text_version?: string | null;
   svg_content: string;
   width?: number | null;
   height?: number | null;
   note?: string | null;
+};
+
+export type CreateMobileSignaturePayload = {
+  patient_id: number;
+  document_type: DocumentType;
+  signer_name: string;
+  info_text_version?: string | null;
+  svg_content: string;
+  width?: number | null;
+  height?: number | null;
+  note?: string | null;
+  signed_at?: string | null; // ISO 8601 — optional, für Offline-Erfassung
 };
 
 /* =========================
@@ -596,6 +607,78 @@ export async function createTestSignature(
       await parseError(
         response,
         "Fehler beim Speichern der Test-Signatur"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+/* =========================
+   SIGNATURES (MOBILE)
+========================= */
+
+export async function createMobileSignature(
+  payload: CreateMobileSignaturePayload
+): Promise<SignatureEvent> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/mobile/signatures`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Speichern der Signatur"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+export async function getMyMobileSignatures(): Promise<SignatureEvent[]> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/mobile/signatures`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Signaturen"
+      )
+    );
+  }
+
+  return response.json();
+}
+
+export async function getMyMobileSignature(
+  signatureId: number
+): Promise<SignatureEvent> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/mobile/signatures/${signatureId}`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Laden der Signatur"
       )
     );
   }

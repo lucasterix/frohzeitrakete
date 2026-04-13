@@ -2,10 +2,24 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+DOCUMENT_TYPE_PATTERN = "^(leistungsnachweis|vp_antrag|pflegeumwandlung)$"
+
+
+class MobileSignatureCreate(BaseModel):
+    patient_id: int
+    document_type: str = Field(pattern=DOCUMENT_TYPE_PATTERN)
+    signer_name: str
+    info_text_version: str | None = None
+    svg_content: str
+    width: int | None = None
+    height: int | None = None
+    note: str | None = None
+    signed_at: datetime | None = None  # wenn None → Server-Zeit; nützlich für Offline-Erfassung
+
 
 class TestSignatureCreate(BaseModel):
     patient_id: int
-    document_type: str = Field(pattern="^(leistungsnachweis|vp_antrag|pflegeumwandlung)$")
+    document_type: str = Field(pattern=DOCUMENT_TYPE_PATTERN)
     signer_name: str
     info_text_version: str | None = None
     svg_content: str
