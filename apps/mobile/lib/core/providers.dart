@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api_client.dart';
+import 'models/entry.dart';
 import 'models/mobile_patient.dart';
 import 'models/user.dart';
 import 'repositories/auth_repository.dart';
+import 'repositories/entry_repository.dart';
 import 'repositories/patient_repository.dart';
 import 'repositories/signature_repository.dart';
 
@@ -21,6 +23,10 @@ final patientRepositoryProvider = Provider<PatientRepository>(
 
 final signatureRepositoryProvider = Provider<SignatureRepository>(
   (ref) => SignatureRepository(ref.watch(apiClientProvider)),
+);
+
+final entryRepositoryProvider = Provider<EntryRepository>(
+  (ref) => EntryRepository(ref.watch(apiClientProvider)),
 );
 
 // ---------------- Auth State ----------------
@@ -65,3 +71,86 @@ final patientsProvider = FutureProvider<List<MobilePatient>>((ref) async {
   final repo = ref.watch(patientRepositoryProvider);
   return repo.getPatients();
 });
+
+// ---------------- Entries ----------------
+
+/// Einsätze des aktuellen Users, gefiltert nach Patient + (optional) Monat.
+class EntryListParams {
+  final int patientId;
+  final int? year;
+  final int? month;
+
+  const EntryListParams({
+    required this.patientId,
+    this.year,
+    this.month,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is EntryListParams &&
+      other.patientId == patientId &&
+      other.year == year &&
+      other.month == month;
+
+  @override
+  int get hashCode => Object.hash(patientId, year, month);
+}
+
+final patientEntriesProvider =
+    FutureProvider.family<List<Entry>, EntryListParams>((ref, params) async {
+  final auth = ref.watch(authControllerProvider);
+  if (auth.valueOrNull == null) return [];
+  final repo = ref.watch(entryRepositoryProvider);
+  return repo.listEntries(
+    patientId: params.patientId,
+    year: params.year,
+    month: params.month,
+  );
+});
+
+/// Hours-summary für Reststunden-Anzeige.
+class HoursSummaryParams {
+  final int patientId;
+  final int year;
+  final int month;
+
+  const HoursSummaryParams({
+    required this.patientId,
+    required this.year,
+    required this.month,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is HoursSummaryParams &&
+      other.patientId == patientId &&
+      other.year == year &&
+      other.month == month;
+
+  @override
+  int get hashCode => Object.hash(patientId, year, month);
+}
+
+final hoursSummaryProvider =
+    FutureProvider.family<PatientHoursSummary, HoursSummaryParams>(
+  (ref, params) async {
+    final auth = ref.watch(authControllerProvider);
+    if (auth.valueOrNull == null) {
+      return PatientHoursSummary(
+        patientId: params.patientId,
+        year: params.year,
+        month: params.month,
+        usedHours: 0,
+        entriesCount: 0,
+        isLocked: false,
+      );
+    }
+    final repo = ref.watch(entryRepositoryProvider);
+    return repo.getHoursSummary(
+      patientId: params.patientId,
+      year: params.year,
+      month: params.month,
+    );
+  },
+);

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/mobile_patient.dart';
+import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
@@ -9,19 +11,23 @@ import '../requests/document_detail_screen.dart';
 import '../settings/settings_screen.dart';
 import '../vp_antrag/vp_antrag_screen.dart';
 
-class PatientDetailScreen extends StatefulWidget {
+class PatientDetailScreen extends ConsumerStatefulWidget {
   final MobilePatient patient;
 
   const PatientDetailScreen({super.key, required this.patient});
 
   @override
-  State<PatientDetailScreen> createState() => _PatientDetailScreenState();
+  ConsumerState<PatientDetailScreen> createState() =>
+      _PatientDetailScreenState();
 }
 
-class _PatientDetailScreenState extends State<PatientDetailScreen> {
-  // MOCK: Backend liefert diese Felder noch nicht (keine Einsatz-API, keine VP-State-Tabelle)
-  late double _remainingHours;
-  late double _usedHours;
+class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
+  // MOCK: VP-Antrag-Status kommt weiterhin aus lokalem Mock-State.
+  // used_hours kommt jetzt echt vom Backend via hoursSummaryProvider.
+  // Reststunden-Kontingent (allocated) ist noch nicht konfigurierbar im Backend,
+  // deshalb nehmen wir einen festen Default von 30 h/Monat.
+  static const double _monthlyAllocation = 30.0;
+
   late String _vpState; // none | signed | approved
   late String _vpMonth;
 
@@ -49,11 +55,8 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Deterministische Mock-Daten aus patient_id
+    // Deterministisches VP-State-Mock aus patient_id (bis Backend diese Info liefert)
     final seed = widget.patient.patientId;
-    _remainingHours = 4.0 + (seed % 15) + ((seed % 2) * 0.5);
-    _usedHours = 6.0 + (seed % 12);
-
     final vpStates = ['none', 'signed', 'approved', 'none'];
     _vpState = widget.patient.pflegegradInt >= 2
         ? vpStates[seed % vpStates.length]
@@ -92,11 +95,18 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
   @override
   Widget build(BuildContext context) {
     const green = Color(0xFF4F8A5B);
-    final totalHours = _remainingHours + _usedHours;
-    final progress =
-        totalHours == 0 ? 0.0 : _usedHours / totalHours;
     final patient = widget.patient;
     final pflegegrad = patient.pflegegradInt;
+    final now = DateTime.now();
+    final summaryAsync = ref.watch(
+      hoursSummaryProvider(
+        HoursSummaryParams(
+          patientId: patient.patientId,
+          year: now.year,
+          month: now.month,
+        ),
+      ),
+    );
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -208,70 +218,10 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
 
               const SizedBox(height: 20),
 
-              // Reststunden Hero (MOCK – Backend liefert noch keine Einsatz-Summen)
+              // Reststunden Hero (live vom Backend via /patients/:id/hours-summary)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [green, green.withValues(alpha: 0.75)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.schedule, color: Colors.white, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Reststunden diesen Monat',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        _formatHours(_remainingHours),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 38,
-                          fontWeight: FontWeight.bold,
-                          height: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 6,
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.25),
-                          valueColor:
-                              const AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${_formatHours(_usedHours)} von ${_formatHours(totalHours)} genutzt',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                child: _buildHoursHero(summaryAsync),
               ),
 
               const SizedBox(height: 24),
@@ -496,6 +446,165 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHoursHero(AsyncValue<dynamic> summaryAsync) {
+    return summaryAsync.when(
+      loading: () => _heroShell(
+        child: const SizedBox(
+          height: 90,
+          child: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.5,
+              ),
+            ),
+          ),
+        ),
+      ),
+      error: (e, _) => _heroShell(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.cloud_off, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Reststunden diesen Monat',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Offline',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              e.toString(),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+      data: (summary) {
+        final used = summary.usedHours as double;
+        final remaining = (_monthlyAllocation - used).clamp(0.0, _monthlyAllocation);
+        final progress = used / _monthlyAllocation;
+        final locked = summary.isLocked as bool;
+
+        return _heroShell(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.schedule, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Reststunden diesen Monat',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (locked)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, color: Colors.white, size: 12),
+                          SizedBox(width: 4),
+                          Text(
+                            'GESPERRT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _formatHours(remaining),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 38,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  minHeight: 6,
+                  backgroundColor: Colors.white.withValues(alpha: 0.25),
+                  valueColor: const AlwaysStoppedAnimation(Colors.white),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_formatHours(used)} von ${_formatHours(_monthlyAllocation)} genutzt · ${summary.entriesCount} Einsätze',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _heroShell({required Widget child}) {
+    const green = Color(0xFF4F8A5B);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [green, green.withValues(alpha: 0.75)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: child,
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/providers.dart';
 
@@ -92,22 +93,51 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       );
       return;
     }
+
     setState(() => _isSaving = true);
 
-    // HINWEIS: Backend hat aktuell keine Einsatz-API.
-    // Sobald verfügbar: ref.read(entryRepositoryProvider).createEntry(...)
-    await Future.delayed(const Duration(milliseconds: 600));
+    try {
+      await ref.read(entryRepositoryProvider).createOrUpdateEntry(
+            patientId: _selectedPatient!.patientId,
+            entryDate: _selectedDate,
+            hours: _hours!,
+            activities: _selectedActivities.toList(),
+          );
 
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Einsatz gespeichert (lokal): ${_formatHours(_hours!)} bei ${_selectedPatient!.displayName}',
+      // Hours-Summary Cache invalidieren, damit PatientDetail neu lädt
+      ref.invalidate(hoursSummaryProvider);
+      ref.invalidate(patientEntriesProvider);
+
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Einsatz gespeichert: ${_formatHours(_hours!)} bei ${_selectedPatient!.displayName}',
+          ),
         ),
-      ),
-    );
-    Navigator.of(context).pop();
+      );
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unerwarteter Fehler: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   bool get _canSave =>
