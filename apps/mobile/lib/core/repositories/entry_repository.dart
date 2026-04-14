@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../models/entry.dart';
+import '../models/user_home.dart';
 
 class EntryRepository {
   final ApiClient _client;
@@ -15,6 +16,7 @@ class EntryRepository {
     required double hours,
     required List<String> activities,
     String? note,
+    TripInput? trip,
   }) async {
     try {
       final response = await _client.dio.post(
@@ -26,6 +28,7 @@ class EntryRepository {
           'hours': hours,
           'activities': activities,
           'note': note,
+          if (trip != null) 'trip': trip.toJson(),
         }..removeWhere((_, v) => v == null),
       );
 
@@ -106,6 +109,52 @@ class EntryRepository {
       }
       throw ApiException(
         message: 'Stunden-Zusammenfassung konnte nicht geladen werden',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Wie viele Einsätze hat der User heute schon erfasst?
+  /// Wird vom EntryScreen genutzt um zu entscheiden ob der Start-Adresse-
+  /// Dialog gezeigt werden soll (nur beim ersten Einsatz des Tages).
+  Future<bool> isFirstEntryToday() async {
+    try {
+      final response = await _client.dio.get('/mobile/entries/today-count');
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        return (data['is_first'] as bool?) ?? true;
+      }
+      return true; // Im Zweifel: fragen (defensiv)
+    } on DioException {
+      return true;
+    }
+  }
+
+  Future<UserHome?> getUserHome() async {
+    try {
+      final response = await _client.dio.get('/mobile/user/home');
+      if (response.statusCode == 200 && response.data != null) {
+        return UserHome.fromJson(response.data as Map<String, dynamic>);
+      }
+      return null;
+    } on DioException {
+      return null;
+    }
+  }
+
+  Future<UserHome> setUserHome(String addressLine) async {
+    try {
+      final response = await _client.dio.put(
+        '/mobile/user/home',
+        data: {'address_line': addressLine},
+      );
+      if (response.statusCode == 200) {
+        return UserHome.fromJson(response.data as Map<String, dynamic>);
+      }
+      throw ApiException(
+        message: 'Home-Adresse konnte nicht gespeichert werden',
         statusCode: response.statusCode,
       );
     } on DioException catch (e) {

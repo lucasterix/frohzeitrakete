@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/models/signature_event.dart';
+import '../../core/models/user_home.dart';
 import '../../core/providers.dart';
 import '../signatures/signature_screen.dart';
 
@@ -35,10 +36,74 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   final Set<String> _selectedActivities = {};
   bool _isSaving = false;
 
+  // Trip tracking state
+  bool _isFirstEntryToday = false;
+  bool _tripInfoLoaded = false;
+  UserHome? _userHome;
+  bool _startFromHome = true;
+  final _startAddressCtrl = TextEditingController();
+  final List<TextEditingController> _intermediateStopCtrls = [];
+
   @override
   void initState() {
     super.initState();
     _selectedPatient = widget.preselectedPatient;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTripInfo());
+  }
+
+  @override
+  void dispose() {
+    _startAddressCtrl.dispose();
+    for (final c in _intermediateStopCtrls) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadTripInfo() async {
+    try {
+      final repo = ref.read(entryRepositoryProvider);
+      final results = await Future.wait([
+        repo.isFirstEntryToday(),
+        repo.getUserHome(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _isFirstEntryToday = results[0] as bool;
+        _userHome = results[1] as UserHome?;
+        _tripInfoLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _tripInfoLoaded = true);
+    }
+  }
+
+  TripInput? _buildTripInput() {
+    // Nur Trip-Info senden wenn wir tatsächlich etwas erfassen wollen
+    final hasStart = _isFirstEntryToday &&
+        (_startFromHome || _startAddressCtrl.text.trim().isNotEmpty);
+    final stops = _intermediateStopCtrls
+        .map((c) => c.text.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (!hasStart && stops.isEmpty) return null;
+    return TripInput(
+      startFromHome: _startFromHome,
+      startAddress: _startFromHome ? null : _startAddressCtrl.text.trim(),
+      intermediateStops: stops,
+    );
+  }
+
+  void _addIntermediateStop() {
+    setState(() => _intermediateStopCtrls.add(TextEditingController()));
+  }
+
+  void _removeIntermediateStop(int index) {
+    setState(() {
+      _intermediateStopCtrls[index].dispose();
+      _intermediateStopCtrls.removeAt(index);
+    });
   }
 
   String _formatHours(double h) {
@@ -131,6 +196,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
             entryDate: _selectedDate,
             hours: _hours!,
             activities: _selectedActivities.toList(),
+            trip: _buildTripInput(),
           );
 
       // Alle Provider die jetzt stale sind invalidieren, damit PatientDetail
@@ -424,6 +490,9 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                       );
                     }).toList(),
                   ),
+
+                  const SizedBox(height: 24),
+                  _buildTripSection(),
                 ],
               ),
             ),
@@ -516,6 +585,202 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTripSection() {
+    const green = Color(0xFF4F8A5B);
+
+    if (!_tripInfoLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: SizedBox(
+          height: 20,
+          child: LinearProgressIndicator(),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Fahrtkosten'),
+        const SizedBox(height: 10),
+
+        // Start-Adresse – nur beim ersten Einsatz des Tages
+        if (_isFirstEntryToday) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Wo bist du heute gestartet?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Zuhause'),
+                        selected: _startFromHome,
+                        onSelected: (_) =>
+                            setState(() => _startFromHome = true),
+                        selectedColor: green.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Andere Adresse'),
+                        selected: !_startFromHome,
+                        onSelected: (_) =>
+                            setState(() => _startFromHome = false),
+                        selectedColor: green.withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_startFromHome && _userHome != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.home_outlined,
+                        size: 16,
+                        color: Colors.black54,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _userHome!.addressLine,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_startFromHome && _userHome == null) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Home-Adresse nicht bekannt – fällt zurück auf '
+                    '"Andere Adresse", bitte manuell eintragen.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+                if (!_startFromHome) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _startAddressCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Start-Adresse',
+                      hintText: 'z.B. Musterstraße 12, 37073 Göttingen',
+                      isDense: true,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Zwischenfahrten während Einsatz
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Fahrten während Einsatz',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _addIntermediateStop,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Hinzufügen'),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'z.B. Patient zum Arzt fahren. Rückfahrt wird automatisch '
+                  'berechnet.',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+              if (_intermediateStopCtrls.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Text(
+                    'Keine Zwischenfahrten',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black38,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              else
+                ..._intermediateStopCtrls.asMap().entries.map(
+                      (e) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: e.value,
+                                decoration: InputDecoration(
+                                  labelText: 'Ziel ${e.key + 1}',
+                                  hintText: 'Adresse des Ziels',
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.black54,
+                                size: 18,
+                              ),
+                              onPressed: () => _removeIntermediateStop(e.key),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

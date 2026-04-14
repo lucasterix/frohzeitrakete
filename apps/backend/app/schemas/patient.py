@@ -63,6 +63,38 @@ class CallRequestCreate(BaseModel):
     note: str | None = None
 
 
+class UserHomeResponse(BaseModel):
+    address_line: str
+    latitude: float | None = None
+    longitude: float | None = None
+    source: str
+
+
+class UserHomeUpdate(BaseModel):
+    address_line: str
+
+
+class TripSegmentResponse(BaseModel):
+    id: int
+    entry_id: int
+    segment_index: int
+    kind: str
+    from_address: str
+    to_address: str
+    distance_km: float | None
+    trip_date: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserTripSummary(BaseModel):
+    user_id: int
+    year: int
+    month: int
+    total_km: float
+    segments_count: int
+
+
 class CallRequestResponse(BaseModel):
     id: int
     patient_id: int

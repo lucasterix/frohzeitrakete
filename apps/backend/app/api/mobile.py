@@ -18,6 +18,8 @@ from app.schemas.patient import (
     PatientBudget,
     PatientExtrasResponse,
     PatientExtrasUpdate,
+    UserHomeResponse,
+    UserHomeUpdate,
 )
 from app.schemas.signature import MobileSignatureCreate, SignatureEventResponse
 from app.services.entry_service import (
@@ -33,6 +35,7 @@ from app.services.patient_extras_service import (
     refresh_contract_state,
     set_emergency_contact,
 )
+from app.services.user_home_service import get_home_location, set_home_location
 from app.services.patient_service import (
     get_caretaker_history,
     get_patient_budget,
@@ -308,6 +311,70 @@ def mobile_patient_caretaker_history(
     """Liste aller Betreuer (aktuelle + ehemalige) für einen Patienten,
     inkl. Zeitraum. Sortiert aktiv zuerst, dann chronologisch rückwärts."""
     return get_caretaker_history(patient_id)
+
+
+@router.get("/user/home", response_model=UserHomeResponse | None)
+def mobile_get_user_home(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Home address des aktuellen Users (für Km-Berechnung beim ersten
+    Einsatz des Tages). Wird beim ersten Aufruf aus Patti gezogen und
+    gecached; kann danach vom User manuell überschrieben werden."""
+    home = get_home_location(db, current_user)
+    if home is None:
+        return None
+    return UserHomeResponse(
+        address_line=home.address_line,
+        latitude=home.latitude,
+        longitude=home.longitude,
+        source=home.source,
+    )
+
+
+@router.put("/user/home", response_model=UserHomeResponse)
+def mobile_set_user_home(
+    payload: UserHomeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Home address manuell setzen – überschreibt den Patti-Cache."""
+    home = set_home_location(
+        db,
+        current_user,
+        address_line=payload.address_line,
+        source="manual",
+    )
+    return UserHomeResponse(
+        address_line=home.address_line,
+        latitude=home.latitude,
+        longitude=home.longitude,
+        source=home.source,
+    )
+
+
+@router.get("/entries/today-count")
+def mobile_entries_today_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Wie viele Einsätze hat der User heute schon erfasst?
+    Die Mobile-App braucht das um zu entscheiden ob der "Start-Adresse"-
+    Dialog beim EntryScreen angezeigt werden soll (nur beim ersten
+    Einsatz des Tages).
+    """
+    from datetime import date as _date
+    from app.models.entry import Entry
+    today = _date.today()
+    count = (
+        db.query(Entry)
+        .filter(
+            Entry.user_id == current_user.id,
+            Entry.entry_date == today,
+        )
+        .count()
+    )
+    return {"date": today.isoformat(), "count": count, "is_first": count == 0}
 
 
 @router.get(

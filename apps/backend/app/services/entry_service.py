@@ -22,6 +22,7 @@ from app.models.entry import Entry
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, PatientHoursSummary
+from app.services.trip_service import create_trip_segments
 
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,31 @@ def _sync_entry_to_patti(
         )
 
 
+def _resolve_patient_address(patient_id: int) -> str | None:
+    """Format a full Patti patient address for geocoding. Errors → None."""
+    try:
+        client = PattiClient()
+        client.login()
+        patient = client.get_patient(patient_id)
+        # Die /patients/{id} response hat die Adresse nested. Wir holen auch
+        # /people/{id} weil das die address-struktur sauberer liefert.
+        person = client.get_person(patient_id)
+        address = person.get("address") or {}
+        line = address.get("address_line")
+        city = address.get("city")
+        zip_code = address.get("zip_code")
+        if isinstance(zip_code, dict):
+            zip_code = zip_code.get("zip_code") or zip_code.get("title")
+        parts = []
+        if line:
+            parts.append(line)
+        if zip_code or city:
+            parts.append(f"{zip_code or ''} {city or ''}".strip())
+        return ", ".join(parts) if parts else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def create_or_update_entry(
     db: Session, user: User, payload: EntryCreate
 ) -> Entry:
@@ -166,6 +192,7 @@ def create_or_update_entry(
         db.refresh(entry)
         # Erstaufnahme → komplette Stunden nach Patti
         _sync_entry_to_patti(db, entry, delta_hours=entry.hours)
+        _maybe_create_trip_segments(db, entry=entry, user=user, payload=payload)
         return entry
 
     # Stunden addieren, aber Deckel bei 8.0
@@ -195,7 +222,45 @@ def create_or_update_entry(
     db.refresh(existing)
     # Nur das Delta nach Patti, sonst doppelt gezählt
     _sync_entry_to_patti(db, existing, delta_hours=payload.hours)
+    # Bei same-day-append: Trip-Segmente nur generieren wenn der User
+    # tatsächlich welche mitgeschickt hat. Der Start-Trip wurde beim
+    # ersten Einsatz des Tages angelegt und soll nicht dupliziert werden.
+    if payload.trip is not None and (
+        payload.trip.intermediate_stops
+        or not payload.trip.start_from_home  # manuelle Start-Adresse
+    ):
+        _maybe_create_trip_segments(db, entry=existing, user=user, payload=payload)
     return existing
+
+
+def _maybe_create_trip_segments(
+    db: Session, *, entry: Entry, user: User, payload: EntryCreate
+) -> None:
+    """Wrapper that converts the pydantic TripInputSchema into the dict shape
+    the trip_service expects, then fires and forgets. Failures are logged but
+    don't break the entry save."""
+    if payload.trip is None:
+        return
+    patient_address = _resolve_patient_address(payload.patient_id)
+    if not patient_address:
+        logger.info(
+            "trip_skip_no_patient_address", patient_id=payload.patient_id
+        )
+        return
+    try:
+        create_trip_segments(
+            db,
+            entry=entry,
+            user=user,
+            patient_address=patient_address,
+            trip_input={
+                "start_from_home": payload.trip.start_from_home,
+                "start_address": payload.trip.start_address,
+                "intermediate_stops": payload.trip.intermediate_stops,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("trip_segment_create_failed", entry_id=entry.id, error=str(exc))
 
 
 def list_entries_for_user(

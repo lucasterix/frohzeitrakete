@@ -3,12 +3,20 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field, field_validator
 
 
+class TripInputSchema(BaseModel):
+    """Trip info that the mobile app can optionally send with an entry."""
+    start_from_home: bool = True
+    start_address: str | None = None
+    intermediate_stops: list[str] = Field(default_factory=list)
+
+
 class EntryCreate(BaseModel):
     patient_id: int
     entry_date: date
     hours: float = Field(gt=0, le=8.0)
     activities: list[str] = Field(default_factory=list)
     note: str | None = None
+    trip: TripInputSchema | None = None
 
     @field_validator("hours")
     @classmethod

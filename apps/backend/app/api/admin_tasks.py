@@ -4,13 +4,17 @@ Diese Endpoints werden vom Admin-Web (Next.js) konsumiert damit das Büro
 sieht welche Patienten anzurufen sind und welche Stammdaten fehlen.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.patient import CallRequestResponse
+from app.schemas.patient import (
+    CallRequestResponse,
+    TripSegmentResponse,
+    UserTripSummary,
+)
 from app.services.admin_tasks_service import collect_admin_tasks
 from app.services.call_request_service import (
     list_open_call_requests,
@@ -20,6 +24,7 @@ from app.services.patient_extras_service import (
     mark_office_call_done,
     mark_primary_caretaker_changed,
 )
+from app.services.trip_service import user_km_for_month
 
 router = APIRouter()
 
@@ -74,6 +79,36 @@ def admin_mark_office_call(
     """Markiert einen Büro-Anruf als erledigt (setzt last_office_call_at)."""
     mark_office_call_done(db, patient_id)
     return {"ok": True}
+
+
+@router.get("/users/{user_id}/trips")
+def admin_user_trips(
+    user_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Km-/Trip-Übersicht für einen Mitarbeiter + Monat.
+
+    Response shape:
+        {
+          "summary": {user_id, year, month, total_km, segments_count},
+          "segments": [TripSegmentResponse, ...]
+        }
+    """
+    result = user_km_for_month(db, user_id=user_id, year=year, month=month)
+    segments = result["segments"]
+    return {
+        "summary": UserTripSummary(
+            user_id=user_id,
+            year=year,
+            month=month,
+            total_km=result["total_km"],
+            segments_count=len(segments),
+        ),
+        "segments": [TripSegmentResponse.model_validate(s) for s in segments],
+    }
 
 
 @router.post("/patients/{patient_id}/caretaker-changed")

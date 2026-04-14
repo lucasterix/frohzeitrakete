@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     patti_timeout_seconds: float = 15.0
     patti_cache_ttl_seconds: int = 60
 
+    # OpenRouteService (Geocoding + Driving-Distance)
+    # Get a free key at https://openrouteservice.org/dev/#/signup
+    ors_api_key: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
