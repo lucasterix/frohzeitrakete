@@ -1,0 +1,176 @@
+name: Ops
+
+# Manueller Ops-Workflow — startet Ops-Kommandos auf dem Hetzner-Host ohne
+# dass jemand selbst SSH braucht. Nutzt den gleichen DEPLOY_SSH_KEY-Secret
+# wie deploy.yml. Alle Runs sind im GitHub-Actions-Log nachvollziehbar.
+#
+# Anleitung:
+#   1. GitHub → Repo → Actions → "Ops" → "Run workflow"
+#   2. Action aus Dropdown wählen
+#   3. Bei first-time-setup: ORS-Key und Admin-Passwort als Inputs eingeben
+#      (werden im Log automatisch maskiert)
+#   4. "Run workflow" drücken
+#
+# Verfügbare Actions:
+#   - first-time-setup: Setzt ORS_API_KEY + ADMIN_SEED_PASSWORD in .env,
+#       installiert Backup-Cron, restartet Backend, führt Admin-Seed aus.
+#       Idempotent. Braucht ors_api_key + admin_seed_password als Inputs.
+#   - restart-backend: docker compose restart backend
+#   - restart-stack: docker compose up -d --build --wait
+#   - run-migrations: alembic upgrade head
+#   - seed-admin: Admin-User seeden (braucht ADMIN_SEED_PASSWORD schon in .env)
+#   - tail-logs: letzte 200 Backend-Log-Zeilen zurückgeben
+#   - health-check: /health, /health/ready, /health/ors abfragen
+#   - run-script: beliebiger Shell-Befehl im Compose-Dir (für Debugging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Was soll passieren?"
+        type: choice
+        required: true
+        options:
+          - first-time-setup
+          - restart-backend
+          - restart-stack
+          - run-migrations
+          - seed-admin
+          - tail-logs
+          - health-check
+          - run-script
+        default: health-check
+      environment:
+        description: "staging oder prod"
+        type: choice
+        required: true
+        options:
+          - staging
+          - prod
+        default: staging
+      ors_api_key:
+        description: "ORS API Key (nur für first-time-setup, wird maskiert)"
+        required: false
+        type: string
+      admin_seed_password:
+        description: "Admin-Seed-Passwort (nur für first-time-setup, wird maskiert, min. 12 Zeichen)"
+        required: false
+        type: string
+      custom_command:
+        description: "Shell-Befehl (nur für run-script) — wird im Compose-Dir ausgeführt"
+        required: false
+        type: string
+
+jobs:
+  ops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maskiere sensible Inputs im Log
+        run: |
+          if [ -n "${{ inputs.ors_api_key }}" ]; then
+            echo "::add-mask::${{ inputs.ors_api_key }}"
+          fi
+          if [ -n "${{ inputs.admin_seed_password }}" ]; then
+            echo "::add-mask::${{ inputs.admin_seed_password }}"
+          fi
+
+      - name: "${{ inputs.action }} (${{ inputs.environment }})"
+        uses: appleboy/ssh-action@v1
+        env:
+          ACTION: ${{ inputs.action }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          ORS_API_KEY: ${{ inputs.ors_api_key }}
+          ADMIN_SEED_PASSWORD: ${{ inputs.admin_seed_password }}
+          CUSTOM_COMMAND: ${{ inputs.custom_command }}
+        with:
+          host: 46.224.7.46
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 20m
+          envs: ACTION,ENVIRONMENT,ORS_API_KEY,ADMIN_SEED_PASSWORD,CUSTOM_COMMAND
+          script: |
+            set -e
+            REPO_DIR=/home/deploy/apps/frohzeitrakete
+            cd "$REPO_DIR"
+            git pull
+
+            if [ "$ENVIRONMENT" = "prod" ]; then
+              COMPOSE_DIR="$REPO_DIR/infra/prod"
+              BACKEND_CONTAINER=fzr_prod_backend
+              API_HOST="https://api-prod.froehlichdienste.de"
+            else
+              COMPOSE_DIR="$REPO_DIR/infra/staging"
+              BACKEND_CONTAINER=fzr_backend
+              API_HOST="https://api.froehlichdienste.de"
+            fi
+            cd "$COMPOSE_DIR"
+
+            echo "=============================="
+            echo "Action:      $ACTION"
+            echo "Environment: $ENVIRONMENT ($COMPOSE_DIR)"
+            echo "=============================="
+
+            case "$ACTION" in
+
+              first-time-setup)
+                if [ -z "$ORS_API_KEY" ] && [ -z "$ADMIN_SEED_PASSWORD" ]; then
+                  echo "ERROR: mindestens ors_api_key oder admin_seed_password angeben"
+                  exit 1
+                fi
+                REPO_DIR="$REPO_DIR" \
+                  ORS_API_KEY="$ORS_API_KEY" \
+                  ADMIN_SEED_PASSWORD="$ADMIN_SEED_PASSWORD" \
+                  bash "$REPO_DIR/infra/setup/first_time_setup.sh" --yes
+                ;;
+
+              restart-backend)
+                docker compose restart backend
+                docker compose ps
+                ;;
+
+              restart-stack)
+                docker compose up -d --build --wait
+                docker compose ps
+                ;;
+
+              run-migrations)
+                docker compose run --rm backend alembic upgrade head
+                ;;
+
+              seed-admin)
+                docker compose exec -T backend python -m app.scripts.seed_admin
+                ;;
+
+              tail-logs)
+                docker logs --tail 200 "$BACKEND_CONTAINER" 2>&1 || true
+                ;;
+
+              health-check)
+                echo "---- /health ----"
+                curl -sS "$API_HOST/health" || echo "FAILED"
+                echo
+                echo "---- /health/ready ----"
+                curl -sS "$API_HOST/health/ready" || echo "FAILED"
+                echo
+                echo "---- /health/ors ----"
+                curl -sS "$API_HOST/health/ors" || echo "FAILED"
+                echo
+                ;;
+
+              run-script)
+                if [ -z "$CUSTOM_COMMAND" ]; then
+                  echo "ERROR: custom_command ist leer"
+                  exit 1
+                fi
+                bash -c "$CUSTOM_COMMAND"
+                ;;
+
+              *)
+                echo "ERROR: unbekannte action $ACTION"
+                exit 1
+                ;;
+            esac
+
+            echo "=============================="
+            echo "DONE."
+            echo "=============================="
