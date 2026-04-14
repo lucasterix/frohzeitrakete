@@ -91,6 +91,20 @@ class PattiClient:
         response.raise_for_status()
         return response.json()
 
+    def get_service_histories_for_patient(
+        self, patient_id: int, per_page: int = 50
+    ) -> dict[str, Any]:
+        """Alle service-histories (aktive + beendete, primary + vertretung)
+        für einen Patienten, für die Betreuer-Historie.
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/service-histories",
+            params={"patient_id": str(patient_id), "per_page": str(per_page)},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     # --- Patient endpoints ---------------------------------------------------
 
     def get_patient(self, patient_id: int) -> dict[str, Any]:

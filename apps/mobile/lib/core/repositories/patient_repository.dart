@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../models/caretaker_history.dart';
 import '../models/mobile_patient.dart';
 import '../models/patient_budget.dart';
 
@@ -78,6 +79,27 @@ class PatientRepository {
       }
       throw ApiException(
         message: 'Suche fehlgeschlagen',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<List<CaretakerHistoryEntry>> getCaretakerHistory(int patientId) async {
+    try {
+      final response = await _client.dio.get(
+        '/mobile/patients/$patientId/caretaker-history',
+      );
+      if (response.statusCode == 200) {
+        final list = response.data as List;
+        return list
+            .map((item) =>
+                CaretakerHistoryEntry.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      throw ApiException(
+        message: 'Betreuer-Historie konnte nicht geladen werden',
         statusCode: response.statusCode,
       );
     } on DioException catch (e) {

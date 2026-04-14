@@ -40,6 +40,15 @@ class MobilePatientUpdate(BaseModel):
     birthday: str | None = None  # "YYYY-MM-DD"
 
 
+class CaretakerHistoryEntry(BaseModel):
+    """Ein Betreuer-Einsatz aus der Patti service-histories-Liste."""
+    person_id: int
+    name: str
+    is_primary: bool
+    started_at: str | None = None
+    ended_at: str | None = None  # None = aktuell aktiv
+
+
 class PatientBudget(BaseModel):
     """Budget-Summary für Mobile: Reststunden Pflegesachleistung + VP."""
 

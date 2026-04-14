@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/models/caretaker_history.dart';
 import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/models/signature_event.dart';
@@ -33,6 +34,14 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
   String _formatDateDe(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+  String _birthdayHint(int? days) {
+    if (days == null) return '';
+    if (days == 0) return '  ·  🎉 Hat heute Geburtstag!';
+    if (days == 1) return '  ·  🎂 morgen Geburtstag';
+    if (days <= 30) return '  ·  🎂 in $days Tagen Geburtstag';
+    return '';
+  }
 
   String _formatHours(double h) {
     final full = h.truncate();
@@ -230,6 +239,16 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                               height: 1.2,
                             ),
                           ),
+                          if (patient.age != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${patient.age} Jahre${_birthdayHint(patient.daysUntilNextBirthday)}',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           if (pflegegrad > 0)
                             Container(
@@ -356,10 +375,159 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               const SizedBox(height: 12),
 
               _buildRecentEntries(entriesAsync, lockAsync),
+
+              const SizedBox(height: 28),
+
+              // Betreuer-Historie (collapsible, per default zu)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildCaretakerHistory(),
+              ),
             ],
           ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCaretakerHistory() {
+    final historyAsync = ref.watch(
+      caretakerHistoryProvider(widget.patient.patientId),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          leading: const Icon(
+            Icons.history,
+            color: Colors.black54,
+            size: 22,
+          ),
+          title: const Text(
+            'Betreuer-Historie',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: const Text(
+            'Wer hat vorher betreut?',
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            historyAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text(
+                  e.toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
+              data: (entries) {
+                if (entries.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text(
+                      'Keine Historie verfügbar',
+                      style: TextStyle(fontSize: 13, color: Colors.black54),
+                    ),
+                  );
+                }
+                return Column(
+                  children: entries
+                      .map((e) => _buildHistoryRow(e))
+                      .toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryRow(CaretakerHistoryEntry e) {
+    const green = Color(0xFF4F8A5B);
+    final from = CaretakerHistoryEntry.formatDate(e.startedAt);
+    final to = e.isActive
+        ? 'heute'
+        : CaretakerHistoryEntry.formatDate(e.endedAt);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: e.isActive ? green : Colors.black26,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.name,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (e.isPrimary)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Haupt',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: green,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$from – $to',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

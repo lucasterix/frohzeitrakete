@@ -9,7 +9,12 @@ from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, EntryResponse, PatientHoursSummary
-from app.schemas.patient import MobilePatient, MobilePatientUpdate, PatientBudget
+from app.schemas.patient import (
+    CaretakerHistoryEntry,
+    MobilePatient,
+    MobilePatientUpdate,
+    PatientBudget,
+)
 from app.schemas.signature import MobileSignatureCreate, SignatureEventResponse
 from app.services.entry_service import (
     create_or_update_entry,
@@ -19,6 +24,7 @@ from app.services.entry_service import (
     list_entries_for_user,
 )
 from app.services.patient_service import (
+    get_caretaker_history,
     get_patient_budget,
     get_patients_for_user,
     search_patients,
@@ -274,6 +280,19 @@ def mobile_update_patient(
         birthday=payload.birthday,
     )
     return None
+
+
+@router.get(
+    "/patients/{patient_id}/caretaker-history",
+    response_model=list[CaretakerHistoryEntry],
+)
+def mobile_patient_caretaker_history(
+    patient_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """Liste aller Betreuer (aktuelle + ehemalige) für einen Patienten,
+    inkl. Zeitraum. Sortiert aktiv zuerst, dann chronologisch rückwärts."""
+    return get_caretaker_history(patient_id)
 
 
 @router.get(

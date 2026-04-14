@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 
 from app.clients.patti_client import PattiClient
 from app.models.user import User
-from app.schemas.patient import PatientBudget
+from app.schemas.patient import CaretakerHistoryEntry, PatientBudget
 
 
 def _parse_care_degree(raw: str | None) -> int:
@@ -283,6 +283,57 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
         for mapped in list(results.values())[:limit]
     ]
     return enriched
+
+
+def get_caretaker_history(patient_id: int) -> list[CaretakerHistoryEntry]:
+    """Liefert alle Betreuungs-Einsätze für einen Patienten aus Patti,
+    sortiert nach Start-Datum absteigend. Aktive Einträge (ended_at=None)
+    zuerst, dann vergangene chronologisch rückwärts.
+    """
+    client = PattiClient()
+    client.login()
+
+    response = client.get_service_histories_for_patient(patient_id)
+    rows = response.get("data", []) if isinstance(response, dict) else []
+
+    entries: list[CaretakerHistoryEntry] = []
+    for row in rows:
+        person = row.get("person") or {}
+        name = (
+            person.get("list_name")
+            or f"{person.get('first_name') or ''} {person.get('last_name') or ''}".strip()
+            or f"Person #{row.get('person_id')}"
+        )
+        started = row.get("started_at")
+        ended = row.get("ended_at")
+        entries.append(
+            CaretakerHistoryEntry(
+                person_id=row.get("person_id") or 0,
+                name=name,
+                is_primary=bool(row.get("is_primary")),
+                started_at=started.split("T")[0] if isinstance(started, str) else None,
+                ended_at=ended.split("T")[0] if isinstance(ended, str) else None,
+            )
+        )
+
+    # Sortierung: aktiv zuerst, dann chronologisch rückwärts nach Start
+    entries.sort(
+        key=lambda e: (
+            0 if e.ended_at is None else 1,
+            -_date_sort_key(e.started_at),
+        )
+    )
+    return entries
+
+
+def _date_sort_key(iso_date: str | None) -> int:
+    """Für sortby – gibt eine Integer-Repräsentation zurück (YYYYMMDD) oder 0."""
+    if not iso_date:
+        return 0
+    try:
+        return int(iso_date.replace("-", ""))
+    except ValueError:
+        return 0
 
 
 def update_patient_data(

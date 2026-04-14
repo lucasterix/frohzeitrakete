@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api_client.dart';
+import 'models/caretaker_history.dart';
 import 'models/entry.dart';
 import 'models/mobile_patient.dart';
 import 'models/patient_budget.dart';
@@ -196,6 +197,18 @@ final pattiBudgetProvider =
       patientId: params.patientId,
       year: params.year,
     );
+  },
+);
+
+// ---------------- Caretaker History ----------------
+
+final caretakerHistoryProvider =
+    FutureProvider.family<List<CaretakerHistoryEntry>, int>(
+  (ref, patientId) async {
+    final auth = ref.watch(authControllerProvider);
+    if (auth.valueOrNull == null) return [];
+    final repo = ref.watch(patientRepositoryProvider);
+    return repo.getCaretakerHistory(patientId);
   },
 );
 
