@@ -89,6 +89,40 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       return;
     }
 
+    // Budget-Check: wenn Patient nicht privat und die neuen Stunden das
+    // Restbudget überschreiten → Patient-Bestätigung einholen.
+    if (!_selectedPatient!.isPrivat) {
+      final budget = await ref.read(
+        pattiBudgetProvider(
+          PattiBudgetParams(
+            patientId: _selectedPatient!.patientId,
+            year: _selectedDate.year,
+          ),
+        ).future,
+      );
+      final remaining = budget.careServiceRemainingHours;
+      if (_hours! > remaining) {
+        final accepted = await _showOverBudgetConfirm(
+          remaining: remaining,
+          requested: _hours!,
+        );
+        if (accepted != true) return;
+      } else if (remaining - _hours! < 2.0) {
+        if (!mounted) return;
+        // Restbudget wird nach diesem Einsatz sehr knapp → Info
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Achtung: nur noch ${_formatHours(remaining - _hours!)} Restbudget '
+              'nach diesem Einsatz',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -154,6 +188,66 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       _selectedPatient != null &&
       _hours != null &&
       _selectedActivities.isNotEmpty;
+
+  Future<bool?> _showOverBudgetConfirm({
+    required double remaining,
+    required double requested,
+  }) async {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(
+          Icons.warning_amber_rounded,
+          color: Colors.orange,
+          size: 48,
+        ),
+        title: const Text(
+          'Pflegesachleistung aufgebraucht',
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Das Restbudget für ${_selectedPatient!.displayName} beträgt '
+              'nur noch ${_formatHours(remaining)}, aber dieser Einsatz '
+              'würde ${_formatHours(requested)} dauern.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                'Der Patient muss bestätigen dass er die zusätzlichen '
+                'Stunden selbst bezahlen möchte. Die Pflegekasse übernimmt '
+                'diese Stunden NICHT.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Patient hat bestätigt'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

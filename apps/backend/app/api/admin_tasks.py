@@ -1,0 +1,88 @@
+"""Admin-Web API für Büro-Aufgaben (Anrufe, Checks, Call-Requests).
+
+Diese Endpoints werden vom Admin-Web (Next.js) konsumiert damit das Büro
+sieht welche Patienten anzurufen sind und welche Stammdaten fehlen.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.auth import require_admin_user
+from app.db.session import get_db
+from app.models.user import User
+from app.schemas.patient import CallRequestResponse
+from app.services.admin_tasks_service import collect_admin_tasks
+from app.services.call_request_service import (
+    list_open_call_requests,
+    mark_call_request_done,
+)
+from app.services.patient_extras_service import (
+    mark_office_call_done,
+    mark_primary_caretaker_changed,
+)
+
+router = APIRouter()
+
+
+@router.get("/call-tasks")
+def admin_list_call_tasks(
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Aggregierte Liste aller offenen Büro-Aufgaben.
+
+    Kinds:
+    - call_request               – Betreuer hat Rückruf angefordert (high)
+    - new_caretaker_followup     – >7 Tage seit neuer Hauptbetreuer (medium)
+    - half_year_check            – >6 Monate kein Office-Call (low)
+    - no_invoice_2_months        – kein Einsatz seit 2 Monaten (medium)
+    - missing_emergency_contact  – Notfallkontakt fehlt (low)
+    - missing_contract           – Betreuungsvertrag fehlt (low)
+    """
+    return collect_admin_tasks(db)
+
+
+@router.get("/call-requests", response_model=list[CallRequestResponse])
+def admin_list_call_requests(
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Nur die offenen Call-Requests (vom Mobile-Betreuer)."""
+    return list_open_call_requests(db)
+
+
+@router.post("/call-requests/{request_id}/done", response_model=CallRequestResponse)
+def admin_mark_call_request_done(
+    request_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return mark_call_request_done(
+            db, request_id=request_id, handler_user_id=admin_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/patients/{patient_id}/office-call-done")
+def admin_mark_office_call(
+    patient_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Markiert einen Büro-Anruf als erledigt (setzt last_office_call_at)."""
+    mark_office_call_done(db, patient_id)
+    return {"ok": True}
+
+
+@router.post("/patients/{patient_id}/caretaker-changed")
+def admin_mark_caretaker_changed(
+    patient_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Wird vom Büro getriggert wenn ein Patient einen neuen Hauptbetreuer
+    bekommt. Startet den "1 Woche später nachfragen"-Task."""
+    mark_primary_caretaker_changed(db, patient_id)
+    return {"ok": True}

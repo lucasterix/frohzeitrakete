@@ -10,10 +10,14 @@ from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, EntryResponse, PatientHoursSummary
 from app.schemas.patient import (
+    CallRequestCreate,
+    CallRequestResponse,
     CaretakerHistoryEntry,
     MobilePatient,
     MobilePatientUpdate,
     PatientBudget,
+    PatientExtrasResponse,
+    PatientExtrasUpdate,
 )
 from app.schemas.signature import MobileSignatureCreate, SignatureEventResponse
 from app.services.entry_service import (
@@ -22,6 +26,12 @@ from app.services.entry_service import (
     get_entry_for_user,
     get_patient_hours_summary,
     list_entries_for_user,
+)
+from app.services.call_request_service import create_call_request
+from app.services.patient_extras_service import (
+    get_or_create_extras,
+    refresh_contract_state,
+    set_emergency_contact,
 )
 from app.services.patient_service import (
     get_caretaker_history,
@@ -93,6 +103,11 @@ def mobile_create_signature(
     )
     db.add(asset)
     db.commit()
+
+    # Wenn ein Betreuungsvertrag unterschrieben wurde, patient_extras
+    # sofort aktualisieren damit die grüne Badge erscheint ohne Reload.
+    if payload.document_type == "betreuungsvertrag":
+        refresh_contract_state(db, payload.patient_id)
 
     created = (
         db.query(SignatureEvent)
@@ -293,6 +308,75 @@ def mobile_patient_caretaker_history(
     """Liste aller Betreuer (aktuelle + ehemalige) für einen Patienten,
     inkl. Zeitraum. Sortiert aktiv zuerst, dann chronologisch rückwärts."""
     return get_caretaker_history(patient_id)
+
+
+@router.get(
+    "/patients/{patient_id}/extras",
+    response_model=PatientExtrasResponse,
+)
+def mobile_get_patient_extras(
+    patient_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Notfallkontakt + Vertrags-Status + weitere Zusatzdaten für diesen
+    Patienten aus unserer eigenen DB (Patti kennt das nicht)."""
+    extras = refresh_contract_state(db, patient_id)
+    return PatientExtrasResponse(
+        patient_id=extras.patient_id,
+        emergency_contact_name=extras.emergency_contact_name,
+        emergency_contact_phone=extras.emergency_contact_phone,
+        contract_signed_at=extras.contract_signed_at,
+        has_contract=extras.contract_signed_at is not None,
+    )
+
+
+@router.patch(
+    "/patients/{patient_id}/extras",
+    response_model=PatientExtrasResponse,
+)
+def mobile_update_patient_extras(
+    patient_id: int,
+    payload: PatientExtrasUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Notfallkontakt nachtragen / ändern."""
+    extras = set_emergency_contact(
+        db,
+        patient_id,
+        name=payload.emergency_contact_name,
+        phone=payload.emergency_contact_phone,
+    )
+    return PatientExtrasResponse(
+        patient_id=extras.patient_id,
+        emergency_contact_name=extras.emergency_contact_name,
+        emergency_contact_phone=extras.emergency_contact_phone,
+        contract_signed_at=extras.contract_signed_at,
+        has_contract=extras.contract_signed_at is not None,
+    )
+
+
+@router.post(
+    "/patients/{patient_id}/request-call",
+    response_model=CallRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def mobile_request_office_call(
+    patient_id: int,
+    payload: CallRequestCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Betreuer bittet das Büro diesen Patienten anzurufen."""
+    request = create_call_request(
+        db,
+        patient_id=patient_id,
+        user_id=current_user.id,
+        reason=payload.reason,
+        note=payload.note,
+    )
+    return CallRequestResponse.model_validate(request)
 
 
 @router.get(

@@ -7,9 +7,11 @@ import '../../core/api/api_exception.dart';
 import '../../core/models/caretaker_history.dart';
 import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
+import '../../core/models/patient_extras.dart';
 import '../../core/models/signature_event.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
+import '../signatures/signature_screen.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
 import '../requests/umwandlung_screen.dart';
@@ -141,6 +143,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
     final signaturesAsync = ref.watch(mySignaturesProvider);
     final vp = _resolveVpState(signaturesAsync.valueOrNull ?? const []);
+    final extrasAsync = ref.watch(patientExtrasProvider(patient.patientId));
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -341,6 +344,52 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                           }
                         },
                       ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Betreuungsvertrag-Card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildContractCard(extrasAsync),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Büro anrufen lassen
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: OutlinedButton.icon(
+                  onPressed: () => _requestOfficeCall(),
+                  icon: const Icon(Icons.phone_in_talk_outlined, size: 18),
+                  label: const Text('Büro soll anrufen'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue[700],
+                    side: BorderSide(color: Colors.blue.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    minimumSize: const Size.fromHeight(50),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Notfallkontakt
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Notfallkontakt',
+                  style:
+                      TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildEmergencyContactCard(extrasAsync),
               ),
 
               const SizedBox(height: 28),
@@ -781,6 +830,400 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  // --- Betreuungsvertrag ---
+
+  Widget _buildContractCard(AsyncValue<PatientExtras> extrasAsync) {
+    const green = Color(0xFF4F8A5B);
+
+    return extrasAsync.when(
+      loading: () => _contractSkeleton(),
+      error: (_, _) => _contractSkeleton(),
+      data: (extras) {
+        final signed = extras.hasContract;
+        return Material(
+          color: signed
+              ? green.withValues(alpha: 0.06)
+              : Colors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: signed ? null : () => _signBetreuungsvertrag(),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: signed
+                      ? green.withValues(alpha: 0.4)
+                      : Colors.orange.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: signed ? green : Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      signed ? Icons.check : Icons.warning_amber_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Betreuungsvertrag',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          signed
+                              ? 'Unterschrieben am ${_formatDateDe(extras.contractSignedAt!)}'
+                              : 'Noch nicht unterschrieben – zum Unterschreiben tippen',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: signed ? green : Colors.orange[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!signed)
+                    const Icon(Icons.chevron_right, color: Colors.orange),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _contractSkeleton() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 12),
+          Text('Vertragsstatus wird geladen…'),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _signBetreuungsvertrag() async {
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SignatureScreen(
+          patient: widget.patient,
+          documentType: DocumentType.betreuungsvertrag,
+          documentTitle: 'Betreuungsvertrag',
+        ),
+      ),
+    );
+    if (ok == true && mounted) {
+      ref.invalidate(patientExtrasProvider);
+      ref.invalidate(mySignaturesProvider);
+    }
+  }
+
+  // --- Notfallkontakt ---
+
+  Widget _buildEmergencyContactCard(AsyncValue<PatientExtras> extrasAsync) {
+    return extrasAsync.when(
+      loading: () => _contractSkeleton(),
+      error: (e, _) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.black12),
+        ),
+        child: Text(
+          e.toString(),
+          style: const TextStyle(fontSize: 12, color: Colors.black54),
+        ),
+      ),
+      data: (extras) {
+        final missing = !extras.hasEmergencyContact;
+        return Material(
+          color: missing ? Colors.orange.withValues(alpha: 0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _editEmergencyContact(extras),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: missing
+                      ? Colors.orange.withValues(alpha: 0.5)
+                      : Colors.black12,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    missing
+                        ? Icons.warning_amber_rounded
+                        : Icons.contact_phone_outlined,
+                    color: missing ? Colors.orange : const Color(0xFF4F8A5B),
+                    size: 28,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: missing
+                          ? [
+                              Text(
+                                'Notfallkontakt fehlt',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange[800],
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Bitte Name und Telefonnummer eintragen',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ]
+                          : [
+                              Text(
+                                extras.emergencyContactName!,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                extras.emergencyContactPhone!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                    ),
+                  ),
+                  if (!missing)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.call,
+                        color: Color(0xFF4F8A5B),
+                      ),
+                      onPressed: () =>
+                          _callPhone(extras.emergencyContactPhone!),
+                    ),
+                  Icon(
+                    Icons.edit_outlined,
+                    color: missing ? Colors.orange : Colors.black38,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editEmergencyContact(PatientExtras extras) async {
+    final nameCtrl =
+        TextEditingController(text: extras.emergencyContactName ?? '');
+    final phoneCtrl =
+        TextEditingController(text: extras.emergencyContactPhone ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Notfallkontakt'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'z.B. Anna Engelhardt (Tochter)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Telefonnummer',
+                hintText: 'z.B. 0175 1234567',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    if (saved != true || !mounted) return;
+
+    try {
+      await ref.read(patientRepositoryProvider).updatePatientExtras(
+            patientId: widget.patient.patientId,
+            emergencyContactName: nameCtrl.text,
+            emergencyContactPhone: phoneCtrl.text,
+          );
+      ref.invalidate(patientExtrasProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notfallkontakt gespeichert')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // --- Büro-Anruf-Request ---
+
+  Future<void> _requestOfficeCall() async {
+    CallReason? selected;
+    final noteCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Büro soll anrufen'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Grund auswählen:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: CallReason.values.map((r) {
+                  final isSelected = selected == r;
+                  return ChoiceChip(
+                    label: Text(r.label),
+                    selected: isSelected,
+                    onSelected: (_) => setSt(() => selected = r),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: noteCtrl,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Notiz (optional)',
+                  hintText: 'Was soll das Büro wissen?',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: selected == null
+                  ? null
+                  : () => Navigator.of(ctx).pop(true),
+              child: const Text('Senden'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || selected == null || !mounted) {
+      noteCtrl.dispose();
+      return;
+    }
+
+    try {
+      await ref.read(patientRepositoryProvider).requestOfficeCall(
+            patientId: widget.patient.patientId,
+            reason: selected!.apiValue,
+            note: noteCtrl.text.trim(),
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Rückruf angefragt (${selected!.label}) · Büro wird sich melden',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      noteCtrl.dispose();
+    }
   }
 
   Future<void> _savePatientField({

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -38,6 +40,40 @@ class MobilePatientUpdate(BaseModel):
     phone_landline: str | None = None  # setzt phone_number
     insurance_number: str | None = None
     birthday: str | None = None  # "YYYY-MM-DD"
+
+
+class PatientExtrasResponse(BaseModel):
+    """Zusätzliche Patient-Daten die nicht aus Patti kommen."""
+    patient_id: int
+    emergency_contact_name: str | None = None
+    emergency_contact_phone: str | None = None
+    contract_signed_at: datetime | None = None
+    has_contract: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class PatientExtrasUpdate(BaseModel):
+    emergency_contact_name: str | None = None
+    emergency_contact_phone: str | None = None
+
+
+class CallRequestCreate(BaseModel):
+    reason: str  # "rueckfrage" | "umzug" | "termin" | "dokumentation" | "sonstiges"
+    note: str | None = None
+
+
+class CallRequestResponse(BaseModel):
+    id: int
+    patient_id: int
+    requested_by_user_id: int | None
+    reason: str
+    note: str | None
+    status: str
+    created_at: datetime
+    handled_at: datetime | None
+
+    model_config = {"from_attributes": True}
 
 
 class CaretakerHistoryEntry(BaseModel):

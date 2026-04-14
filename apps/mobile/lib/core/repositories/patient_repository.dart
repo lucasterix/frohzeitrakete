@@ -5,6 +5,7 @@ import '../api/api_exception.dart';
 import '../models/caretaker_history.dart';
 import '../models/mobile_patient.dart';
 import '../models/patient_budget.dart';
+import '../models/patient_extras.dart';
 
 class PatientRepository {
   final ApiClient _client;
@@ -81,6 +82,73 @@ class PatientRepository {
         message: 'Suche fehlgeschlagen',
         statusCode: response.statusCode,
       );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<PatientExtras> getPatientExtras(int patientId) async {
+    try {
+      final response = await _client.dio.get(
+        '/mobile/patients/$patientId/extras',
+      );
+      if (response.statusCode == 200) {
+        return PatientExtras.fromJson(response.data as Map<String, dynamic>);
+      }
+      throw ApiException(
+        message: 'Zusatzdaten konnten nicht geladen werden',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<PatientExtras> updatePatientExtras({
+    required int patientId,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
+  }) async {
+    try {
+      final response = await _client.dio.patch(
+        '/mobile/patients/$patientId/extras',
+        data: {
+          'emergency_contact_name': emergencyContactName,
+          'emergency_contact_phone': emergencyContactPhone,
+        },
+      );
+      if (response.statusCode == 200) {
+        return PatientExtras.fromJson(response.data as Map<String, dynamic>);
+      }
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Zusatzdaten konnten nicht gespeichert werden';
+      throw ApiException(message: detail, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<void> requestOfficeCall({
+    required int patientId,
+    required String reason,
+    String? note,
+  }) async {
+    try {
+      final response = await _client.dio.post(
+        '/mobile/patients/$patientId/request-call',
+        data: {
+          'reason': reason,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) return;
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Anfrage konnte nicht übermittelt werden';
+      throw ApiException(message: detail, statusCode: response.statusCode);
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }

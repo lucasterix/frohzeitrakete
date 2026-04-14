@@ -1,6 +1,15 @@
+from app.models.call_request import CallRequest
 from app.models.entry import Entry
+from app.models.patient_extras import PatientExtras
 from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 
-__all__ = ["User", "SignatureEvent", "SignatureAsset", "Entry"]
+__all__ = [
+    "User",
+    "SignatureEvent",
+    "SignatureAsset",
+    "Entry",
+    "PatientExtras",
+    "CallRequest",
+]

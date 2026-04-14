@@ -5,6 +5,7 @@ import 'models/caretaker_history.dart';
 import 'models/entry.dart';
 import 'models/mobile_patient.dart';
 import 'models/patient_budget.dart';
+import 'models/patient_extras.dart';
 import 'models/signature_event.dart';
 import 'models/user.dart';
 import 'repositories/auth_repository.dart';
@@ -224,6 +225,17 @@ final caretakerHistoryProvider =
     if (auth.valueOrNull == null) return [];
     final repo = ref.watch(patientRepositoryProvider);
     return repo.getCaretakerHistory(patientId);
+  },
+);
+
+final patientExtrasProvider = FutureProvider.family<PatientExtras, int>(
+  (ref, patientId) async {
+    final auth = ref.watch(authControllerProvider);
+    if (auth.valueOrNull == null) {
+      throw StateError('Not authenticated');
+    }
+    final repo = ref.watch(patientRepositoryProvider);
+    return repo.getPatientExtras(patientId);
   },
 );
 

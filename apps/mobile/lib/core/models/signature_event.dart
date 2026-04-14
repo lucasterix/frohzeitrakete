@@ -1,7 +1,8 @@
 enum DocumentType {
   leistungsnachweis,
   vpAntrag,
-  pflegeumwandlung;
+  pflegeumwandlung,
+  betreuungsvertrag;
 
   String get apiValue {
     switch (this) {
@@ -11,6 +12,8 @@ enum DocumentType {
         return 'vp_antrag';
       case DocumentType.pflegeumwandlung:
         return 'pflegeumwandlung';
+      case DocumentType.betreuungsvertrag:
+        return 'betreuungsvertrag';
     }
   }
 
@@ -22,6 +25,8 @@ enum DocumentType {
         return 'Verhinderungspflege';
       case DocumentType.pflegeumwandlung:
         return 'Pflegeumwandlung';
+      case DocumentType.betreuungsvertrag:
+        return 'Betreuungsvertrag';
     }
   }
 
@@ -33,6 +38,8 @@ enum DocumentType {
         return DocumentType.vpAntrag;
       case 'pflegeumwandlung':
         return DocumentType.pflegeumwandlung;
+      case 'betreuungsvertrag':
+        return DocumentType.betreuungsvertrag;
       default:
         throw ArgumentError('Unknown document type: $value');
     }

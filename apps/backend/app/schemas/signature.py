@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-DOCUMENT_TYPE_PATTERN = "^(leistungsnachweis|vp_antrag|pflegeumwandlung)$"
+DOCUMENT_TYPE_PATTERN = "^(leistungsnachweis|vp_antrag|pflegeumwandlung|betreuungsvertrag)$"
 
 
 class MobileSignatureCreate(BaseModel):
