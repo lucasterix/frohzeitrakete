@@ -216,13 +216,17 @@ def admin_user_patient_leistungsnachweis(
     """
     from app.services.leistungsnachweis_service import (
         build_leistungsnachweis_pdf,
-        fetch_patti_leistungsnachweis_pdf,
+        fetch_patti_leistungsnachweis_pdf_filled,
     )
 
     pdf_bytes: bytes | None = None
     if source == "patti":
-        pdf_bytes = fetch_patti_leistungsnachweis_pdf(
-            patient_id, year=year, month=month
+        pdf_bytes = fetch_patti_leistungsnachweis_pdf_filled(
+            db,
+            user_id=user_id,
+            patient_id=patient_id,
+            year=year,
+            month=month,
         )
 
     if pdf_bytes is None:
@@ -331,7 +335,7 @@ def admin_user_leistungsnachweise_zip(
     from app.models.entry import Entry
     from app.services.leistungsnachweis_service import (
         build_leistungsnachweis_pdf,
-        fetch_patti_leistungsnachweis_pdf,
+        fetch_patti_leistungsnachweis_pdf_filled,
     )
 
     start = _date(year, month, 1)
@@ -373,8 +377,12 @@ def admin_user_leistungsnachweise_zip(
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for pid in patient_ids:
-            pdf_bytes = fetch_patti_leistungsnachweis_pdf(
-                pid, year=year, month=month
+            pdf_bytes = fetch_patti_leistungsnachweis_pdf_filled(
+                db,
+                user_id=user_id,
+                patient_id=pid,
+                year=year,
+                month=month,
             )
             if pdf_bytes is None:
                 try:

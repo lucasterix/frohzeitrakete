@@ -255,6 +255,102 @@ def fetch_patti_leistungsnachweis_pdf(
         return None
 
 
+def _day_rows_for_month(
+    db: Session,
+    *,
+    user_id: int,
+    patient_id: int,
+    year: int,
+    month: int,
+) -> list[tuple[int, float, float]]:
+    """Aggregiert pro Tag: (tag_im_monat, stunden, km_mit_patient).
+
+    Km zählt nur Segmente die zum jeweiligen Patient-Einsatz gehören —
+    home_commute / Heimfahrten sind bewusst nicht dabei.
+    """
+    from collections import defaultdict
+
+    entries = _month_entries(
+        db, user_id=user_id, patient_id=patient_id, year=year, month=month
+    )
+    hours_per_day: dict[int, float] = defaultdict(float)
+    for e in entries:
+        hours_per_day[e.entry_date.day] += e.hours
+
+    entry_ids = [e.id for e in entries]
+    km_per_day: dict[int, float] = defaultdict(float)
+    if entry_ids:
+        segments = (
+            db.query(TripSegment)
+            .filter(TripSegment.entry_id.in_(entry_ids))
+            .all()
+        )
+        for s in segments:
+            if s.distance_km:
+                km_per_day[s.trip_date.day] += s.distance_km
+
+    days = sorted(set(hours_per_day) | set(km_per_day))
+    return [
+        (
+            d,
+            round(hours_per_day.get(d, 0.0), 2),
+            round(km_per_day.get(d, 0.0), 2),
+        )
+        for d in days
+    ]
+
+
+def fetch_patti_leistungsnachweis_pdf_filled(
+    db: Session,
+    *,
+    user_id: int,
+    patient_id: int,
+    year: int,
+    month: int,
+) -> bytes | None:
+    """Lädt das Patti-PDF und überlagert es mit Stunden, Km und
+    Unterschrift. Rückgabe = fertig ausgefülltes PDF, oder None wenn
+    Patti nichts lieferte.
+    """
+    from app.services.leistungsnachweis_overlay import overlay_on_patti_pdf
+
+    patti_pdf = fetch_patti_leistungsnachweis_pdf(
+        patient_id, year=year, month=month
+    )
+    if patti_pdf is None:
+        return None
+
+    day_rows = _day_rows_for_month(
+        db,
+        user_id=user_id,
+        patient_id=patient_id,
+        year=year,
+        month=month,
+    )
+    latest = _latest_signature(
+        db, patient_id=patient_id, year=year, month=month
+    )
+    sig_svg: str | None = None
+    signer_name: str | None = None
+    signed_at = None
+    if latest is not None:
+        event, asset = latest
+        signer_name = event.signer_name
+        signed_at = event.signed_at
+        if asset is not None:
+            sig_svg = asset.svg_content
+
+    return overlay_on_patti_pdf(
+        patti_pdf,
+        day_rows=day_rows,
+        month=month,
+        year=year,
+        signature_svg=sig_svg,
+        signer_name=signer_name,
+        signed_at=signed_at,
+    )
+
+
 def build_leistungsnachweis_pdf(
     db: Session,
     *,
