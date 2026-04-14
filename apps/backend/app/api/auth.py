@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.logging import get_logger
+from app.core.rate_limit import limiter
 from app.core.settings import settings
 from app.db.session import get_db
 from app.models.user import User
@@ -16,6 +18,7 @@ from app.services.auth_service import (
 )
 
 router = APIRouter()
+logger = get_logger("auth")
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str):
@@ -45,22 +48,43 @@ def _clear_auth_cookies(response: Response):
 
 
 @router.post("/login", response_model=AuthResponse)
+@limiter.limit(settings.login_rate_limit)
 def login(
     payload: LoginRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
-    result = login_user(
-        db,
-        email=payload.email,
-        password=payload.password,
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-        device_name=request.headers.get("x-device-name"),
-    )
+    ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    try:
+        result = login_user(
+            db,
+            email=payload.email,
+            password=payload.password,
+            user_agent=user_agent,
+            ip_address=ip,
+            device_name=request.headers.get("x-device-name"),
+        )
+    except HTTPException as exc:
+        logger.warning(
+            "login_failed",
+            email=payload.email,
+            ip=ip,
+            user_agent=user_agent,
+            reason=exc.detail,
+            status=exc.status_code,
+        )
+        raise
 
     _set_auth_cookies(response, result["access_token"], result["refresh_token"])
+    logger.info(
+        "login_success",
+        user_id=result["user"].id,
+        email=result["user"].email,
+        ip=ip,
+    )
     return {"user": result["user"]}
 
 
