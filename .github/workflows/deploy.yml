@@ -14,9 +14,23 @@ jobs:
           host: 46.224.7.46
           username: deploy
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 15m
           script: |
             set -e
             cd /home/deploy/apps/frohzeitrakete
             git pull
             cd infra/staging
-            docker compose up -d --build
+
+            # 1. Image bauen, ohne den Live-Container anzufassen
+            docker compose build backend
+
+            # 2. Migrations als one-shot ausführen (keine Crash-Loop bei Failure –
+            #    der Container existiert nach diesem Schritt nicht mehr).
+            #    --rm   = Container nach Run aufräumen
+            #    Wenn alembic upgrade fehlschlägt, schlägt der Workflow fehl
+            #    und der laufende Backend-Container wird nicht angerührt.
+            docker compose run --rm backend alembic upgrade head
+
+            # 3. Stack hochziehen. --wait blockiert bis alle Container
+            #    healthcheck-grün sind, schlägt sonst fehl.
+            docker compose up -d --wait
