@@ -781,21 +781,36 @@ export async function getUserWorkReport(
    ADMIN CALL TASKS
 ========================= */
 
+export type AdminCallTaskKind =
+  | "call_request"
+  | "new_caretaker_followup"
+  | "half_year_check"
+  | "no_invoice_2_months"
+  | "missing_emergency_contact"
+  | "missing_contract";
+
 export type AdminCallTask = {
-  kind:
-    | "call_request"
-    | "new_caretaker_followup"
-    | "half_year_check"
-    | "no_invoice_2_months"
-    | "missing_emergency_contact"
-    | "missing_contract";
+  kind: AdminCallTaskKind;
   priority: "high" | "medium" | "low";
   patient_id: number;
+  patient_name: string | null;
   title: string;
   subtitle: string;
   created_at: string;
   source_id: number | null;
   requested_by_user_id?: number | null;
+};
+
+export type AdminCallRequest = {
+  id: number;
+  patient_id: number;
+  reason: string;
+  note: string | null;
+  status: string;
+  created_at: string;
+  requested_by_user_id: number;
+  handler_user_id: number | null;
+  resolved_at: string | null;
 };
 
 export async function getAdminCallTasks(): Promise<AdminCallTask[]> {
@@ -827,4 +842,38 @@ export async function markOfficeCallDone(patientId: number): Promise<void> {
       await parseError(response, "Fehler beim Markieren als erledigt")
     );
   }
+}
+
+export async function getAdminCallRequests(): Promise<AdminCallRequest[]> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/call-requests`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Rückruf-Anfragen")
+    );
+  }
+  return response.json();
+}
+
+export async function markCallRequestDone(
+  requestId: number
+): Promise<AdminCallRequest> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/call-requests/${requestId}/done`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Abschließen der Anfrage")
+    );
+  }
+  return response.json();
 }

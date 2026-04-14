@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.clients.patti_client import PattiClient
 from app.models.call_request import CallRequest
 from app.models.entry import Entry
 from app.models.patient_extras import PatientExtras
@@ -195,6 +196,26 @@ def collect_admin_tasks(db: Session) -> list[dict[str, Any]]:
                 "source_id": extras.id,
             }
         )
+
+    # Patient-Namen best-effort über Patti auflösen, damit das Admin-Web
+    # echte Namen statt bloßer IDs zeigen kann. Ein einzelner Patti-Ausfall
+    # soll den Task-Feed nicht blockieren.
+    patient_ids = {t["patient_id"] for t in tasks if t.get("patient_id")}
+    patient_names: dict[int, str] = {}
+    if patient_ids:
+        try:
+            client = PattiClient()
+            client.login()
+            for pid in patient_ids:
+                try:
+                    p = client.get_patient(pid)
+                    patient_names[pid] = p.get("list_name") or f"Patient {pid}"
+                except Exception:  # noqa: BLE001
+                    patient_names[pid] = f"Patient {pid}"
+        except Exception:  # noqa: BLE001
+            patient_names = {pid: f"Patient {pid}" for pid in patient_ids}
+    for t in tasks:
+        t["patient_name"] = patient_names.get(t.get("patient_id"))
 
     # Sortieren: high > medium > low, dann nach created_at
     priority_rank = {"high": 0, "medium": 1, "low": 2}

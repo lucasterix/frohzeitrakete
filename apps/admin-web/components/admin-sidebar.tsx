@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { User, getMe, logout } from "@/lib/api";
 import {
   DashboardIcon,
+  InboxIcon,
   LogoutIcon,
   RocketIcon,
   SignatureIcon,
@@ -15,6 +16,7 @@ import {
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", Icon: DashboardIcon },
+  { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon },
   { href: "/admin/users", label: "User", Icon: UsersIcon },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
