@@ -40,6 +40,16 @@ __pycache__
 apps/admin-web/.next
 apps/admin-web/.env.local
 infra/staging/.env
+infra/prod/.env
+
+# Android release signing — never commit keystores or passwords
+apps/mobile/android/key.properties
+apps/mobile/android/upload-keystore.jks
+apps/mobile/android/app/upload-keystore.jks
+
+# Firebase config files contain project identifiers — check before committing
+apps/mobile/ios/Runner/GoogleService-Info.plist
+apps/mobile/android/app/google-services.json
 
 # Claude Code local config
 .claude/
