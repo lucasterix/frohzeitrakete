@@ -30,6 +30,13 @@ from app.services.entry_service import (
     list_entries_for_user,
 )
 from app.services.call_request_service import create_call_request
+from app.services.notification_service import (
+    count_unread,
+    list_user_notifications,
+    mark_all_read,
+    mark_read,
+    notify_all_admins,
+)
 from app.services.patient_extras_service import (
     get_or_create_extras,
     refresh_contract_state,
@@ -479,7 +486,77 @@ def mobile_request_office_call(
         reason=payload.reason,
         note=payload.note,
     )
+    # Alle Admins benachrichtigen, damit der Rückruf im Büro sofort sichtbar ist
+    notify_all_admins(
+        db,
+        kind="call_request_created",
+        title="Neue Rückruf-Anfrage",
+        body=f"{current_user.full_name} bittet um Rückruf – Grund: {payload.reason}",
+        related_patient_id=patient_id,
+        related_entity_id=request.id,
+    )
+    db.commit()
     return CallRequestResponse.model_validate(request)
+
+
+# ---------------------------------------------------------------------------
+# Notifications (in-app, poll-based)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/notifications")
+def mobile_list_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = list_user_notifications(db, user_id=current_user.id)
+    return [
+        {
+            "id": n.id,
+            "kind": n.kind,
+            "title": n.title,
+            "body": n.body,
+            "related_patient_id": n.related_patient_id,
+            "related_entity_id": n.related_entity_id,
+            "read_at": n.read_at,
+            "created_at": n.created_at,
+        }
+        for n in rows
+    ]
+
+
+@router.get("/notifications/unread-count")
+def mobile_notifications_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return {"count": count_unread(db, user_id=current_user.id)}
+
+
+@router.post("/notifications/{notification_id}/read")
+def mobile_notification_mark_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ok = mark_read(db, user_id=current_user.id, notification_id=notification_id)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification nicht gefunden",
+        )
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/notifications/read-all")
+def mobile_notifications_read_all(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    count = mark_all_read(db, user_id=current_user.id)
+    db.commit()
+    return {"updated": count}
 
 
 @router.get(

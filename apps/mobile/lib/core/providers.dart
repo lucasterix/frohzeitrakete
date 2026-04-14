@@ -8,8 +8,10 @@ import 'models/patient_budget.dart';
 import 'models/patient_extras.dart';
 import 'models/signature_event.dart';
 import 'models/user.dart';
+import 'models/notification.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/entry_repository.dart';
+import 'repositories/notification_repository.dart';
 import 'repositories/patient_repository.dart';
 import 'repositories/signature_repository.dart';
 
@@ -32,6 +34,21 @@ final signatureRepositoryProvider = Provider<SignatureRepository>(
 final entryRepositoryProvider = Provider<EntryRepository>(
   (ref) => EntryRepository(ref.watch(apiClientProvider)),
 );
+
+final notificationRepositoryProvider = Provider<NotificationRepository>(
+  (ref) => NotificationRepository(ref.watch(apiClientProvider)),
+);
+
+final notificationsProvider =
+    FutureProvider<List<AppNotification>>((ref) async {
+  final repo = ref.watch(notificationRepositoryProvider);
+  return repo.list();
+});
+
+final unreadNotificationCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(notificationRepositoryProvider);
+  return repo.unreadCount();
+});
 
 // ---------------- Auth State ----------------
 

@@ -1,79 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class NotificationsScreen extends StatefulWidget {
+import '../../core/models/notification.dart';
+import '../../core/providers.dart';
+
+class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
 
-  @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
-}
-
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'icon': Icons.school_outlined,
-      'title': 'Neue Fortbildung verfügbar',
-      'body': 'Am 20.04.2026 findet die Schulung „Demenz verstehen" statt.',
-      'time': 'Heute, 09:12',
-      'unread': true,
-    },
-    {
-      'icon': Icons.description_outlined,
-      'title': 'Leistungsnachweis erinnert',
-      'body': 'Patient Nr. 1 – bitte unterschreiben lassen.',
-      'time': 'Gestern',
-      'unread': true,
-    },
-    {
-      'icon': Icons.campaign_outlined,
-      'title': 'Nachricht vom Büro',
-      'body': 'Bitte Urlaubswünsche bis 30.04. einreichen.',
-      'time': '11.04.2026',
-      'unread': false,
-    },
-    {
-      'icon': Icons.warning_amber_outlined,
-      'title': 'Versicherungsnummer fehlt',
-      'body': 'Patient Nr. 1 – bitte im Büro nachfragen.',
-      'time': '10.04.2026',
-      'unread': false,
-    },
-  ];
-
-  int get _unreadCount =>
-      _notifications.where((n) => n['unread'] as bool).length;
-
-  void _markAllRead() {
-    setState(() {
-      for (final n in _notifications) {
-        n['unread'] = false;
-      }
-    });
+  IconData _iconFor(String kind) {
+    switch (kind) {
+      case 'call_request_created':
+        return Icons.phone_callback_outlined;
+      case 'training_new':
+        return Icons.school_outlined;
+      case 'birthday_reminder':
+        return Icons.cake_outlined;
+      case 'office_message':
+        return Icons.campaign_outlined;
+      default:
+        return Icons.notifications_none;
+    }
   }
 
-  void _markRead(int index) {
-    if (!(_notifications[index]['unread'] as bool)) return;
-    setState(() {
-      _notifications[index]['unread'] = false;
-    });
+  String _formatTime(DateTime dt) {
+    final local = dt.toLocal();
+    final now = DateTime.now();
+    final today =
+        local.year == now.year && local.month == now.month && local.day == now.day;
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    if (today) return 'Heute, $hh:$mm';
+    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}.${local.year}';
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
-    final unreadCount = _unreadCount;
+    final asyncNotifs = ref.watch(notificationsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Benachrichtigungen'),
         actions: [
           TextButton(
-            onPressed: unreadCount == 0 ? null : _markAllRead,
+            onPressed: () async {
+              await ref.read(notificationRepositoryProvider).markAllRead();
+              ref.invalidate(notificationsProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+            },
             child: const Text('Alle gelesen'),
           ),
         ],
       ),
-      body: _notifications.isEmpty
-          ? const Center(
+      body: asyncNotifs.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Konnte Benachrichtigungen nicht laden:\n$e',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ),
+        ),
+        data: (items) {
+          if (items.isEmpty) {
+            return const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -89,15 +82,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                 ],
               ),
-            )
-          : ListView.separated(
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(notificationsProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+              await ref.read(notificationsProvider.future);
+            },
+            child: ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              itemCount: _notifications.length,
+              itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                final n = _notifications[index];
-                final unread = n['unread'] as bool;
-
+                final AppNotification n = items[index];
+                final unread = n.isUnread;
                 return Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -116,13 +116,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     leading: CircleAvatar(
                       backgroundColor: green.withValues(alpha: 0.12),
-                      child: Icon(n['icon'] as IconData, color: green),
+                      child: Icon(_iconFor(n.kind), color: green),
                     ),
                     title: Row(
                       children: [
                         Expanded(
                           child: Text(
-                            n['title'] as String,
+                            n.title,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: unread
@@ -147,13 +147,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            n['body'] as String,
-                            style: const TextStyle(fontSize: 14),
-                          ),
+                          if (n.body != null)
+                            Text(
+                              n.body!,
+                              style: const TextStyle(fontSize: 14),
+                            ),
                           const SizedBox(height: 6),
                           Text(
-                            n['time'] as String,
+                            _formatTime(n.createdAt),
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.black45,
@@ -162,11 +163,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ],
                       ),
                     ),
-                    onTap: () => _markRead(index),
+                    onTap: () async {
+                      if (unread) {
+                        await ref
+                            .read(notificationRepositoryProvider)
+                            .markRead(n.id);
+                        ref.invalidate(notificationsProvider);
+                        ref.invalidate(unreadNotificationCountProvider);
+                      }
+                    },
                   ),
                 );
               },
             ),
+          );
+        },
+      ),
     );
   }
 }

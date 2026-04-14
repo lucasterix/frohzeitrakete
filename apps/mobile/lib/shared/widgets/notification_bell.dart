@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers.dart';
 import '../../features/notifications/notifications_screen.dart';
 
-class NotificationBell extends StatelessWidget {
-  final int unreadCount;
-
-  const NotificationBell({super.key, this.unreadCount = 2});
+class NotificationBell extends ConsumerWidget {
+  const NotificationBell({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncCount = ref.watch(unreadNotificationCountProvider);
+    final unreadCount = asyncCount.maybeWhen(data: (c) => c, orElse: () => 0);
+
     return IconButton(
-      onPressed: () {
-        Navigator.of(context).push(
+      onPressed: () async {
+        await Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const NotificationsScreen()),
         );
+        ref.invalidate(unreadNotificationCountProvider);
       },
       icon: Stack(
         clipBehavior: Clip.none,
