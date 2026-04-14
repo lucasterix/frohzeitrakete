@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   getUserWorkReport,
+  markCaretakerChanged,
   type WorkReport,
   type WorkReportDay,
   type WorkReportEntry,
@@ -58,6 +59,8 @@ export default function UserReportPage() {
   const [report, setReport] = useState<WorkReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyPatientId, setBusyPatientId] = useState<number | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -76,6 +79,50 @@ export default function UserReportPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const uniquePatients = useMemo(() => {
+    if (!report) return [] as { id: number; name: string }[];
+    const seen = new Map<number, string>();
+    for (const day of report.days) {
+      for (const e of day.entries) {
+        if (e.type === "patient" && e.patient_id != null) {
+          if (!seen.has(e.patient_id)) {
+            seen.set(
+              e.patient_id,
+              e.patient_name ?? `Patient #${e.patient_id}`
+            );
+          }
+        }
+      }
+    }
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [report]);
+
+  const handleCaretakerChanged = useCallback(
+    async (patientId: number, patientName: string) => {
+      if (
+        !window.confirm(
+          `Neuen Hauptbetreuer für ${patientName} signalisieren?\n\nDas startet den 7-Tage-Follow-up-Task für das Büro.`
+        )
+      ) {
+        return;
+      }
+      setBusyPatientId(patientId);
+      setFlash(null);
+      setError(null);
+      try {
+        await markCaretakerChanged(patientId);
+        setFlash(
+          `Follow-up-Task für ${patientName} gestartet (in 7 Tagen im Feed).`
+        );
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusyPatientId(null);
+      }
+    },
+    []
+  );
 
   const prevMonth = () => {
     if (month === 1) {
@@ -156,6 +203,43 @@ export default function UserReportPage() {
             value={formatKm(report.total_km)}
             icon="🚗"
           />
+        </div>
+      )}
+
+      {report && uniquePatients.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Betreute Patienten in diesem Monat
+          </h3>
+          <ul className="space-y-2">
+            {uniquePatients.map((p) => {
+              const busy = busyPatientId === p.id;
+              return (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+                >
+                  <span className="truncate text-sm font-medium text-slate-800">
+                    {p.name}
+                  </span>
+                  <button
+                    onClick={() => handleCaretakerChanged(p.id, p.name)}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    title="Signalisiert dem Büro, dass dieser Patient einen neuen Hauptbetreuer bekommen hat. Startet den 7-Tage-Follow-up-Task."
+                  >
+                    {busy ? "Speichere …" : "Neuer Hauptbetreuer"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {flash && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+          {flash}
         </div>
       )}
 

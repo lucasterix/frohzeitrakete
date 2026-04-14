@@ -829,6 +829,26 @@ export async function getAdminCallTasks(): Promise<AdminCallTask[]> {
   return response.json();
 }
 
+export async function markCaretakerChanged(
+  patientId: number
+): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/patients/${patientId}/caretaker-changed`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Fehler beim Markieren des neuen Hauptbetreuers"
+      )
+    );
+  }
+}
+
 export async function markOfficeCallDone(patientId: number): Promise<void> {
   const response = await fetchWithRefresh(
     `${API_BASE_URL}/admin/patients/${patientId}/office-call-done`,
