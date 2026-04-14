@@ -5,6 +5,7 @@ import '../../core/offline/connectivity_provider.dart';
 import '../../core/providers.dart';
 import '../entries/entry_screen.dart';
 import '../entries/my_entries_screen.dart';
+import '../office_requests/office_requests_screen.dart';
 import '../patients/patient_intake_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
@@ -494,8 +495,12 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 20),
 
+          _TodayStatusBanner(),
+          _AnnouncementsSection(),
           // Aufgaben & Termine
           _MonthlySummaryCard(year: now.year, month: now.month),
+          const SizedBox(height: 14),
+          _buildOfficeRequestsTile(context),
           const SizedBox(height: 14),
           _buildTasksSection(ref),
 
@@ -853,4 +858,190 @@ class _MonthlySummaryCard extends ConsumerWidget {
       },
     );
   }
+}
+
+Widget _buildOfficeRequestsTile(BuildContext context) {
+  const green = Color(0xFF4F8A5B);
+  return Card(
+    color: green.withValues(alpha: 0.04),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const OfficeRequestsScreen(),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: green.withValues(alpha: 0.15),
+              child: const Icon(
+                Icons.forward_to_inbox_outlined,
+                size: 26,
+                color: green,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Anfrage ans Büro',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Urlaub, Krankmeldung, HR-Anliegen',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: green),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _TodayStatusBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(todayStatusProvider);
+    return async.maybeWhen(
+      data: (data) {
+        final onVacation = data['on_vacation'] == true;
+        final isSick = data['is_sick'] == true;
+        if (!onVacation && !isSick) return const SizedBox.shrink();
+        final label = onVacation ? 'Du hast heute Urlaub' : 'Du bist heute krankgemeldet';
+        final until = onVacation
+            ? (data['vacation_until'] as String?)
+            : (data['sick_until'] as String?);
+        final color = onVacation ? Colors.blue : Colors.red;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  onVacation ? Icons.beach_access : Icons.sick_outlined,
+                  color: color,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                      if (until != null)
+                        Text(
+                          'bis ${_fmtIso(until)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: color.withValues(alpha: 0.8),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _AnnouncementsSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(announcementsProvider);
+    return async.maybeWhen(
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: items.map<Widget>((a) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.amber.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.campaign_outlined,
+                          size: 18,
+                          color: Colors.amber,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            (a['title'] as String?) ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      (a['body'] as String?) ?? '',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+String _fmtIso(String iso) {
+  final parts = iso.split('-');
+  if (parts.length != 3) return iso;
+  return '${parts[2]}.${parts[1]}.${parts[0]}';
 }

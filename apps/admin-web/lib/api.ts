@@ -80,6 +80,235 @@ export async function createTravelCostPayment(
   return response.json();
 }
 
+// ==========================================================================
+// Office Workflow: Vacation, Sick Leave, HR Requests, Announcements
+// ==========================================================================
+
+export type VacationRequest = {
+  id: number;
+  user_id: number;
+  from_date: string;
+  to_date: string;
+  note: string | null;
+  status: string;
+  approved_from_date: string | null;
+  approved_to_date: string | null;
+  handler_user_id: number | null;
+  handler_kuerzel: string | null;
+  handled_at: string | null;
+  response_text: string | null;
+  created_at: string;
+};
+
+export async function getVacationRequests(
+  status?: string
+): Promise<VacationRequest[]> {
+  const url = new URL(`${API_BASE_URL}/admin/vacation-requests`);
+  if (status) url.searchParams.set("status", status);
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Urlaubsanträge")
+    );
+  }
+  return response.json();
+}
+
+export async function resolveVacationRequest(
+  id: number,
+  payload: {
+    status: "approved" | "partially_approved" | "rejected";
+    approved_from_date?: string | null;
+    approved_to_date?: string | null;
+    response_text?: string | null;
+    handler_kuerzel: string;
+  }
+): Promise<VacationRequest> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/vacation-requests/${id}/resolve`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Antwort konnte nicht gespeichert werden")
+    );
+  }
+  return response.json();
+}
+
+export type SickLeave = {
+  id: number;
+  user_id: number;
+  from_date: string;
+  to_date: string;
+  note: string | null;
+  handler_user_id: number | null;
+  handler_kuerzel: string | null;
+  acknowledged_at: string | null;
+  response_text: string | null;
+  created_at: string;
+};
+
+export async function getSickLeaves(
+  onlyOpen = false
+): Promise<SickLeave[]> {
+  const url = new URL(`${API_BASE_URL}/admin/sick-leaves`);
+  if (onlyOpen) url.searchParams.set("only_open", "true");
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Krankmeldungen")
+    );
+  }
+  return response.json();
+}
+
+export async function acknowledgeSickLeave(
+  id: number,
+  payload: { response_text?: string | null; handler_kuerzel: string }
+): Promise<SickLeave> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/sick-leaves/${id}/acknowledge`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Bestätigung fehlgeschlagen")
+    );
+  }
+  return response.json();
+}
+
+export type HrRequestRecord = {
+  id: number;
+  user_id: number;
+  category: string;
+  subject: string;
+  body: string | null;
+  status: string;
+  handler_user_id: number | null;
+  handler_kuerzel: string | null;
+  handled_at: string | null;
+  response_text: string | null;
+  created_at: string;
+};
+
+export async function getHrRequests(
+  onlyOpen = false
+): Promise<HrRequestRecord[]> {
+  const url = new URL(`${API_BASE_URL}/admin/hr-requests`);
+  if (onlyOpen) url.searchParams.set("only_open", "true");
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der HR-Anfragen")
+    );
+  }
+  return response.json();
+}
+
+export async function resolveHrRequest(
+  id: number,
+  payload: {
+    status: "done" | "rejected";
+    response_text?: string | null;
+    handler_kuerzel: string;
+  }
+): Promise<HrRequestRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/hr-requests/${id}/resolve`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Antwort konnte nicht gespeichert werden")
+    );
+  }
+  return response.json();
+}
+
+export type AdminAnnouncement = {
+  id: number;
+  title: string;
+  body: string;
+  visible_from: string;
+  visible_until: string;
+  created_by_user_id: number | null;
+  created_at: string;
+};
+
+export async function getAnnouncements(
+  activeOnly = false
+): Promise<AdminAnnouncement[]> {
+  const url = new URL(`${API_BASE_URL}/admin/announcements`);
+  if (activeOnly) url.searchParams.set("active_only", "true");
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Ankündigungen")
+    );
+  }
+  return response.json();
+}
+
+export async function createAnnouncement(payload: {
+  title: string;
+  body: string;
+  visible_until: string;
+  visible_from?: string | null;
+}): Promise<AdminAnnouncement> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/announcements`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Ankündigung konnte nicht angelegt werden")
+    );
+  }
+  return response.json();
+}
+
+export async function deleteAnnouncement(id: number): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/announcements/${id}`,
+    { method: "DELETE", headers: buildHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Ankündigung konnte nicht gelöscht werden")
+    );
+  }
+}
+
 export async function deleteTravelCostPayment(id: number): Promise<void> {
   const response = await fetchWithRefresh(
     `${API_BASE_URL}/admin/travel-cost-payments/${id}`,

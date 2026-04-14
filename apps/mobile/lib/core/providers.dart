@@ -12,6 +12,7 @@ import 'models/notification.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/entry_repository.dart';
 import 'repositories/notification_repository.dart';
+import 'repositories/office_workflow_repository.dart';
 import 'repositories/patient_intake_repository.dart';
 import 'repositories/patient_repository.dart';
 import 'repositories/signature_repository.dart';
@@ -43,6 +44,34 @@ final notificationRepositoryProvider = Provider<NotificationRepository>(
 final patientIntakeRepositoryProvider = Provider<PatientIntakeRepository>(
   (ref) => PatientIntakeRepository(ref.watch(apiClientProvider)),
 );
+
+final officeWorkflowRepositoryProvider = Provider<OfficeWorkflowRepository>(
+  (ref) => OfficeWorkflowRepository(ref.watch(apiClientProvider)),
+);
+
+final myVacationRequestsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(officeWorkflowRepositoryProvider).listMyVacationRequests();
+});
+
+final mySickLeavesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(officeWorkflowRepositoryProvider).listMySickLeaves();
+});
+
+final myHrRequestsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(officeWorkflowRepositoryProvider).listMyHrRequests();
+});
+
+final announcementsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(officeWorkflowRepositoryProvider).listAnnouncements();
+});
+
+final todayStatusProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  return ref.read(officeWorkflowRepositoryProvider).todayStatus();
+});
 
 final notificationsProvider =
     FutureProvider<List<AppNotification>>((ref) async {

@@ -311,16 +311,24 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
   }
 }
 
-class _PatientCard extends StatelessWidget {
+class _PatientCard extends ConsumerWidget {
   final MobilePatient patient;
 
   const _PatientCard({required this.patient});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
     final pflegegrad = patient.pflegegradInt;
     final city = patient.city ?? '';
+    final budgetAsync = ref.watch(
+      pattiBudgetProvider(
+        PattiBudgetParams(
+          patientId: patient.patientId,
+          year: DateTime.now().year,
+        ),
+      ),
+    );
 
     return Material(
       color: Colors.white,
@@ -404,6 +412,28 @@ class _PatientCard extends StatelessWidget {
                   if (pflegegrad > 0)
                     _chip(label: 'PG $pflegegrad', color: green),
                   if (pflegegrad > 0) const SizedBox(width: 8),
+                  budgetAsync.when(
+                    loading: () => _chip(
+                      label: '…',
+                      color: Colors.grey,
+                    ),
+                    error: (_, _) => const SizedBox.shrink(),
+                    data: (b) {
+                      final remaining = b.careServiceRemainingHours;
+                      final color = remaining < 2
+                          ? Colors.red
+                          : remaining < 5
+                              ? Colors.orange
+                              : green;
+                      return _chip(
+                        label:
+                            '${remaining.toStringAsFixed(1)}h Rest',
+                        color: color,
+                        icon: Icons.schedule,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   if (patient.isPrimary)
                     _chip(
                       label: 'Hauptpatient',
