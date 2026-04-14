@@ -6,7 +6,7 @@ sieht welche Patienten anzurufen sind und welche Stammdaten fehlen.
 
 from datetime import date
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin_user
@@ -187,6 +187,76 @@ def admin_resolve_patient_intake(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get(
+    "/users/{user_id}/leistungsnachweis/{patient_id}",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def admin_user_patient_leistungsnachweis(
+    user_id: int,
+    patient_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Erstellt ein PDF-Leistungsnachweis für (user, patient, monat).
+
+    Aggregiert Stunden, km, Leistungsarten und Unterschriften aus den
+    Einsätzen und der letzten Leistungsnachweis-Signatur im Monat.
+    """
+    from app.services.leistungsnachweis_service import build_leistungsnachweis_pdf
+
+    try:
+        pdf_bytes = build_leistungsnachweis_pdf(
+            db,
+            user_id=user_id,
+            patient_id=patient_id,
+            year=year,
+            month=month,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    filename = f"leistungsnachweis_u{user_id}_p{patient_id}_{year}-{month:02d}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/users/{user_id}/leistungsnachweis-patient-ids")
+def admin_list_patient_ids_for_month(
+    user_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Gibt alle Patient-IDs zurück, für die der User in dem Monat
+    Einsätze erfasst hat. Wird vom Admin-Web genutzt um die PDFs
+    in einer Schleife abzurufen (einen pro Patient)."""
+    from calendar import monthrange
+    from datetime import date as _date
+
+    start = _date(year, month, 1)
+    end = _date(year, month, monthrange(year, month)[1])
+    from app.models.entry import Entry
+    patient_ids = (
+        db.query(Entry.patient_id)
+        .filter(
+            Entry.user_id == user_id,
+            Entry.patient_id.is_not(None),
+            Entry.entry_date >= start,
+            Entry.entry_date <= end,
+            Entry.entry_type == "patient",
+        )
+        .distinct()
+        .all()
+    )
+    return {"patient_ids": [p[0] for p in patient_ids]}
 
 
 @router.get("/trainings", response_model=list[TrainingResponse])

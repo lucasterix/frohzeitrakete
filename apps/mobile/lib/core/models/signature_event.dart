@@ -56,6 +56,9 @@ class SignatureEvent {
   final String? note;
   final int? createdByUserId;
   final DateTime signedAt;
+  final bool approvedByKk;
+  final DateTime? approvedAt;
+  final String? approvedNote;
   final DateTime createdAt;
 
   const SignatureEvent({
@@ -68,6 +71,9 @@ class SignatureEvent {
     this.note,
     this.createdByUserId,
     required this.signedAt,
+    this.approvedByKk = false,
+    this.approvedAt,
+    this.approvedNote,
     required this.createdAt,
   });
 
@@ -82,6 +88,11 @@ class SignatureEvent {
       note: json['note'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,
       signedAt: DateTime.parse(json['signed_at'] as String),
+      approvedByKk: (json['approved_by_kk'] as bool?) ?? false,
+      approvedAt: json['approved_at'] != null
+          ? DateTime.parse(json['approved_at'] as String)
+          : null,
+      approvedNote: json['approved_note'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -25,6 +25,16 @@ class SignatureEvent(Base):
     signed_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False, index=True
     )
+
+    # Nur für document_type='vp_antrag' relevant: hat die Krankenkasse den
+    # Antrag bestätigt? Vom Büro im Admin-Web gesetzt. Wenn True zeigt der
+    # Mobile-VP-Screen eine grüne "genehmigt"-Card statt "offen".
+    approved_by_kk: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approved_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

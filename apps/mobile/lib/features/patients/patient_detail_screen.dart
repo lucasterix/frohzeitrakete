@@ -107,6 +107,11 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     }
     final label =
         '${monthNames[latest.signedAt.month - 1]} ${latest.signedAt.year}';
+    // Wenn die Krankenkasse den Antrag bestätigt hat, zeigen wir einen
+    // eigenen state damit die Card grün statt orange gefärbt wird.
+    if (latest.approvedByKk) {
+      return (state: 'approved', month: label);
+    }
     return (state: 'signed', month: label);
   }
 
@@ -1983,14 +1988,16 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     }
 
     if (vpState == 'signed') {
+      // Unterschrieben, aber noch nicht von der KK bestätigt → orange
+      const amber = Colors.orange;
       return Material(
-        color: green.withValues(alpha: 0.06),
+        color: amber.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: green.withValues(alpha: 0.4)),
+            border: Border.all(color: amber.withValues(alpha: 0.4)),
           ),
           child: Row(
             children: [
@@ -1998,10 +2005,10 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                 width: 44,
                 height: 44,
                 decoration: const BoxDecoration(
-                  color: green,
+                  color: amber,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check, color: Colors.white),
+                child: const Icon(Icons.hourglass_top, color: Colors.white),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -2019,15 +2026,15 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                             ),
                           ),
                         ),
-                        Icon(Icons.verified, color: green, size: 20),
+                        Icon(Icons.hourglass_empty, color: amber, size: 20),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Unterschrieben · bei Krankenkasse eingereicht',
+                    const Text(
+                      'Unterschrieben · warte auf KK-Genehmigung',
                       style: TextStyle(
                         fontSize: 13,
-                        color: green.withValues(alpha: 0.9),
+                        color: Color(0xFFC97A00),
                       ),
                     ),
                     const SizedBox(height: 2),

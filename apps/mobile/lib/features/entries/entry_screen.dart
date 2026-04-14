@@ -132,13 +132,17 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(DateTime.now().year - 1),
-      lastDate: DateTime.now(),
+    // Fachregel: Einsätze können nur am Einsatztag selbst erfasst werden.
+    // Der Datumsfeld ist fix auf heute — kein Picker.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Einsätze können nur am Einsatztag selbst erfasst werden. '
+          'Datum ist auf heute fixiert.',
+        ),
+        duration: Duration(seconds: 3),
+      ),
     );
-    if (picked != null) setState(() => _selectedDate = picked);
   }
 
   Future<void> _save() async {

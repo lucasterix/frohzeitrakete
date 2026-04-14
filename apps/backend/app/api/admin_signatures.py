@@ -98,6 +98,40 @@ def get_signature(
     return event
 
 
+@router.post("/signatures/{signature_id}/vp-approve")
+def admin_set_vp_approval(
+    signature_id: int,
+    approved: bool = True,
+    note: str | None = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    """Markiert einen VP-Antrag als von der Krankenkasse genehmigt (oder
+    zurück auf offen). Nur für document_type='vp_antrag'."""
+    from datetime import datetime as _dt
+
+    event = (
+        db.query(SignatureEvent)
+        .filter(SignatureEvent.id == signature_id)
+        .first()
+    )
+    if event is None or event.document_type != "vp_antrag":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VP-Antrag nicht gefunden",
+        )
+    event.approved_by_kk = approved
+    event.approved_at = _dt.utcnow() if approved else None
+    event.approved_note = note
+    db.commit()
+    return {
+        "id": event.id,
+        "approved_by_kk": event.approved_by_kk,
+        "approved_at": event.approved_at,
+        "approved_note": event.approved_note,
+    }
+
+
 @router.get("/contracts")
 def list_contracts(
     q: str | None = Query(None, max_length=200),

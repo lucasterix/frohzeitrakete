@@ -38,9 +38,13 @@ class EntryCreate(BaseModel):
 
     @field_validator("entry_date")
     @classmethod
-    def entry_date_not_in_future(cls, v: date) -> date:
-        if v > date.today():
-            raise ValueError("entry_date darf nicht in der Zukunft liegen")
+    def entry_date_must_be_today(cls, v: date) -> date:
+        if v != date.today():
+            raise ValueError(
+                "Einsätze können nur am Einsatztag selbst erfasst werden. "
+                "Nachträgliche Einträge oder Einträge für die Zukunft sind "
+                "nicht möglich."
+            )
         return v
 
 

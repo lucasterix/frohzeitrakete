@@ -321,6 +321,64 @@ export async function deleteTravelCostPayment(id: number): Promise<void> {
   }
 }
 
+export async function getLeistungsnachweisPatientIds(
+  userId: number,
+  year: number,
+  month: number
+): Promise<number[]> {
+  const url = new URL(
+    `${API_BASE_URL}/admin/users/${userId}/leistungsnachweis-patient-ids`
+  );
+  url.searchParams.set("year", String(year));
+  url.searchParams.set("month", String(month));
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Patienten-IDs")
+    );
+  }
+  const data = (await response.json()) as { patient_ids: number[] };
+  return data.patient_ids;
+}
+
+export function leistungsnachweisPdfUrl(
+  userId: number,
+  patientId: number,
+  year: number,
+  month: number
+): string {
+  const url = new URL(
+    `${API_BASE_URL}/admin/users/${userId}/leistungsnachweis/${patientId}`
+  );
+  url.searchParams.set("year", String(year));
+  url.searchParams.set("month", String(month));
+  return url.toString();
+}
+
+export async function setVpApproval(
+  signatureId: number,
+  approved: boolean,
+  note?: string | null
+): Promise<void> {
+  const url = new URL(
+    `${API_BASE_URL}/admin/signatures/${signatureId}/vp-approve`
+  );
+  url.searchParams.set("approved", String(approved));
+  if (note) url.searchParams.set("note", note);
+  const response = await fetchWithRefresh(url.toString(), {
+    method: "POST",
+    headers: buildHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "VP-Approval konnte nicht gesetzt werden")
+    );
+  }
+}
+
 export type Patient = {
   service_history_id: number;
   patient_id: number;

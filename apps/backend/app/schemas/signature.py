@@ -48,6 +48,9 @@ class SignatureEventResponse(BaseModel):
     note: str | None = None
     created_by_user_id: int | None = None
     signed_at: datetime
+    approved_by_kk: bool = False
+    approved_at: datetime | None = None
+    approved_note: str | None = None
     created_at: datetime
     updated_at: datetime
     asset: SignatureAssetResponse | None = None

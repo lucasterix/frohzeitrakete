@@ -43,3 +43,6 @@ cachetools==5.5.0
 
 # Testing (dev only, aber hier für CI-Bequemlichkeit)
 pytest==8.3.3
+
+# PDF-Generator für Leistungsnachweis-Export
+reportlab==4.2.5
