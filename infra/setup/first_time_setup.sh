@@ -192,8 +192,11 @@ log "Schritt 4/4: Backend neu starten und seed'en"
 
 cd "$COMPOSE_DIR"
 
-log "  docker compose up -d backend (re-liest .env)"
-docker compose up -d backend
+log "  docker compose up -d --force-recreate backend (re-liest .env)"
+# --force-recreate ist wichtig: compose detektiert Änderungen in der
+# .env-Datei, die über env_file: referenziert wird, nicht automatisch.
+# Ohne --force-recreate läuft der alte Container mit den alten Env-Vars weiter.
+docker compose up -d --force-recreate backend
 
 # Warten bis backend ready ist
 log "  Warte bis Backend ready …"
