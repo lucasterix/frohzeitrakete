@@ -149,10 +149,25 @@ fi
 # ----------------------------------------------------------------------------
 log "Schritt 3/4: Postgres-Backup-Cron einrichten"
 
+# Der Cron-Install braucht sudo. Im CI/non-TTY-Kontext (GitHub Actions via
+# appleboy/ssh-action) ist kein Terminal verfügbar, sudo kann daher kein
+# Passwort abfragen. Wir testen einmal ob passwordless sudo geht und
+# überspringen den ganzen Schritt sonst freiwillig — der Backup-Cron ist
+# nice-to-have und blockiert den Setup nicht.
+SUDO_OK=false
+if sudo -n true 2>/dev/null; then
+  SUDO_OK=true
+fi
+
 if [ ! -f "$BACKUP_SCRIPT_SRC" ]; then
   warn "Backup-Script nicht gefunden unter $BACKUP_SCRIPT_SRC — wird übersprungen"
 elif ! command -v crontab &>/dev/null; then
   warn "crontab fehlt — wird übersprungen"
+elif [ "$SUDO_OK" = false ]; then
+  warn "sudo braucht ein Passwort in dieser Session — Backup-Cron wird übersprungen."
+  warn "  Später manuell nachholen mit:"
+  warn "    bash $REPO_DIR/infra/setup/first_time_setup.sh --yes"
+  warn "  von einer echten Shell-Session aus, oder den Cron-Install einzeln."
 else
   if sudo test -f "$BACKUP_SCRIPT_DEST"; then
     ok "  Backup-Script ist bereits unter $BACKUP_SCRIPT_DEST installiert"
