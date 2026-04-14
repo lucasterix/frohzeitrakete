@@ -884,6 +884,37 @@ export async function resolveAdminPatientIntake(
   return response.json();
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
+    method: "POST",
+    credentials: "include",
+    headers: buildHeaders(),
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Reset-Anfrage fehlgeschlagen")
+    );
+  }
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/confirm`, {
+    method: "POST",
+    credentials: "include",
+    headers: buildHeaders(),
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Reset fehlgeschlagen")
+    );
+  }
+}
+
 export async function markCaretakerChanged(
   patientId: number
 ): Promise<void> {

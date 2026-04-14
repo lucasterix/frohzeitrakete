@@ -15,6 +15,8 @@ from app.schemas.auth import (
     AuthResponse,
     ChangePasswordRequest,
     LoginRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     SessionResponse,
 )
 from app.schemas.user import UserResponse
@@ -25,6 +27,7 @@ from app.services.auth_service import (
     refresh_login,
     revoke_session_for_user,
 )
+from app.services.password_reset_service import confirm_reset, request_reset
 
 router = APIRouter()
 logger = get_logger("auth")
@@ -208,3 +211,44 @@ def revoke_my_session(
         "revoked_at": session.revoked_at,
         "is_current": session.token_hash == current_hash,
     }
+
+
+@router.post("/password-reset/request")
+@limiter.limit(settings.login_rate_limit)
+def password_reset_request(
+    payload: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Startet den Passwort-Reset-Flow.
+
+    Gibt immer 200 zurück, auch wenn die E-Mail unbekannt ist — das
+    verhindert User-Enumeration. Der eigentliche Versand passiert im
+    Service (SMTP oder Log-Fallback).
+    """
+    request_reset(db, email=payload.email)
+    return {"ok": True}
+
+
+@router.post("/password-reset/confirm")
+@limiter.limit(settings.login_rate_limit)
+def password_reset_confirm(
+    payload: PasswordResetConfirm,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    try:
+        confirm_reset(
+            db, token=payload.token, new_password=payload.new_password
+        )
+    except ValueError as exc:
+        if str(exc) == "password_too_short":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passwort muss mindestens 8 Zeichen lang sein",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset-Link ist ungültig oder abgelaufen",
+        )
+    return {"ok": True}

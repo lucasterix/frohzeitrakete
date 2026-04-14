@@ -61,6 +61,37 @@ class AuthRepository {
     }
   }
 
+  Future<void> requestPasswordReset({required String email}) async {
+    try {
+      await _client.dio.post(
+        '/auth/password-reset/request',
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<void> confirmPasswordReset({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _client.dio.post(
+        '/auth/password-reset/confirm',
+        data: {'token': token, 'new_password': newPassword},
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) return;
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Reset fehlgeschlagen';
+      throw ApiException(message: detail, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,

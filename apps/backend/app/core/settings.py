@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     # Get a free key at https://openrouteservice.org/dev/#/signup
     ors_api_key: str = ""
 
+    # Password-Reset
+    # Wenn SMTP-Daten fehlen, wird der Reset-Link im Log ausgegeben damit
+    # das Büro ihn manuell an den User weitergibt.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@froehlichdienste.de"
+    password_reset_base_url: str = "https://admin.froehlichdienste.de/reset-password"
+    password_reset_token_ttl_minutes: int = 60
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

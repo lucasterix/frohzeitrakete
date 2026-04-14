@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/providers.dart';
 import '../../navigation/main_navigation.dart';
+import 'password_reset_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -331,7 +332,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PasswordResetScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Passwort vergessen?',
+                      style: TextStyle(color: green),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 const Center(
                   child: Text(
                     'Probleme beim Anmelden?',
