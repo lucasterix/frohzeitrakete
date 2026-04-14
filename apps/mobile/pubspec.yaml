@@ -59,6 +59,16 @@ dependencies:
   # Calendar widget for month view
   table_calendar: ^3.1.2
 
+  # Error-Monitoring (wird nur aktiv wenn --dart-define=SENTRY_DSN=... gesetzt ist)
+  sentry_flutter: ^8.9.0
+
+  # Offline-Cache (lokale Einsätze + Sync-Queue)
+  sqflite: ^2.3.3
+  path: ^1.9.0
+
+  # Connectivity-Check für Offline-Modus
+  connectivity_plus: ^6.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

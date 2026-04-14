@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/entry.dart';
+import '../../core/offline/connectivity_provider.dart';
+import '../../core/offline/offline_queue.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/models/signature_event.dart';
 import '../../core/models/user_home.dart';
@@ -263,6 +265,36 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       return;
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Netzwerk-Fehler → Offline-Queue, damit der Einsatz nicht verloren geht.
+      // Patient-Einsätze brauchen Signatur, das geht offline nicht — da bleiben
+      // wir im Fehler-Modus und bitten den User den Einsatz später nochmal
+      // abzusenden sobald Netz da ist.
+      if (e.isNetworkError && _entryType != EntryType.patient) {
+        final payload = <String, dynamic>{
+          'entry_type': _entryType.apiValue,
+          'category_label': _categoryLabelCtrl.text.trim(),
+          'entry_date':
+              '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+          'hours': _hours,
+          'activities': const <String>[],
+          'note': null,
+        }..removeWhere((_, v) => v == null);
+        await OfflineQueue.enqueue(payload);
+        ref.invalidate(pendingOfflineCountProvider);
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Kein Netz — Einsatz offline gespeichert. Wird automatisch '
+              'übertragen sobald du wieder online bist.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        Navigator.of(context).pop();
+        return;
+      }
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

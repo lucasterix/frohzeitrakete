@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/offline/connectivity_provider.dart';
 import '../core/providers.dart';
 import '../features/auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
@@ -127,6 +128,11 @@ class _BootstrapState extends ConsumerState<_Bootstrap> {
 
   @override
   Widget build(BuildContext context) {
+    // Kickoff: sobald wir online sind und ein auth'd User da ist, werden
+    // offline gequeuete Einsätze automatisch gesynct.
+    if (_authed) {
+      ref.watch(offlineSyncKickoffProvider);
+    }
     if (!_done) {
       return const Scaffold(
         body: Center(

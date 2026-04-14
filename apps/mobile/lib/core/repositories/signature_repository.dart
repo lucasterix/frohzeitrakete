@@ -22,6 +22,7 @@ class SignatureRepository {
     int? width,
     int? height,
     String? note,
+    String? infoTextVersion,
     DateTime? signedAt,
   }) async {
     try {
@@ -35,6 +36,7 @@ class SignatureRepository {
           'width': width,
           'height': height,
           'note': note,
+          'info_text_version': infoTextVersion,
           'signed_at': signedAt?.toIso8601String(),
         }..removeWhere((_, v) => v == null),
       );

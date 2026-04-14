@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/offline/connectivity_provider.dart';
 import '../../core/providers.dart';
 import '../entries/entry_screen.dart';
 import '../entries/my_entries_screen.dart';
@@ -310,6 +311,7 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+          _OfflineBanner(),
           Row(
             children: [
               GestureDetector(
@@ -659,6 +661,65 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OfflineBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final online = ref.watch(connectivityStreamProvider).maybeWhen(
+          data: (o) => o,
+          orElse: () => true,
+        );
+    final pending = ref.watch(pendingOfflineCountProvider).maybeWhen(
+          data: (c) => c,
+          orElse: () => 0,
+        );
+
+    if (online && pending == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final isOffline = !online;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: (isOffline ? Colors.red : Colors.orange)
+              .withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: (isOffline ? Colors.red : Colors.orange)
+                .withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isOffline ? Icons.wifi_off : Icons.sync_problem,
+              size: 18,
+              color: isOffline ? Colors.red : Colors.orange[800],
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isOffline
+                    ? (pending > 0
+                        ? 'Offline — $pending Einsatz/Einsätze warten auf Sync'
+                        : 'Du bist offline')
+                    : '$pending Einsatz/Einsätze werden übertragen …',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isOffline ? Colors.red[800] : Colors.orange[900],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

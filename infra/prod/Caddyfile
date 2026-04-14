@@ -1,0 +1,32 @@
+# Globale Defaults für alle Sites
+(security-headers) {
+    header {
+        # HSTS: Browser merken sich für 1 Jahr "diese Domain nur über HTTPS"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Verhindert das Embedding in fremden iframes (Clickjacking-Schutz)
+        X-Frame-Options "DENY"
+
+        # Verhindert MIME-Type-Sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Restriktive Referrer-Policy: nur Origin, kein Pfad
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Disable Browser-Features die wir nicht brauchen
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+
+        # Caddy fügt einen "Server: Caddy" Header hinzu – verraten wir nicht
+        -Server
+    }
+}
+
+app.froehlichdienste.de {
+    import security-headers
+    reverse_proxy admin-web:3000
+}
+
+api-prod.froehlichdienste.de {
+    import security-headers
+    reverse_proxy backend:8000
+}
