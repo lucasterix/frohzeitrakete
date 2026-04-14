@@ -713,7 +713,9 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _formatHours(_hours!),
+                            _entryType == EntryType.homeCommute
+                                ? 'Heimfahrt'
+                                : _formatHours(_hours ?? 0),
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
@@ -723,11 +725,15 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${_selectedActivities.length} Tätigkeit${_selectedActivities.length == 1 ? '' : 'en'}',
+                            _entryType == EntryType.homeCommute
+                                ? (_homeCommuteStartAddress ?? '')
+                                : '${_selectedActivities.length} Tätigkeit${_selectedActivities.length == 1 ? '' : 'en'}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.black54,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
