@@ -102,15 +102,10 @@ export default function OfficeInboxPage() {
         return;
       }
       setMe(user);
-      const defaultKuerzel =
-        user.full_name
-          .split(" ")
-          .map((part) => part[0])
-          .filter(Boolean)
-          .join("")
-          .toUpperCase()
-          .slice(0, 4) || "OO";
-      setKuerzel(defaultKuerzel);
+      // Voller Vorname als Default — der Betreuer soll im Mobile genau sehen
+      // wer im Büro bearbeitet hat, nicht nur ein zwei-Buchstaben-Kürzel.
+      const firstName = user.full_name.split(" ")[0] ?? "";
+      setKuerzel(firstName);
       await loadAll();
     } catch {
       router.replace("/");
@@ -291,13 +286,13 @@ export default function OfficeInboxPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              Kürzel:
+              Bearbeitet von:
               <input
                 value={kuerzel}
                 onChange={(e) => setKuerzel(e.target.value)}
-                className="w-20 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm uppercase outline-none focus:border-brand-400"
-                maxLength={4}
-                placeholder="DR"
+                className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400"
+                maxLength={50}
+                placeholder="Daniel"
               />
             </label>
             <button

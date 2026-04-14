@@ -40,7 +40,6 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
   final List<List<Offset>> _strokes = [];
   List<Offset> _currentStroke = [];
   bool _isProcessing = false;
-  bool _consentChecked = false;
   String? _uploadError;
   final GlobalKey _canvasKey = GlobalKey();
 
@@ -181,13 +180,6 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_consentChecked) {
-      setState(
-        () => _uploadError =
-            'Bitte zuerst die DSGVO-Einwilligung bestätigen (Checkbox).',
-      );
-      return;
-    }
     if (_strokes.isEmpty && _currentStroke.isEmpty) {
       setState(() => _uploadError = 'Bitte zuerst unterschreiben.');
       return;
@@ -487,56 +479,15 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
             '${widget.patient.displayName}  •  Pflegeperson: ${_pflegepersonController.text.trim()}',
             style: const TextStyle(fontSize: 14, color: Colors.black54),
           ),
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: _isProcessing
-                ? null
-                : () => setState(() => _consentChecked = !_consentChecked),
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _consentChecked
-                    ? green.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _consentChecked
-                      ? green.withValues(alpha: 0.5)
-                      : Colors.black12,
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Checkbox(
-                    value: _consentChecked,
-                    onChanged: _isProcessing
-                        ? null
-                        : (v) =>
-                            setState(() => _consentChecked = v ?? false),
-                    activeColor: green,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  const SizedBox(width: 4),
-                  const Expanded(
-                    child: Text(
-                      'Ich willige ein, dass meine personenbezogenen Daten '
-                      '(Name, Unterschrift, Zeitpunkt, Verhinderungspflege-'
-                      'Zeitraum) zur Dokumentation und Abrechnung mit der '
-                      'Pflegekasse von FrohZeit Rakete / Fröhlich Dienste '
-                      'gespeichert und verarbeitet werden. Die Einwilligung '
-                      'kann jederzeit gegenüber dem Büro widerrufen werden '
-                      '(§ 13 DSGVO).',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.black87,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 6),
+          Text(
+            'Mit der Unterschrift bestätigt der Patient den VP-Antrag und '
+            'willigt in die Verarbeitung der Daten zur Abrechnung mit der '
+            'Pflegekasse ein.',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.black.withValues(alpha: 0.6),
+              height: 1.35,
             ),
           ),
           const SizedBox(height: 16),

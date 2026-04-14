@@ -37,7 +37,6 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   List<Offset> _currentStroke = [];
   bool _isSaving = false;
   String? _error;
-  bool _consentChecked = false;
   final GlobalKey _canvasKey = GlobalKey();
 
   bool get _isEmpty => _strokes.isEmpty && _currentStroke.isEmpty;
@@ -68,13 +67,6 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   }
 
   Future<void> _save() async {
-    if (!_consentChecked) {
-      setState(
-        () => _error =
-            'Bitte zuerst die DSGVO-Einwilligung bestätigen (Checkbox).',
-      );
-      return;
-    }
     if (_isEmpty) {
       setState(() => _error = 'Bitte zuerst unterschreiben.');
       return;
@@ -175,59 +167,17 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            // DSGVO-Einwilligung (Art. 6 Abs. 1 lit. a DSGVO)
-            InkWell(
-              onTap: _isSaving
-                  ? null
-                  : () => setState(() => _consentChecked = !_consentChecked),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _consentChecked
-                      ? green.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: _consentChecked
-                        ? green.withValues(alpha: 0.5)
-                        : Colors.black12,
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Checkbox(
-                      value: _consentChecked,
-                      onChanged: _isSaving
-                          ? null
-                          : (v) =>
-                              setState(() => _consentChecked = v ?? false),
-                      activeColor: green,
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    const SizedBox(width: 4),
-                    const Expanded(
-                      child: Text(
-                        'Ich willige ein, dass meine personenbezogenen Daten '
-                        '(Name, Unterschrift, Zeitpunkt) zur Dokumentation '
-                        'der Leistungserbringung von FrohZeit Rakete / '
-                        'Fröhlich Dienste gespeichert und verarbeitet werden. '
-                        'Die Einwilligung kann jederzeit gegenüber dem Büro '
-                        'widerrufen werden. Mir ist bekannt, dass Details '
-                        'zur Verarbeitung in der Datenschutzerklärung '
-                        'nachzulesen sind (§ 13 DSGVO).',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.black87,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 6),
+            // Hinweis: mit der Unterschrift ist die DSGVO-Einwilligung
+            // abgegeben — keine Checkbox, kein extra Klick.
+            Text(
+              'Mit deiner Unterschrift bestätigst du die Richtigkeit der '
+              'Leistungen und willigst in die Speicherung der Daten '
+              '(Name, Unterschrift, Zeitpunkt) zur Dokumentation ein.',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.black.withValues(alpha: 0.6),
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 12),

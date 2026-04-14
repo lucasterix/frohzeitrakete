@@ -30,7 +30,7 @@ class VacationRequestResolve(BaseModel):
     approved_from_date: date | None = None
     approved_to_date: date | None = None
     response_text: str | None = None
-    handler_kuerzel: str = Field(min_length=1, max_length=10)
+    handler_kuerzel: str = Field(min_length=1, max_length=50)
 
 
 class VacationRequestResponse(BaseModel):
@@ -64,7 +64,7 @@ class SickLeaveCreate(BaseModel):
 
 class SickLeaveResolve(BaseModel):
     response_text: str | None = None
-    handler_kuerzel: str = Field(min_length=1, max_length=10)
+    handler_kuerzel: str = Field(min_length=1, max_length=50)
 
 
 class SickLeaveResponse(BaseModel):
@@ -98,7 +98,7 @@ class HrRequestCreate(BaseModel):
 class HrRequestResolve(BaseModel):
     status: str = Field(pattern="^(done|rejected)$")
     response_text: str | None = None
-    handler_kuerzel: str = Field(min_length=1, max_length=10)
+    handler_kuerzel: str = Field(min_length=1, max_length=50)
 
 
 class HrRequestResponse(BaseModel):

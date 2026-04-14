@@ -36,7 +36,9 @@ def test_open_call_request_becomes_high_priority_task(db, monkeypatch):
     assert tasks[0]["patient_name"] is not None  # fallback string
 
 
-def test_missing_contract_flagged(db, monkeypatch):
+def test_missing_contract_is_not_in_admin_feed(db, monkeypatch):
+    """Fehlender Betreuungsvertrag + fehlender Notfallkontakt sind
+    Betreuer-Aufgaben, sie sollen NICHT im Admin-Feed auftauchen."""
     monkeypatch.setattr(
         "app.services.admin_tasks_service.PattiClient", _NoopPatti
     )
@@ -44,15 +46,15 @@ def test_missing_contract_flagged(db, monkeypatch):
         PatientExtras(
             patient_id=9,
             contract_signed_at=None,
-            emergency_contact_name="Max",
-            emergency_contact_phone="0123",
+            emergency_contact_name=None,
+            emergency_contact_phone=None,
         )
     )
     db.commit()
 
     tasks = collect_admin_tasks(db)
     kinds = {t["kind"] for t in tasks}
-    assert "missing_contract" in kinds
+    assert "missing_contract" not in kinds
     assert "missing_emergency_contact" not in kinds
 
 
@@ -60,14 +62,16 @@ def test_sorting_prefers_high_priority(db, monkeypatch):
     monkeypatch.setattr(
         "app.services.admin_tasks_service.PattiClient", _NoopPatti
     )
+    old_date = datetime.utcnow() - timedelta(days=200)
     db.add_all(
         [
             PatientExtras(
                 patient_id=1,
-                contract_signed_at=None,  # -> low (missing_contract)
-                last_office_call_at=datetime.utcnow(),
+                contract_signed_at=datetime.utcnow(),
+                last_office_call_at=old_date,  # → half_year_check (low)
                 emergency_contact_name="E",
                 emergency_contact_phone="1",
+                created_at=old_date,
             ),
             CallRequest(
                 patient_id=2,
@@ -80,7 +84,6 @@ def test_sorting_prefers_high_priority(db, monkeypatch):
     db.commit()
 
     tasks = collect_admin_tasks(db)
-    # High-priority call_request muss vor low-priority missing_contract stehen
     assert tasks[0]["priority"] == "high"
     assert any(t["priority"] == "low" for t in tasks[1:])
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/offline/connectivity_provider.dart';
 import '../../core/providers.dart';
@@ -502,6 +503,8 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 14),
           _buildOfficeRequestsTile(context),
           const SizedBox(height: 14),
+          _buildVertretungsplanTile(context),
+          const SizedBox(height: 14),
           _buildTasksSection(ref),
 
           const SizedBox(height: 20),
@@ -858,6 +861,71 @@ class _MonthlySummaryCard extends ConsumerWidget {
       },
     );
   }
+}
+
+const String _vertretungsplanUrl =
+    'https://docs.google.com/forms/d/e/1FAIpQLSfrNkLBHK8i1Av_7A_1tgCjthleQi3WssYBLWlJQhikWuPyiA/viewform';
+
+Widget _buildVertretungsplanTile(BuildContext context) {
+  return Card(
+    color: Colors.blue.withValues(alpha: 0.04),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        final uri = Uri.parse(_vertretungsplanUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Link konnte nicht geöffnet werden.'),
+            ),
+          );
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: Colors.blue.withValues(alpha: 0.15),
+              child: const Icon(
+                Icons.swap_horiz,
+                size: 26,
+                color: Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Vertretung übermitteln',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Öffnet das Vertretungs-Formular',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.open_in_new, color: Colors.blue),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 Widget _buildOfficeRequestsTile(BuildContext context) {

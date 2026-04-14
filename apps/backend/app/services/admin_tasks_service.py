@@ -154,48 +154,10 @@ def collect_admin_tasks(db: Session) -> list[dict[str, Any]]:
                 }
             )
 
-    # 5. Patient ohne Notfallkontakt
-    missing_emergency = (
-        db.query(PatientExtras)
-        .filter(
-            (PatientExtras.emergency_contact_name.is_(None))
-            | (PatientExtras.emergency_contact_name == "")
-            | (PatientExtras.emergency_contact_phone.is_(None))
-            | (PatientExtras.emergency_contact_phone == "")
-        )
-        .all()
-    )
-    for extras in missing_emergency:
-        tasks.append(
-            {
-                "kind": "missing_emergency_contact",
-                "priority": "low",
-                "patient_id": extras.patient_id,
-                "title": "Notfallkontakt fehlt",
-                "subtitle": "Bitte vom Betreuer erfassen lassen",
-                "created_at": extras.updated_at,
-                "source_id": extras.id,
-            }
-        )
-
-    # 6. Fehlender Betreuungsvertrag
-    missing_contract = (
-        db.query(PatientExtras)
-        .filter(PatientExtras.contract_signed_at.is_(None))
-        .all()
-    )
-    for extras in missing_contract:
-        tasks.append(
-            {
-                "kind": "missing_contract",
-                "priority": "low",
-                "patient_id": extras.patient_id,
-                "title": "Betreuungsvertrag fehlt",
-                "subtitle": "Unterschrift vom Patienten erforderlich",
-                "created_at": extras.updated_at,
-                "source_id": extras.id,
-            }
-        )
+    # Notfallkontakt und Betreuungsvertrag sind bewusst NICHT im Admin-
+    # Feed: das sind Aufgaben für den Betreuer direkt beim Patienten, die
+    # im Mobile erfasst werden. Im Admin-Web würden sie nur Rauschen
+    # erzeugen.
 
     # Patient-Namen best-effort über Patti auflösen, damit das Admin-Web
     # echte Namen statt bloßer IDs zeigen kann. Ein einzelner Patti-Ausfall

@@ -52,7 +52,7 @@ class HrRequest(Base):
     handler_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    handler_kuerzel: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    handler_kuerzel: Mapped[str | None] = mapped_column(String(50), nullable=True)
     handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
