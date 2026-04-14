@@ -321,11 +321,16 @@ export async function deleteTravelCostPayment(id: number): Promise<void> {
   }
 }
 
-export async function getLeistungsnachweisPatientIds(
+export type LeistungsnachweisPatient = {
+  id: number;
+  name: string;
+};
+
+export async function getLeistungsnachweisPatients(
   userId: number,
   year: number,
   month: number
-): Promise<number[]> {
+): Promise<LeistungsnachweisPatient[]> {
   const url = new URL(
     `${API_BASE_URL}/admin/users/${userId}/leistungsnachweis-patient-ids`
   );
@@ -337,11 +342,28 @@ export async function getLeistungsnachweisPatientIds(
   });
   if (!response.ok) {
     throw new Error(
-      await parseError(response, "Fehler beim Laden der Patienten-IDs")
+      await parseError(response, "Fehler beim Laden der Patienten")
     );
   }
-  const data = (await response.json()) as { patient_ids: number[] };
-  return data.patient_ids;
+  const data = (await response.json()) as {
+    patient_ids: number[];
+    patients?: LeistungsnachweisPatient[];
+  };
+  if (data.patients) return data.patients;
+  return data.patient_ids.map((id) => ({ id, name: `Patient #${id}` }));
+}
+
+export function leistungsnachweiseZipUrl(
+  userId: number,
+  year: number,
+  month: number
+): string {
+  const url = new URL(
+    `${API_BASE_URL}/admin/users/${userId}/leistungsnachweise.zip`
+  );
+  url.searchParams.set("year", String(year));
+  url.searchParams.set("month", String(month));
+  return url.toString();
 }
 
 export function leistungsnachweisPdfUrl(

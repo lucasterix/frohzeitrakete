@@ -253,16 +253,18 @@ def admin_list_patient_ids_for_month(
     admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
-    """Gibt alle Patient-IDs zurück, für die der User in dem Monat
-    Einsätze erfasst hat. Wird vom Admin-Web genutzt um die PDFs
-    in einer Schleife abzurufen (einen pro Patient)."""
+    """Gibt alle Patienten (id + name) zurück, für die der User in dem
+    Monat tatsächlich Stunden erfasst hat. Patienten ohne Einsätze
+    tauchen nicht auf — für die gibt es auch keinen Leistungsnachweis."""
     from calendar import monthrange
     from datetime import date as _date
 
     start = _date(year, month, 1)
     end = _date(year, month, monthrange(year, month)[1])
+    from app.clients.patti_client import PattiClient
     from app.models.entry import Entry
-    patient_ids = (
+
+    rows = (
         db.query(Entry.patient_id)
         .filter(
             Entry.user_id == user_id,
@@ -274,7 +276,134 @@ def admin_list_patient_ids_for_month(
         .distinct()
         .all()
     )
-    return {"patient_ids": [p[0] for p in patient_ids]}
+    patient_ids = [p[0] for p in rows]
+
+    # Patient-Namen best-effort via Patti auflösen
+    names: dict[int, str] = {}
+    if patient_ids:
+        try:
+            client = PattiClient()
+            client.login()
+            for pid in patient_ids:
+                try:
+                    p = client.get_patient(pid)
+                    names[pid] = p.get("list_name") or f"Patient {pid}"
+                except Exception:  # noqa: BLE001
+                    names[pid] = f"Patient {pid}"
+        except Exception:  # noqa: BLE001
+            names = {pid: f"Patient {pid}" for pid in patient_ids}
+
+    # Keep the old key for backwards-compat, add the new one
+    return {
+        "patient_ids": patient_ids,
+        "patients": [
+            {"id": pid, "name": names.get(pid, f"Patient {pid}")}
+            for pid in patient_ids
+        ],
+    }
+
+
+@router.get(
+    "/users/{user_id}/leistungsnachweise.zip",
+    responses={200: {"content": {"application/zip": {}}}},
+)
+def admin_user_leistungsnachweise_zip(
+    user_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Bulk-Download: alle Leistungsnachweise (aus Patti) eines
+    Betreuers für einen Monat als ZIP.
+
+    Es werden nur Patienten einbezogen bei denen im Monat tatsächlich
+    Einsätze erfasst wurden. Pro Patient wird versucht das Patti-PDF
+    zu laden; bei Fehler fällt der jeweilige Eintrag auf das Rakete-
+    PDF zurück damit der ZIP vollständig bleibt.
+    """
+    import io
+    import zipfile
+    from calendar import monthrange
+    from datetime import date as _date
+
+    from app.clients.patti_client import PattiClient
+    from app.models.entry import Entry
+    from app.services.leistungsnachweis_service import (
+        build_leistungsnachweis_pdf,
+        fetch_patti_leistungsnachweis_pdf,
+    )
+
+    start = _date(year, month, 1)
+    end = _date(year, month, monthrange(year, month)[1])
+    patient_ids = [
+        p[0]
+        for p in db.query(Entry.patient_id)
+        .filter(
+            Entry.user_id == user_id,
+            Entry.patient_id.is_not(None),
+            Entry.entry_date >= start,
+            Entry.entry_date <= end,
+            Entry.entry_type == "patient",
+        )
+        .distinct()
+        .all()
+    ]
+
+    if not patient_ids:
+        raise HTTPException(
+            status_code=404,
+            detail="Für diesen Monat gibt es keine Einsätze.",
+        )
+
+    # Patient-Namen für sprechende Dateinamen
+    names: dict[int, str] = {}
+    try:
+        client = PattiClient()
+        client.login()
+        for pid in patient_ids:
+            try:
+                p = client.get_patient(pid)
+                names[pid] = p.get("list_name") or f"patient-{pid}"
+            except Exception:  # noqa: BLE001
+                names[pid] = f"patient-{pid}"
+    except Exception:  # noqa: BLE001
+        names = {pid: f"patient-{pid}" for pid in patient_ids}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for pid in patient_ids:
+            pdf_bytes = fetch_patti_leistungsnachweis_pdf(
+                pid, year=year, month=month
+            )
+            if pdf_bytes is None:
+                try:
+                    pdf_bytes = build_leistungsnachweis_pdf(
+                        db,
+                        user_id=user_id,
+                        patient_id=pid,
+                        year=year,
+                        month=month,
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+            safe_name = "".join(
+                c if c.isalnum() or c in "-_" else "_"
+                for c in names[pid]
+            )
+            zf.writestr(
+                f"leistungsnachweis_{safe_name}_{year}-{month:02d}.pdf",
+                pdf_bytes,
+            )
+
+    filename = f"leistungsnachweise_u{user_id}_{year}-{month:02d}.zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
 
 
 @router.get("/trainings", response_model=list[TrainingResponse])

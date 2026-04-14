@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  LeistungsnachweisPatient,
   User,
-  getLeistungsnachweisPatientIds,
+  getLeistungsnachweisPatients,
   getMe,
-  leistungsnachweisPdfUrl,
   getUsers,
+  leistungsnachweisPdfUrl,
+  leistungsnachweiseZipUrl,
 } from "@/lib/api";
 import { AlertCircleIcon, SparkleIcon } from "@/components/icons";
 
@@ -28,7 +30,7 @@ const MONTH_NAMES = [
 
 type UserRow = {
   user: User;
-  patientIds: number[] | null;
+  patients: LeistungsnachweisPatient[] | null;
   loading: boolean;
   error: string | null;
 };
@@ -54,7 +56,7 @@ export default function LeistungsnachweisePage() {
       setRows(
         caretakers.map((u) => ({
           user: u,
-          patientIds: null,
+          patients: null,
           loading: false,
           error: null,
         }))
@@ -70,18 +72,18 @@ export default function LeistungsnachweisePage() {
     bootstrap();
   }, [bootstrap]);
 
-  async function loadPatientIdsFor(userId: number) {
+  async function loadPatientsFor(userId: number) {
     setRows((rows) =>
       rows.map((r) =>
         r.user.id === userId ? { ...r, loading: true, error: null } : r
       )
     );
     try {
-      const ids = await getLeistungsnachweisPatientIds(userId, year, month);
+      const patients = await getLeistungsnachweisPatients(userId, year, month);
       setRows((rows) =>
         rows.map((r) =>
           r.user.id === userId
-            ? { ...r, patientIds: ids, loading: false }
+            ? { ...r, patients, loading: false }
             : r
         )
       );
@@ -102,7 +104,7 @@ export default function LeistungsnachweisePage() {
 
   async function loadAll() {
     for (const r of rows) {
-      await loadPatientIdsFor(r.user.id);
+      await loadPatientsFor(r.user.id);
     }
   }
 
@@ -114,7 +116,7 @@ export default function LeistungsnachweisePage() {
       setMonth(month - 1);
     }
     setRows((rows) =>
-      rows.map((r) => ({ ...r, patientIds: null, error: null }))
+      rows.map((r) => ({ ...r, patients: null, error: null }))
     );
   }
 
@@ -126,7 +128,7 @@ export default function LeistungsnachweisePage() {
       setMonth(month + 1);
     }
     setRows((rows) =>
-      rows.map((r) => ({ ...r, patientIds: null, error: null }))
+      rows.map((r) => ({ ...r, patients: null, error: null }))
     );
   }
 
@@ -146,9 +148,9 @@ export default function LeistungsnachweisePage() {
               Leistungsnachweise
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              Aggregiert Einsätze, km und die letzte Unterschrift eines
-              Monats in ein PDF pro (Betreuer, Patient). Zum Ansehen /
-              Drucken öffnen.
+              Zieht die Leistungsnachweis-PDFs direkt aus Patti (mit
+              QR-Code) — nur für Patienten, bei denen im Monat
+              tatsächlich Stunden erfasst wurden.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -192,7 +194,7 @@ export default function LeistungsnachweisePage() {
           </div>
         ) : (
           <ul className="space-y-3">
-            {rows.map(({ user, patientIds, loading, error }) => (
+            {rows.map(({ user, patients, loading, error }) => (
               <li
                 key={user.id}
                 className="rounded-2xl border border-slate-200 bg-white p-4"
@@ -204,65 +206,63 @@ export default function LeistungsnachweisePage() {
                     </p>
                     <p className="text-xs text-slate-500">{user.email}</p>
                   </div>
-                  <button
-                    onClick={() => loadPatientIdsFor(user.id)}
-                    disabled={loading}
-                    className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    {loading ? "Lade …" : "Patienten laden"}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => loadPatientsFor(user.id)}
+                      disabled={loading}
+                      className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {loading ? "Lade …" : "Patienten laden"}
+                    </button>
+                    {patients && patients.length > 0 && (
+                      <a
+                        href={leistungsnachweiseZipUrl(user.id, year, month)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-slate-800"
+                        title="Alle Leistungsnachweise dieses Betreuers für den Monat als ZIP"
+                      >
+                        📦 Alle als ZIP
+                      </a>
+                    )}
+                  </div>
                 </div>
                 {error && (
                   <p className="mt-2 text-xs text-red-600">{error}</p>
                 )}
-                {patientIds !== null && (
+                {patients !== null && (
                   <div className="mt-3">
-                    {patientIds.length === 0 ? (
+                    {patients.length === 0 ? (
                       <p className="text-xs text-slate-400">
                         Keine Einsätze in diesem Monat.
                       </p>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {patientIds.map((pid) => (
-                          <div
-                            key={pid}
-                            className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1"
+                      <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+                        {patients.map((p) => (
+                          <li
+                            key={p.id}
+                            className="flex items-center justify-between gap-3 px-3 py-2"
                           >
-                            <span className="text-xs font-medium text-slate-700">
-                              Patient #{pid}
+                            <span className="truncate text-sm text-slate-800">
+                              {p.name}
                             </span>
                             <a
                               href={leistungsnachweisPdfUrl(
                                 user.id,
-                                pid,
-                                year,
-                                month,
-                                "rakete"
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-xl bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700"
-                            >
-                              Rakete
-                            </a>
-                            <a
-                              href={leistungsnachweisPdfUrl(
-                                user.id,
-                                pid,
+                                p.id,
                                 year,
                                 month,
                                 "patti"
                               )}
                               target="_blank"
                               rel="noreferrer"
-                              className="rounded-xl bg-slate-700 px-2 py-1 text-[10px] font-medium text-white hover:bg-slate-800"
-                              title="Direkt aus Patti mit QR-Code. Fällt auf Rakete-PDF zurück wenn Patti nicht antwortet."
+                              className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-brand-700"
                             >
-                              Patti QR
+                              Leistungsnachweis PDF ↗
                             </a>
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                   </div>
                 )}
@@ -271,16 +271,6 @@ export default function LeistungsnachweisePage() {
           </ul>
         )}
       </section>
-
-      <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-900">
-        <strong>Hinweis zur Patti-Integration:</strong> Das PDF wird
-        aktuell serverseitig von der Rakete generiert (korrekte Stunden,
-        km, Leistungsarten-Ankreuzung, letzte Unterschrift des Monats).
-        Der QR-Code-Leistungsnachweis aus Patti wird erst genutzt, sobald
-        der genaue Patti-API-Endpoint für die Dokument-Generierung
-        eingerichtet ist — die Struktur dafür ist im Backend schon
-        vorbereitet.
-      </p>
     </div>
   );
 }
