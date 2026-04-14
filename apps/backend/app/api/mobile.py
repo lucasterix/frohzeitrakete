@@ -159,7 +159,7 @@ def mobile_create_entry(
     damit die Reststunden-Berechnung dort aktuell bleibt.
     """
     entry = create_or_update_entry(db, user=current_user, payload=payload)
-    return EntryResponse.from_orm_entry(entry)
+    return EntryResponse.from_orm_entry(entry, user_name=current_user.full_name)
 
 
 @router.get("/entries", response_model=list[EntryResponse])
@@ -167,18 +167,38 @@ def mobile_list_entries(
     patient_id: int | None = Query(default=None),
     year: int | None = Query(default=None, ge=2020, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
+    scope: str = Query(default="mine", pattern="^(mine|patient)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Listet eigene Einsätze, optional gefiltert nach patient_id, year, month."""
+    """Listet Einsätze, optional gefiltert nach patient_id, year, month.
+
+    `scope=mine` (default) → nur die Einsätze des aktuellen Users.
+    `scope=patient` + patient_id → alle Einsätze aller Betreuer für diesen
+    Patienten. Wird auf PatientDetail genutzt damit man auch sieht wenn
+    ein Vertretungs-Kollege einen Einsatz erfasst hat.
+
+    Die Response enthält `user_name` damit das Frontend bei fremden
+    Einsätzen den Namen des Betreuers direkt anzeigen kann.
+    """
     entries = list_entries_for_user(
         db,
         user_id=current_user.id,
         patient_id=patient_id,
         year=year,
         month=month,
+        scope=scope,
     )
-    return [EntryResponse.from_orm_entry(e) for e in entries]
+    # Eager-load user names to avoid N+1
+    user_ids = {e.user_id for e in entries}
+    users = (
+        db.query(User).filter(User.id.in_(user_ids)).all() if user_ids else []
+    )
+    name_by_id = {u.id: u.full_name for u in users}
+    return [
+        EntryResponse.from_orm_entry(e, user_name=name_by_id.get(e.user_id))
+        for e in entries
+    ]
 
 
 @router.get("/entries/{entry_id}", response_model=EntryResponse)
@@ -188,7 +208,10 @@ def mobile_get_entry(
     db: Session = Depends(get_db),
 ):
     entry = get_entry_for_user(db, user_id=current_user.id, entry_id=entry_id)
-    return EntryResponse.from_orm_entry(entry)
+    user = db.query(User).filter(User.id == entry.user_id).first()
+    return EntryResponse.from_orm_entry(
+        entry, user_name=user.full_name if user else None
+    )
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

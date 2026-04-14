@@ -23,6 +23,7 @@ class MobilePatient(BaseModel):
     care_degree: str | None = None
     care_degree_int: int = 0
     insurance_number: str | None = None
+    insurance_company_name: str | None = None
     active: bool
     is_primary: bool
     started_at: str | None = None

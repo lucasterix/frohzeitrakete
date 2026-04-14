@@ -130,18 +130,43 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
             Text(
               widget.documentTitle,
               style: const TextStyle(
-                fontSize: 26,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              widget.signerNameOverride != null
-                  ? 'Unterschrift von: ${widget.signerNameOverride}'
-                  : 'Der Patient unterschreibt hier persönlich.',
-              style: const TextStyle(fontSize: 15, color: Colors.black54),
+              widget.signerNameOverride ?? widget.patient.displayName,
+              style: const TextStyle(
+                fontSize: 15,
+                color: Colors.black54,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            // Rechtlicher Hinweis über dem Unterschriftsfeld.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Hiermit bestätige ich, dass folgende Leistungen erbracht '
+                'wurden und trete meine Ansprüche zur Erstattung von den '
+                'Leistungen ab. Sie sind auskunftsberechtigt und der '
+                'Schweigepflicht enthoben. Mir ist bekannt, dass es bei '
+                'Umwandlung der Pflegesachleistung zur Kürzung des '
+                'Pflegegeldes kommt.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Expanded(
               child: Container(
                 width: double.infinity,

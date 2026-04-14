@@ -10,7 +10,7 @@ import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
-import '../requests/document_detail_screen.dart';
+import '../requests/umwandlung_screen.dart';
 import '../settings/settings_screen.dart';
 import '../vp_antrag/vp_antrag_screen.dart';
 
@@ -64,7 +64,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
   }
 
   /// Ermittelt aus den Signaturen des Users ob ein VP-Antrag für diesen
-  /// Patienten im aktuellen Monat läuft.
+  /// Patienten läuft, signiert wurde oder vom Patient nicht gewünscht ist.
   ({String state, String month}) _resolveVpState(
     List<SignatureEvent> signatures,
   ) {
@@ -77,19 +77,23 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
     ];
 
-    final myVpSignatures = signatures
+    final vpSignatures = signatures
         .where((s) =>
             s.patientId == widget.patient.patientId &&
             s.documentType == DocumentType.vpAntrag)
         .toList()
       ..sort((a, b) => b.signedAt.compareTo(a.signedAt));
 
-    if (myVpSignatures.isEmpty) {
+    if (vpSignatures.isEmpty) {
       return (state: 'none', month: '');
     }
 
-    final latest = myVpSignatures.first;
-    final label = '${monthNames[latest.signedAt.month - 1]} ${latest.signedAt.year}';
+    final latest = vpSignatures.first;
+    if (latest.signerName == 'Nicht gewünscht') {
+      return (state: 'not_wanted', month: '');
+    }
+    final label =
+        '${monthNames[latest.signedAt.month - 1]} ${latest.signedAt.year}';
     return (state: 'signed', month: label);
   }
 
@@ -254,6 +258,13 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
 
               const SizedBox(height: 20),
 
+              // Warning-Banner für fehlende Stammdaten
+              if (patient.hasMissingData)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                  child: _buildMissingDataBanner(patient.missingFields),
+                ),
+
               // Reststunden Hero (live aus Patti via Backend)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -293,21 +304,21 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                       )
                     : _documentCard(
                         icon: Icons.folder_outlined,
-                        title: 'Pflegeumwandlung',
+                        title: 'Umwandlungsantrag',
                         subtitle:
-                            'Antrag auf Umwandlung von Pflegeleistungen',
+                            '40% Pflegesachleistung → Betreuungsleistung',
                         statusColor: Colors.black54,
                         statusLabel: 'VERFÜGBAR',
-                        onTap: () {
-                          Navigator.of(context).push(
+                        onTap: () async {
+                          final ok = await Navigator.of(context).push<bool>(
                             MaterialPageRoute(
-                              builder: (_) => DocumentDetailScreen(
-                                title: 'Pflegeumwandlung',
-                                status: 'bereit',
-                                patient: patient,
-                              ),
+                              builder: (_) =>
+                                  UmwandlungScreen(patient: patient),
                             ),
                           );
+                          if (ok == true) {
+                            ref.invalidate(mySignaturesProvider);
+                          }
                         },
                       ),
               ),
@@ -603,6 +614,52 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
   }
 
+  Widget _buildMissingDataBanner(List<String> missingFields) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Stammdaten unvollständig',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Folgende Daten fehlen und müssen im Büro nachgetragen werden:\n• ${missingFields.join('\n• ')}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildContactCard() {
     const green = Color(0xFF4F8A5B);
     final patient = widget.patient;
@@ -679,9 +736,21 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
           ),
           const Divider(height: 1, indent: 56),
           _contactTile(
-            icon: Icons.medical_services_outlined,
-            label: 'Versicherung',
+            icon: Icons.account_balance_outlined,
+            label: 'Krankenkasse',
+            value: patient.insuranceCompanyName ?? '—',
+          ),
+          const Divider(height: 1, indent: 56),
+          _contactTile(
+            icon: Icons.badge_outlined,
+            label: 'Versichertennummer',
             value: patient.insuranceNumber ?? '—',
+            onLongPress: patient.insuranceNumber != null
+                ? () => _copyToClipboard(
+                      patient.insuranceNumber!,
+                      'Versichertennummer',
+                    )
+                : null,
           ),
         ],
       ),
@@ -874,6 +943,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         ),
       ),
       data: (entries) {
+        final currentUser = ref.watch(currentUserProvider);
         if (entries.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -901,7 +971,8 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         final locked = lockAsync.valueOrNull?.isLocked == true;
 
         return Column(
-          children: entries.take(5).map((entry) {
+          children: entries.take(10).map((entry) {
+            final isMine = entry.userId == currentUser?.id;
             return Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
               child: Material(
@@ -960,11 +1031,35 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
+                                  if (!isMine && entry.userName != null) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue
+                                            .withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Vertretung',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue[800],
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                entry.activities.join(', '),
+                                isMine || entry.userName == null
+                                    ? entry.activities.join(', ')
+                                    : '${entry.userName} · ${entry.activities.join(', ')}',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   color: Colors.black54,
@@ -1002,6 +1097,17 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         statusLabel: 'NICHT VERFÜGBAR',
         onTap: () {},
         disabled: true,
+      );
+    }
+
+    if (vpState == 'not_wanted') {
+      return _documentCard(
+        icon: Icons.block,
+        title: 'Verhinderungspflege',
+        subtitle: 'Vom Patienten nicht gewünscht',
+        statusColor: Colors.black54,
+        statusLabel: 'NICHT GEWÜNSCHT',
+        onTap: _openVpAntrag,
       );
     }
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
+import '../entries/my_entries_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -59,6 +60,120 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildTasksSection() {
+    const green = Color(0xFF4F8A5B);
+    // MOCK: Aufgaben/Termine – bis Backend ein tasks/events Endpoint hat,
+    // stehen hier statische Einträge als Gedächtnisstützen.
+    final tasks = <Map<String, dynamic>>[
+      {
+        'icon': Icons.school_outlined,
+        'title': 'Fortbildung "Demenz verstehen"',
+        'subtitle': '20.04.2026 · 14:00–17:00 Uhr · Online',
+        'color': Colors.blue,
+      },
+      {
+        'icon': Icons.assignment_turned_in_outlined,
+        'title': 'Monatsabrechnung abgeben',
+        'subtitle': 'Bis zum 30.04.2026 im Büro',
+        'color': Colors.orange,
+      },
+      {
+        'icon': Icons.event_available_outlined,
+        'title': 'Teamsitzung',
+        'subtitle': 'Jeden 1. Montag im Monat · 10:00 Uhr',
+        'color': green,
+      },
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.task_alt,
+                  color: Colors.orange,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Aufgaben & Termine',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...tasks.asMap().entries.map((entry) {
+            final isLast = entry.key == tasks.length - 1;
+            final t = entry.value;
+            return Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: (t['color'] as Color).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      t['icon'] as IconData,
+                      color: t['color'] as Color,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t['title'] as String,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          t['subtitle'] as String,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   void _showContact(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -92,7 +207,7 @@ class HomeScreen extends ConsumerWidget {
             ),
             SizedBox(height: 12),
             Text(
-              'Erreichbar Mo–Fr, 08:00–17:00 Uhr',
+              'Erreichbar Mo–Fr, 09:00–16:00 Uhr',
               style: TextStyle(fontSize: 13, color: Colors.black54),
             ),
           ],
@@ -290,30 +405,69 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 18),
 
-          // Neuer Einsatz
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const EntryScreen()),
-                );
-              },
-              icon: const Icon(Icons.add, size: 22),
-              label: const Text(
-                'Neuer Einsatz erfassen',
-                style: TextStyle(fontSize: 17),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+          // Aktionen: Neuer Einsatz + Meine Einsätze
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: SizedBox(
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const EntryScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 22),
+                    label: const Text(
+                      'Neuer Einsatz',
+                      style: TextStyle(fontSize: 15),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MyEntriesScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history, size: 20),
+                    label: const Text(
+                      'Historie',
+                      style: TextStyle(fontSize: 15),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: green,
+                      side: const BorderSide(color: green),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+
+          const SizedBox(height: 20),
+
+          // Aufgaben & Termine
+          _buildTasksSection(),
 
           const SizedBox(height: 20),
 
@@ -405,7 +559,7 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Mo–Fr, 08:00–17:00 Uhr',
+                            'Mo–Fr, 09:00–16:00 Uhr',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.black54,

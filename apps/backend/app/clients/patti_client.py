@@ -111,6 +111,31 @@ class PattiClient:
         response.raise_for_status()
         return response.json()
 
+    def get_company(self, company_id: int) -> dict[str, Any]:
+        """GET /api/v1/companies/{company_id} – insurance/pflege companies.
+
+        Used to resolve `patient.insurance_company_id` → company name
+        (e.g. "AOK Niedersachsen").
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/companies/{company_id}", timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_person(self, person_id: int) -> dict[str, Any]:
+        """GET /api/v1/people/{person_id} – includes communication & address
+        automatically (Patti eager-loads these on the person detail endpoint,
+        unlike service-histories which only has communication_id).
+
+        We need this to extract phone numbers which service-histories omits.
+        """
+        response = self.session.get(
+            f"{self.base_url}/api/v1/people/{person_id}", timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+
     def search(self, query: str) -> dict[str, Any]:
         """GET /api/v1/search?q=... – globale Patti-Suche über people/patients."""
         response = self.session.get(

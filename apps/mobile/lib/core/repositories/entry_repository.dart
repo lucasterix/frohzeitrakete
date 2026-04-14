@@ -47,6 +47,7 @@ class EntryRepository {
     int? patientId,
     int? year,
     int? month,
+    String scope = 'mine',
   }) async {
     try {
       final response = await _client.dio.get(
@@ -55,6 +56,7 @@ class EntryRepository {
           'patient_id': patientId,
           'year': year,
           'month': month,
+          'scope': scope,
         }..removeWhere((_, v) => v == null),
       );
       if (response.statusCode == 200) {

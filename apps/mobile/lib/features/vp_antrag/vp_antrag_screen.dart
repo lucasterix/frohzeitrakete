@@ -34,6 +34,7 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
   String? _pflegepersonError;
   late int _month;
   late int _year;
+  bool _markingNotWanted = false;
 
   // Signature
   final List<List<Offset>> _strokes = [];
@@ -84,6 +85,74 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
       _pflegepersonError = null;
       _step = _Step.sign;
     });
+  }
+
+  Future<void> _markNotWanted() async {
+    // Kurzer Confirmation-Dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Nicht gewünscht?'),
+        content: Text(
+          'Dadurch wird vermerkt dass ${widget.patient.displayName} '
+          'keine Verhinderungspflege wünscht. Dieser Hinweis erscheint '
+          'anschließend auf dem Patientenprofil.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Bestätigen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _markingNotWanted = true);
+
+    try {
+      // Wir nutzen einen vereinfachten SVG als Platzhalter – das Backend
+      // erwartet ein SVG, aber der signer_name markiert es als "not wanted".
+      const placeholderSvg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="transparent"/></svg>';
+      await ref.read(signatureRepositoryProvider).createSignature(
+            patientId: widget.patient.patientId,
+            documentType: DocumentType.vpAntrag,
+            signerName: 'Nicht gewünscht',
+            svgContent: placeholderSvg,
+            note: 'Patient wünscht keine Verhinderungspflege',
+          );
+      ref.invalidate(mySignaturesProvider);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vermerkt: Patient wünscht keine Verhinderungspflege'),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _markingNotWanted = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _markingNotWanted = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fehler: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _onPanStart(DragStartDetails d) {
@@ -338,12 +407,12 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: SizedBox(
             width: double.infinity,
             height: 54,
             child: ElevatedButton.icon(
-              onPressed: _continueToSign,
+              onPressed: _markingNotWanted ? null : _continueToSign,
               icon: const Icon(Icons.arrow_forward),
               label: const Text(
                 'Weiter zur Unterschrift',
@@ -354,6 +423,34 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          child: SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: OutlinedButton.icon(
+              onPressed: _markingNotWanted ? null : _markNotWanted,
+              icon: _markingNotWanted
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.block, size: 18),
+              label: const Text(
+                'Patient wünscht keine Verhinderungspflege',
+                style: TextStyle(fontSize: 14),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.black54,
+                side: BorderSide(color: Colors.black.withValues(alpha: 0.2)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),

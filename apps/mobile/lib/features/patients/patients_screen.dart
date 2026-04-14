@@ -420,6 +420,14 @@ class _PatientCard extends StatelessWidget {
                       icon: Icons.pause_circle_outline,
                     ),
                   ],
+                  if (patient.hasMissingData) ...[
+                    const SizedBox(width: 8),
+                    _chip(
+                      label: 'Daten fehlen',
+                      color: Colors.orange,
+                      icon: Icons.warning_amber_rounded,
+                    ),
+                  ],
                 ],
               ),
             ],

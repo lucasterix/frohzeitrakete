@@ -1,6 +1,7 @@
 class Entry {
   final int id;
   final int userId;
+  final String? userName;
   final int patientId;
   final DateTime entryDate;
   final double hours;
@@ -13,6 +14,7 @@ class Entry {
   const Entry({
     required this.id,
     required this.userId,
+    this.userName,
     required this.patientId,
     required this.entryDate,
     required this.hours,
@@ -27,6 +29,7 @@ class Entry {
     return Entry(
       id: json['id'] as int,
       userId: json['user_id'] as int,
+      userName: json['user_name'] as String?,
       patientId: json['patient_id'] as int,
       entryDate: DateTime.parse(json['entry_date'] as String),
       hours: (json['hours'] as num).toDouble(),

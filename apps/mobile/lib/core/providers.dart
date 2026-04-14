@@ -109,10 +109,13 @@ final patientEntriesProvider =
   final auth = ref.watch(authControllerProvider);
   if (auth.valueOrNull == null) return [];
   final repo = ref.watch(entryRepositoryProvider);
+  // Im PatientDetail wollen wir ALLE Einsätze sehen (auch von Vertretungs-
+  // Kollegen), daher scope=patient.
   return repo.listEntries(
     patientId: params.patientId,
     year: params.year,
     month: params.month,
+    scope: 'patient',
   );
 });
 

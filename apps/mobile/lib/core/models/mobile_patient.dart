@@ -17,6 +17,7 @@ class MobilePatient {
   final String? careDegree; // "pg1"-"pg5" vom Patti
   final int careDegreeInt; // vom Backend geparsed, 0 wenn unbekannt
   final String? insuranceNumber;
+  final String? insuranceCompanyName;
   final bool active;
   final bool isPrimary;
   final String? startedAt;
@@ -36,6 +37,7 @@ class MobilePatient {
     this.careDegree,
     this.careDegreeInt = 0,
     this.insuranceNumber,
+    this.insuranceCompanyName,
     required this.active,
     required this.isPrimary,
     this.startedAt,
@@ -57,6 +59,7 @@ class MobilePatient {
       careDegree: json['care_degree'] as String?,
       careDegreeInt: (json['care_degree_int'] as int?) ?? 0,
       insuranceNumber: json['insurance_number'] as String?,
+      insuranceCompanyName: json['insurance_company_name'] as String?,
       active: json['active'] as bool,
       isPrimary: json['is_primary'] as bool,
       startedAt: json['started_at'] as String?,
@@ -92,6 +95,24 @@ class MobilePatient {
     }
     return next.difference(today).inDays;
   }
+
+  /// Liste fehlender Pflichtfelder, die vom Büro nachgetragen werden müssen.
+  List<String> get missingFields {
+    final missing = <String>[];
+    if (phone == null || phone!.trim().isEmpty) missing.add('Telefonnummer');
+    if (birthday == null || birthday!.trim().isEmpty) missing.add('Geburtsdatum');
+    if (insuranceNumber == null ||
+        insuranceNumber!.trim().isEmpty ||
+        insuranceNumber!.toLowerCase() == 'fehlt') {
+      missing.add('Versichertennummer');
+    }
+    if (insuranceCompanyName == null || insuranceCompanyName!.trim().isEmpty) {
+      missing.add('Krankenkasse');
+    }
+    return missing;
+  }
+
+  bool get hasMissingData => missingFields.isNotEmpty;
 
   int? get age {
     final bd = birthdayDate;

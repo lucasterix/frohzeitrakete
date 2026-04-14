@@ -205,10 +205,23 @@ def list_entries_for_user(
     year: int | None = None,
     month: int | None = None,
     limit: int = 200,
+    scope: str = "mine",
 ) -> list[Entry]:
-    query = db.query(Entry).filter(Entry.user_id == user_id)
-    if patient_id is not None:
+    """List entries.
+
+    scope="mine" → nur die des current user (Default, für HomeScreen/Calendar)
+    scope="patient" → alle Einsätze für den patient (inkl. Vertretungs-Kollegen).
+        patient_id wird dann Pflicht. Wird für PatientDetail genutzt.
+    """
+    query = db.query(Entry)
+    if scope == "patient":
+        if patient_id is None:
+            return []
         query = query.filter(Entry.patient_id == patient_id)
+    else:
+        query = query.filter(Entry.user_id == user_id)
+        if patient_id is not None:
+            query = query.filter(Entry.patient_id == patient_id)
     if year is not None:
         query = query.filter(extract("year", Entry.entry_date) == year)
     if month is not None:

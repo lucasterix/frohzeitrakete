@@ -31,6 +31,7 @@ class EntryCreate(BaseModel):
 class EntryResponse(BaseModel):
     id: int
     user_id: int
+    user_name: str | None = None
     patient_id: int
     entry_date: date
     hours: float
@@ -43,11 +44,14 @@ class EntryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_orm_entry(cls, entry) -> "EntryResponse":
-        """Helper: Entry ORM hat `activities` als String, wir splitten zu Liste."""
+    def from_orm_entry(cls, entry, user_name: str | None = None) -> "EntryResponse":
+        """Helper: Entry ORM hat `activities` als String, wir splitten zu Liste.
+        `user_name` wird für Vertretungs-Anzeige durchgereicht.
+        """
         return cls(
             id=entry.id,
             user_id=entry.user_id,
+            user_name=user_name,
             patient_id=entry.patient_id,
             entry_date=entry.entry_date,
             hours=entry.hours,

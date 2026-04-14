@@ -76,10 +76,55 @@ def map_service_history_to_mobile_patient(item: dict) -> dict:
         "care_degree": care_degree_raw,
         "care_degree_int": _parse_care_degree(care_degree_raw),
         "insurance_number": patient.get("insurance_number"),
+        "insurance_company_name": None,  # wird später enriched
+        "_insurance_company_id": patient.get("insurance_company_id"),
         "active": bool(patient.get("active")),
         "is_primary": bool(item.get("is_primary")),
         "started_at": item.get("started_at"),
     }
+
+
+def _enrich_patient(
+    client: PattiClient,
+    mapped: dict,
+    insurance_cache: dict[int, str | None],
+) -> dict:
+    """Lädt Telefon (GET /people/{id}) und Krankenkassen-Name
+    (GET /companies/{id}) nach.
+
+    insurance_cache wird zwischen Patienten wiederverwendet damit bei N
+    Patienten die zur selben Kasse gehören nur 1 API-Call nötig ist.
+    """
+    # Phone
+    person_id = mapped.pop("_patti_person_id", None)
+    if person_id:
+        try:
+            person = client.get_person(person_id)
+            comm = person.get("communication") or {}
+            mobile = comm.get("mobile_number")
+            landline = comm.get("phone_number")
+            mapped["phone"] = mobile or landline
+            mapped["phone_landline"] = (
+                landline if landline and landline != mobile else None
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Insurance company name
+    ins_id = mapped.pop("_insurance_company_id", None)
+    if ins_id:
+        if ins_id in insurance_cache:
+            mapped["insurance_company_name"] = insurance_cache[ins_id]
+        else:
+            try:
+                company = client.get_company(ins_id)
+                name = company.get("name") or company.get("list_name")
+                insurance_cache[ins_id] = name
+                mapped["insurance_company_name"] = name
+            except Exception:  # noqa: BLE001
+                insurance_cache[ins_id] = None
+
+    return mapped
 
 
 def get_mobile_patients_for_person(person_id: int) -> list[dict]:
@@ -89,6 +134,7 @@ def get_mobile_patients_for_person(person_id: int) -> list[dict]:
     response = client.get_service_histories_by_person_id(person_id)
     rows = response.get("data", []) if isinstance(response, dict) else []
 
+    insurance_cache: dict[int, str | None] = {}
     result: list[dict] = []
 
     for item in rows:
@@ -96,14 +142,16 @@ def get_mobile_patients_for_person(person_id: int) -> list[dict]:
 
         if not item.get("is_primary"):
             continue
-
         if item.get("ended_at") is not None:
             continue
-
         if not patient.get("active"):
             continue
 
-        result.append(map_service_history_to_mobile_patient(item))
+        mapped = map_service_history_to_mobile_patient(item)
+        mapped["_patti_person_id"] = (
+            item.get("patient_person") or {}
+        ).get("id")
+        result.append(_enrich_patient(client, mapped, insurance_cache))
 
     return result
 
@@ -175,6 +223,9 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
                 "care_degree": patient.get("care_degree"),
                 "care_degree_int": _parse_care_degree(patient.get("care_degree")),
                 "insurance_number": patient.get("insurance_number"),
+                "insurance_company_name": None,
+                "_insurance_company_id": patient.get("insurance_company_id"),
+                "_patti_person_id": person.get("id"),
                 "active": bool(patient.get("active")),
                 "is_primary": False,
                 "started_at": None,
@@ -213,6 +264,11 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
                         patient.get("care_degree")
                     ),
                     "insurance_number": patient.get("insurance_number"),
+                    "insurance_company_name": None,
+                    "_insurance_company_id": patient.get(
+                        "insurance_company_id"
+                    ),
+                    "_patti_person_id": None,
                     "active": bool(patient.get("active")),
                     "is_primary": False,
                     "started_at": None,
@@ -220,7 +276,13 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
     except Exception:  # noqa: BLE001
         pass
 
-    return list(results.values())[:limit]
+    # Enrichment: phone + insurance-company-name for each result
+    insurance_cache: dict[int, str | None] = {}
+    enriched = [
+        _enrich_patient(client, mapped, insurance_cache)
+        for mapped in list(results.values())[:limit]
+    ]
+    return enriched
 
 
 def get_patient_budget(
