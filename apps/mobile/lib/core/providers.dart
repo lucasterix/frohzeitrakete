@@ -76,6 +76,30 @@ final trainingsProvider =
   return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
 });
 
+class MonthParams {
+  final int year;
+  final int month;
+  const MonthParams(this.year, this.month);
+
+  @override
+  bool operator ==(Object other) =>
+      other is MonthParams && other.year == year && other.month == month;
+
+  @override
+  int get hashCode => year.hashCode ^ month.hashCode;
+}
+
+final userMonthlySummaryProvider =
+    FutureProvider.family<Map<String, dynamic>, MonthParams>(
+        (ref, params) async {
+  final client = ref.watch(apiClientProvider);
+  final response = await client.dio.get(
+    '/mobile/user/monthly-summary',
+    queryParameters: {'year': params.year, 'month': params.month},
+  );
+  return (response.data as Map).cast<String, dynamic>();
+});
+
 // ---------------- Auth State ----------------
 
 /// Aktuell eingeloggter User (null = nicht eingeloggt).

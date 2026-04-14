@@ -2,6 +2,7 @@
 /// sind interne Arbeitszeit ohne Patient.
 enum EntryType {
   patient('patient', 'Patient', '👤'),
+  homeCommute('home_commute', 'Nach Hause', '🏠'),
   office('office', 'Büro', '🏢'),
   training('training', 'Fortbildung', '🎓'),
   other('other', 'Sonstiges', '📋');

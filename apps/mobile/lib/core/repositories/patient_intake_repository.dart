@@ -10,9 +10,9 @@ class PatientIntakeRepository {
 
   Future<Map<String, dynamic>> create({
     required String fullName,
+    required String phone,
     String? birthdate,
     String? address,
-    String? phone,
     String? contactPerson,
     String? careLevel,
     String? note,

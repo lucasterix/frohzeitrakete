@@ -16,6 +16,9 @@ export default function UserEditForm({ user, onUpdated }: Props) {
   const [pattiPersonId, setPattiPersonId] = useState<number | null>(
     user.patti_person_id
   );
+  const [hasCompanyCar, setHasCompanyCar] = useState<boolean>(
+    user.has_company_car ?? false
+  );
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -30,9 +33,19 @@ export default function UserEditForm({ user, onUpdated }: Props) {
       role !== user.role ||
       isActive !== user.is_active ||
       pattiPersonId !== user.patti_person_id ||
+      hasCompanyCar !== (user.has_company_car ?? false) ||
       password.trim() !== ""
     );
-  }, [email, fullName, role, isActive, pattiPersonId, password, user]);
+  }, [
+    email,
+    fullName,
+    role,
+    isActive,
+    pattiPersonId,
+    hasCompanyCar,
+    password,
+    user,
+  ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,6 +60,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
         role,
         is_active: isActive,
         patti_person_id: pattiPersonId,
+        has_company_car: hasCompanyCar,
         password: password.trim() === "" ? null : password,
       });
 
@@ -68,6 +82,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
     setRole(user.role);
     setIsActive(user.is_active);
     setPattiPersonId(user.patti_person_id);
+    setHasCompanyCar(user.has_company_car ?? false);
     setPassword("");
     setSuccessMessage("");
     setErrorMessage("");
@@ -175,6 +190,19 @@ export default function UserEditForm({ user, onUpdated }: Props) {
                   className="h-4 w-4"
                 />
                 User ist aktiv
+              </label>
+
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={hasCompanyCar}
+                  onChange={(e) => setHasCompanyCar(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Dienstwagen — keine Fahrtkosten-Erstattung
+                <span className="text-xs font-normal text-slate-500">
+                  (Km werden im Report automatisch als bezahlt markiert)
+                </span>
               </label>
             </div>
 

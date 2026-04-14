@@ -50,7 +50,7 @@ class _PatientIntakeScreenState extends ConsumerState<PatientIntakeScreen> {
             ? null
             : _birthdateCtrl.text.trim(),
         address: _address.isEmpty ? null : _address,
-        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
         contactPerson: _contactCtrl.text.trim().isEmpty
             ? null
             : _contactCtrl.text.trim(),
@@ -121,10 +121,12 @@ class _PatientIntakeScreenState extends ConsumerState<PatientIntakeScreen> {
               TextFormField(
                 controller: _phoneCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Telefon',
+                  labelText: 'Telefon *',
                   isDense: true,
                 ),
                 keyboardType: TextInputType.phone,
+                validator: (v) =>
+                    (v == null || v.trim().length < 3) ? 'Pflichtfeld' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(

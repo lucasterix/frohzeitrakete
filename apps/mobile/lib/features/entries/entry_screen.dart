@@ -50,6 +50,9 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   String? _startAddress; // confirmed ORS label
   final List<String?> _intermediateStopLabels = []; // confirmed labels
 
+  // Home-Commute-State: nur genutzt wenn _entryType == home_commute.
+  String? _homeCommuteStartAddress;
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +149,16 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
         );
         return;
       }
+    } else if (_entryType == EntryType.homeCommute) {
+      if (_homeCommuteStartAddress == null ||
+          _homeCommuteStartAddress!.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bitte Start-Adresse für die Heimfahrt wählen.'),
+          ),
+        );
+        return;
+      }
     } else {
       if (_categoryLabelCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,7 +171,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
         return;
       }
     }
-    if (_hours == null) {
+    if (_hours == null && _entryType != EntryType.homeCommute) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte Stunden wählen.')),
       );
@@ -212,15 +225,19 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                 ? _selectedPatient?.patientId
                 : null,
             entryType: _entryType,
-            categoryLabel: _entryType == EntryType.patient
+            categoryLabel: _entryType == EntryType.patient ||
+                    _entryType == EntryType.homeCommute
                 ? null
                 : _categoryLabelCtrl.text.trim(),
             entryDate: _selectedDate,
-            hours: _hours!,
+            hours: _hours ?? 0.0,
             activities: _entryType == EntryType.patient
                 ? _selectedActivities.toList()
                 : const [],
             trip: _buildTripInput(),
+            homeCommuteStartAddress: _entryType == EntryType.homeCommute
+                ? _homeCommuteStartAddress
+                : null,
           );
 
       // Alle Provider die jetzt stale sind invalidieren, damit PatientDetail
@@ -252,12 +269,15 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           ref.invalidate(mySignaturesProvider);
         }
       } else {
-        // Office/Training: direkt zurück mit Erfolgs-SnackBar
+        // Office/Training/Heimfahrt: direkt zurück mit Erfolgs-SnackBar
         Navigator.of(context).pop();
+        final msg = _entryType == EntryType.homeCommute
+            ? 'Heimfahrt gespeichert'
+            : '${_entryType.label} gespeichert: ${_formatHours(_hours ?? 0)}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${_entryType.label} gespeichert: ${_formatHours(_hours!)}',
+              msg,
             ),
           ),
         );
@@ -317,6 +337,10 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   }
 
   bool get _canSave {
+    if (_entryType == EntryType.homeCommute) {
+      return _homeCommuteStartAddress != null &&
+          _homeCommuteStartAddress!.trim().isNotEmpty;
+    }
     if (_hours == null) return false;
     if (_entryType == EntryType.patient) {
       return _selectedPatient != null && _selectedActivities.isNotEmpty;
@@ -430,11 +454,49 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Patient-Dropdown oder Label-Field
+                  // Patient-Dropdown oder Label-Field oder Home-Commute-Picker
                   if (_entryType == EntryType.patient) ...[
                     _label('Patient'),
                     const SizedBox(height: 8),
                     _buildPatientDropdown(),
+                  ] else if (_entryType == EntryType.homeCommute) ...[
+                    _label('Start-Adresse (Patient oder frei)'),
+                    const SizedBox(height: 8),
+                    _HomeCommuteStartPicker(
+                      initialValue: _homeCommuteStartAddress ?? '',
+                      onPicked: (v) =>
+                          setState(() => _homeCommuteStartAddress = v),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_userHome != null)
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.flag_outlined,
+                            size: 16,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Ziel: ${_userHome!.addressLine}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      const Text(
+                        'Home-Adresse nicht gesetzt — bitte in den '
+                        'Einstellungen hinterlegen.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                        ),
+                      ),
                   ] else ...[
                     _label(_entryType == EntryType.training
                         ? 'Fortbildungs-Titel'
@@ -516,7 +578,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Stunden-Presets
+                  // Stunden-Presets (nicht für Heimfahrt — da geht's nur um km)
+                  if (_entryType != EntryType.homeCommute) ...[
                   _label('Stunden'),
                   const SizedBox(height: 10),
                   Wrap(
@@ -553,6 +616,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                       );
                     }).toList(),
                   ),
+                  ],
 
                   if (_entryType == EntryType.patient) ...[
                     const SizedBox(height: 24),
@@ -814,14 +878,12 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                 ],
                 if (!_startFromHome) ...[
                   const SizedBox(height: 10),
-                  AddressAutocomplete(
-                    label: 'Start-Adresse',
-                    hint: 'z.B. Musterstraße 12, 37073 Göttingen',
+                  _HomeCommuteStartPicker(
                     initialValue: _startAddress ?? '',
-                    onAddressSelected: (label) {
-                      setState(() => _startAddress = label);
+                    onPicked: (label) {
+                      setState(
+                          () => _startAddress = label.isEmpty ? null : label);
                     },
-                    onCleared: () => setState(() => _startAddress = null),
                   ),
                 ],
               ],
@@ -862,8 +924,9 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'z.B. Patient zum Arzt fahren. Rückfahrt wird automatisch '
-                  'berechnet.',
+                  'z.B. Patient zum Arzt fahren. Nur die Hinfahrt wird '
+                  'erfasst — für die Rückfahrt legst du ggf. einen neuen '
+                  'Eintrag an.',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ),
@@ -1015,6 +1078,113 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: child,
+    );
+  }
+}
+
+/// Picker für die Start-Adresse bei Heimfahrt-Einträgen (oder wo sonst eine
+/// "andere Adresse" gebraucht wird): zeigt alle Patienten des Users als
+/// ChoiceChips an. Tippt der User auf einen Patienten, wird dessen
+/// `addressLine` als Wert übernommen. Parallel kann er über das Freitext-
+/// Feld eine beliebige Adresse tippen und per Autocomplete bestätigen.
+class _HomeCommuteStartPicker extends ConsumerStatefulWidget {
+  final String initialValue;
+  final void Function(String) onPicked;
+
+  const _HomeCommuteStartPicker({
+    required this.initialValue,
+    required this.onPicked,
+  });
+
+  @override
+  ConsumerState<_HomeCommuteStartPicker> createState() =>
+      _HomeCommuteStartPickerState();
+}
+
+class _HomeCommuteStartPickerState
+    extends ConsumerState<_HomeCommuteStartPicker> {
+  int? _selectedPatientId;
+  String _currentLabel = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _currentLabel = widget.initialValue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF4F8A5B);
+    final patientsAsync = ref.watch(patientsProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        patientsAsync.when(
+          loading: () => const SizedBox(
+            height: 32,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+          error: (e, _) => Text(
+            'Konnte Patienten nicht laden: $e',
+            style: const TextStyle(fontSize: 11, color: Colors.red),
+          ),
+          data: (patients) {
+            if (patients.isEmpty) return const SizedBox.shrink();
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: patients.map((p) {
+                final selected = _selectedPatientId == p.patientId;
+                final addr = p.addressLine ?? '';
+                final canPick = addr.isNotEmpty;
+                return ChoiceChip(
+                  label: Text(
+                    p.displayName,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  selected: selected,
+                  selectedColor: green.withValues(alpha: 0.2),
+                  onSelected: canPick
+                      ? (_) {
+                          setState(() {
+                            _selectedPatientId = p.patientId;
+                            _currentLabel = addr;
+                          });
+                          widget.onPicked(addr);
+                        }
+                      : null,
+                );
+              }).toList(),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'oder eine freie Adresse eingeben:',
+          style: TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+        const SizedBox(height: 6),
+        AddressAutocomplete(
+          label: 'Freie Adresse',
+          hint: 'z.B. Musterstraße 12, 37073 Göttingen',
+          initialValue: _currentLabel,
+          onAddressSelected: (label) {
+            setState(() {
+              _selectedPatientId = null;
+              _currentLabel = label;
+            });
+            widget.onPicked(label);
+          },
+          onCleared: () {
+            setState(() {
+              _selectedPatientId = null;
+              _currentLabel = '';
+            });
+            widget.onPicked('');
+          },
+        ),
+      ],
     );
   }
 }

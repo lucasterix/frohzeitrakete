@@ -12,6 +12,7 @@ export type User = {
   role: string;
   is_active: boolean;
   patti_person_id: number | null;
+  has_company_car?: boolean;
 };
 
 export type CreateUserPayload = {
@@ -21,6 +22,7 @@ export type CreateUserPayload = {
   role: string;
   is_active?: boolean;
   patti_person_id?: number | null;
+  has_company_car?: boolean;
 };
 
 export type UpdateUserPayload = {
@@ -29,8 +31,66 @@ export type UpdateUserPayload = {
   role: string;
   is_active: boolean;
   patti_person_id?: number | null;
+  has_company_car?: boolean;
   password?: string | null;
 };
+
+export type TravelCostPayment = {
+  id: number;
+  user_id: number;
+  from_date: string;
+  to_date: string;
+  note: string | null;
+  marked_by_user_id: number | null;
+  created_at: string;
+};
+
+export async function getTravelCostPayments(
+  userId: number
+): Promise<TravelCostPayment[]> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/travel-cost-payments`,
+    { headers: buildHeaders(), cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Fahrtkosten")
+    );
+  }
+  return response.json();
+}
+
+export async function createTravelCostPayment(
+  userId: number,
+  payload: { from_date: string; to_date: string; note?: string | null }
+): Promise<TravelCostPayment> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/travel-cost-payments`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fahrtkosten konnten nicht markiert werden")
+    );
+  }
+  return response.json();
+}
+
+export async function deleteTravelCostPayment(id: number): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/travel-cost-payments/${id}`,
+    { method: "DELETE", headers: buildHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fahrtkosten konnten nicht gelöscht werden")
+    );
+  }
+}
 
 export type Patient = {
   service_history_id: number;
@@ -738,6 +798,10 @@ export type WorkReportDay = {
   trips: WorkReportTrip[];
   day_hours: number;
   day_km: number;
+  patient_hours?: number;
+  non_patient_hours?: number;
+  patient_hours_with_bonus?: number;
+  travel_costs_paid?: boolean;
 };
 
 export type WorkReport = {
@@ -746,12 +810,18 @@ export type WorkReport = {
     email: string;
     full_name: string;
     role: string;
+    has_company_car?: boolean;
   };
   year: number;
   month: number;
   total_hours: number;
   total_km: number;
   working_days: number;
+  patient_hours?: number;
+  non_patient_hours?: number;
+  patient_hours_with_bonus?: number;
+  billable_hours?: number;
+  bonus_pct?: number;
   days: WorkReportDay[];
 };
 

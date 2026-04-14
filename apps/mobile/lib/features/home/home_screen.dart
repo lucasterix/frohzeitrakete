@@ -495,6 +495,8 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 20),
 
           // Aufgaben & Termine
+          _MonthlySummaryCard(year: now.year, month: now.month),
+          const SizedBox(height: 14),
           _buildTasksSection(ref),
 
           const SizedBox(height: 20),
@@ -721,6 +723,134 @@ class _OfflineBanner extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MonthlySummaryCard extends ConsumerWidget {
+  final int year;
+  final int month;
+
+  const _MonthlySummaryCard({required this.year, required this.month});
+
+  static const _monthNames = [
+    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+  ];
+
+  String _fmt(double h) {
+    final full = h.truncate();
+    final rest = ((h - full) * 10).round();
+    return '$full,$rest h';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const green = Color(0xFF4F8A5B);
+    final async = ref.watch(userMonthlySummaryProvider(MonthParams(year, month)));
+
+    return async.when(
+      loading: () => const SizedBox(
+        height: 120,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (data) {
+        final patientHours = (data['patient_hours'] as num?)?.toDouble() ?? 0;
+        final nonPatient =
+            (data['non_patient_hours'] as num?)?.toDouble() ?? 0;
+        final withBonus =
+            (data['patient_hours_with_bonus'] as num?)?.toDouble() ?? 0;
+        final billable = (data['billable_hours'] as num?)?.toDouble() ?? 0;
+        final totalKm = (data['total_km'] as num?)?.toDouble() ?? 0;
+        final bonusPct = (data['bonus_pct'] as num?)?.toDouble() ?? 10;
+
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.bar_chart,
+                      color: green,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${_monthNames[month - 1]} $year',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black54,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Abrechenbar',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                      Text(
+                        _fmt(billable),
+                        style: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Km',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                      Text(
+                        totalKm.toStringAsFixed(1),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Patient: ${_fmt(patientHours)} · +${bonusPct.toStringAsFixed(0)}% Aufschlag = '
+                '${_fmt(withBonus)} · Büro/Fortbildung: ${_fmt(nonPatient)}',
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

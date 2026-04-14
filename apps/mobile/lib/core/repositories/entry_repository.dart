@@ -19,6 +19,7 @@ class EntryRepository {
     TripInput? trip,
     EntryType entryType = EntryType.patient,
     String? categoryLabel,
+    String? homeCommuteStartAddress,
   }) async {
     try {
       final response = await _client.dio.post(
@@ -34,6 +35,9 @@ class EntryRepository {
           'activities': activities,
           'note': note,
           if (trip != null) 'trip': trip.toJson(),
+          if (homeCommuteStartAddress != null &&
+              homeCommuteStartAddress.isNotEmpty)
+            'home_commute_start_address': homeCommuteStartAddress,
         }..removeWhere((_, v) => v == null),
       );
 
