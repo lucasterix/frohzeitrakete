@@ -10,6 +10,8 @@ from app.api.admin_tasks import router as admin_tasks_router
 from app.api.admin_users import router as admin_users_router
 from app.api.auth import router as auth_router
 from app.api.mobile import router as mobile_router
+from app.api.office_workflow import admin_router as office_admin_router
+from app.api.office_workflow import mobile_router as office_mobile_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
 from app.core.rate_limit import limiter
@@ -66,9 +68,11 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(mobile_router, prefix="/mobile", tags=["mobile"])
+app.include_router(office_mobile_router, prefix="/mobile", tags=["mobile-office-workflow"])
 app.include_router(admin_users_router, prefix="/admin", tags=["admin"])
 app.include_router(admin_signatures_router, prefix="/admin", tags=["admin-signatures"])
 app.include_router(admin_tasks_router, prefix="/admin", tags=["admin-tasks"])
+app.include_router(office_admin_router, prefix="/admin", tags=["admin-office-workflow"])
 
 
 @app.get("/health")

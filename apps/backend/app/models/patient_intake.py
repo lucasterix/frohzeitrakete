@@ -38,6 +38,8 @@ class PatientIntakeRequest(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    handler_kuerzel: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    response_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     patti_patient_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

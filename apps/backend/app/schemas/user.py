@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     is_active: bool = True
     patti_person_id: int | None = None
     has_company_car: bool = False
+    initials: str | None = None
 
 
 class UserUpdate(BaseModel):
@@ -18,6 +19,7 @@ class UserUpdate(BaseModel):
     is_active: bool
     patti_person_id: int | None = None
     has_company_car: bool = False
+    initials: str | None = None
     password: str | None = None
 
 
@@ -29,6 +31,7 @@ class UserResponse(BaseModel):
     is_active: bool
     patti_person_id: int | None = None
     has_company_car: bool = False
+    initials: str | None = None
 
     class Config:
         from_attributes = True

@@ -22,6 +22,11 @@ class User(Base):
     has_company_car: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    # Bearbeitungskürzel (z.B. "DR"). Wird beim Resolve von Tickets
+    # (Urlaub / Krankmeldung / HR-Anfrage / Call-Request / Intake) als
+    # Signatur im Admin-Web eingetragen, damit jeder im Büro sieht wer
+    # was bearbeitet hat.
+    initials: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
