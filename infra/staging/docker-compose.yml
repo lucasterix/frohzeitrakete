@@ -21,8 +21,6 @@ services:
       - .env
     depends_on:
       - postgres
-    ports:
-      - "8000:8000"
     networks:
       - fzr_net
 
@@ -35,13 +33,30 @@ services:
       - .env
     depends_on:
       - backend
+    networks:
+      - fzr_net
+
+  caddy:
+    image: caddy:2
+    container_name: fzr_caddy
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - admin-web
     ports:
-      - "3000:3000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - fzr_net
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   fzr_net:

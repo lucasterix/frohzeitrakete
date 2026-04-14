@@ -1,0 +1,7 @@
+admin.froehlichdienste.de {
+    reverse_proxy admin-web:3000
+}
+
+api.froehlichdienste.de {
+    reverse_proxy backend:8000
+}
