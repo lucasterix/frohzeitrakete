@@ -337,3 +337,33 @@ class PattiClient:
     def delete_service_entry(self, entry_id: int) -> None:
         """DELETE /api/v1/service-entries/{id}."""
         self._delete(f"/api/v1/service-entries/{entry_id}")
+
+    def get_leistungsnachweis_pdf(
+        self,
+        patient_id: int,
+        *,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> bytes:
+        """Lädt das Leistungsnachweis-PDF direkt aus Patti.
+
+        URL-Muster: ``/patients/{id}/leistungsnachweis.pdf`` (mit
+        optionalem ``?year=...&month=...``). Patti generiert das PDF
+        serverseitig inkl. QR-Code. Nutzt die bestehende Session (der
+        Client muss vorher ``login()`` gerufen haben).
+
+        Wirft requests.HTTPError wenn Patti 4xx/5xx liefert — Caller
+        soll das als "Fallback auf eigenes PDF" interpretieren.
+        """
+        params: dict[str, Any] = {}
+        if year is not None:
+            params["year"] = year
+        if month is not None:
+            params["month"] = month
+        url = f"/patients/{patient_id}/leistungsnachweis.pdf"
+        response = self._get(url, params=params or None)
+        response.raise_for_status()
+        if not response.content.startswith(b"%PDF"):
+            # Patti hat vermutlich eine HTML-Login-Page zurückgegeben
+            raise ValueError("patti_response_is_not_pdf")
+        return response.content

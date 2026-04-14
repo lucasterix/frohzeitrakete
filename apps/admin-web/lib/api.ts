@@ -348,13 +348,15 @@ export function leistungsnachweisPdfUrl(
   userId: number,
   patientId: number,
   year: number,
-  month: number
+  month: number,
+  source: "rakete" | "patti" = "rakete"
 ): string {
   const url = new URL(
     `${API_BASE_URL}/admin/users/${userId}/leistungsnachweis/${patientId}`
   );
   url.searchParams.set("year", String(year));
   url.searchParams.set("month", String(month));
+  url.searchParams.set("source", source);
   return url.toString();
 }
 

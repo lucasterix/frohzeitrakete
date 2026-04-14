@@ -198,26 +198,44 @@ def admin_user_patient_leistungsnachweis(
     patient_id: int,
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
+    source: str = Query(
+        "rakete",
+        pattern="^(rakete|patti)$",
+    ),
     admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     """Erstellt ein PDF-Leistungsnachweis für (user, patient, monat).
 
-    Aggregiert Stunden, km, Leistungsarten und Unterschriften aus den
-    Einsätzen und der letzten Leistungsnachweis-Signatur im Monat.
+    - source=rakete (default): Rakete generiert das PDF selbst mit
+      Stunden, km, Leistungsarten und der letzten Unterschrift des
+      Monats.
+    - source=patti: Zieht das PDF direkt aus Patti
+      (/patients/{id}/leistungsnachweis.pdf, mit QR-Code). Bei
+      Fehler → Fallback auf Rakete-PDF.
     """
-    from app.services.leistungsnachweis_service import build_leistungsnachweis_pdf
+    from app.services.leistungsnachweis_service import (
+        build_leistungsnachweis_pdf,
+        fetch_patti_leistungsnachweis_pdf,
+    )
 
-    try:
-        pdf_bytes = build_leistungsnachweis_pdf(
-            db,
-            user_id=user_id,
-            patient_id=patient_id,
-            year=year,
-            month=month,
+    pdf_bytes: bytes | None = None
+    if source == "patti":
+        pdf_bytes = fetch_patti_leistungsnachweis_pdf(
+            patient_id, year=year, month=month
         )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+
+    if pdf_bytes is None:
+        try:
+            pdf_bytes = build_leistungsnachweis_pdf(
+                db,
+                user_id=user_id,
+                patient_id=patient_id,
+                year=year,
+                month=month,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
 
     filename = f"leistungsnachweis_u{user_id}_p{patient_id}_{year}-{month:02d}.pdf"
     return Response(

@@ -41,6 +41,45 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
 
   bool get _isEmpty => _strokes.isEmpty && _currentStroke.isEmpty;
 
+  /// Unterschriften-Qualitäts-Check. Eine "gültige" Unterschrift muss:
+  ///   - mindestens 2 getrennte Striche haben (ein einzelner Strich ist
+  ///     meistens nur ein "Krackel")
+  ///   - insgesamt mindestens 25 Punkte enthalten
+  ///   - eine Bounding-Box von mindestens 60×25 px aufspannen
+  /// Wenn das nicht erfüllt ist, wird der User gebeten sauberer zu
+  /// unterschreiben. Das ist kein absoluter OCR-Test, aber fängt die
+  /// häufigsten "aus Versehen einen Strich gemalt"-Fälle ab.
+  ({bool ok, String? reason}) _validateSignature() {
+    if (_strokes.length < 2) {
+      return (ok: false, reason: 'Bitte mit vollständigem Namen unterschreiben — ein einzelner Strich reicht nicht.');
+    }
+    final totalPoints = _strokes.fold<int>(
+      0,
+      (sum, s) => sum + s.length,
+    );
+    if (totalPoints < 25) {
+      return (ok: false, reason: 'Unterschrift ist zu kurz. Bitte erneut und vollständig unterschreiben.');
+    }
+    double minX = double.infinity;
+    double maxX = -double.infinity;
+    double minY = double.infinity;
+    double maxY = -double.infinity;
+    for (final s in _strokes) {
+      for (final p in s) {
+        if (p.dx < minX) minX = p.dx;
+        if (p.dx > maxX) maxX = p.dx;
+        if (p.dy < minY) minY = p.dy;
+        if (p.dy > maxY) maxY = p.dy;
+      }
+    }
+    final width = maxX - minX;
+    final height = maxY - minY;
+    if (width < 60 || height < 25) {
+      return (ok: false, reason: 'Unterschrift ist zu klein. Bitte den kompletten Bereich nutzen und erneut unterschreiben.');
+    }
+    return (ok: true, reason: null);
+  }
+
   void _onPanStart(DragStartDetails d) {
     setState(() => _currentStroke = [d.localPosition]);
   }
@@ -69,6 +108,12 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   Future<void> _save() async {
     if (_isEmpty) {
       setState(() => _error = 'Bitte zuerst unterschreiben.');
+      return;
+    }
+    final validation = _validateSignature();
+    if (!validation.ok) {
+      setState(() => _error = validation.reason);
+      // Strokes werden nicht gelöscht — User kann direkt ergänzen
       return;
     }
 

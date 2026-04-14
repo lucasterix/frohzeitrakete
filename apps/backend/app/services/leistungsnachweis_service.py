@@ -224,6 +224,37 @@ def _render_svg_path_as_drawing(svg_content: str, box_w: float, box_h: float) ->
     return drawing
 
 
+def fetch_patti_leistungsnachweis_pdf(
+    patient_id: int,
+    *,
+    year: int | None = None,
+    month: int | None = None,
+) -> bytes | None:
+    """Versucht das Leistungsnachweis-PDF direkt aus Patti zu laden.
+
+    Patti hat unter ``/patients/{id}/leistungsnachweis.pdf`` einen
+    serverseitigen PDF-Generator inkl. QR-Code. Rückgabe = PDF-Bytes,
+    oder None wenn der Aufruf fehlschlägt (Session expired, 404,
+    Patti liefert HTML statt PDF zurück). Fehler werden geloggt aber
+    nicht propagiert — der Caller fällt dann auf das Rakete-PDF zurück.
+    """
+    try:
+        client = PattiClient()
+        client.login()
+        return client.get_leistungsnachweis_pdf(
+            patient_id, year=year, month=month
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "patti_leistungsnachweis_fetch_failed patient=%s year=%s month=%s error=%s",
+            patient_id,
+            year,
+            month,
+            exc,
+        )
+        return None
+
+
 def build_leistungsnachweis_pdf(
     db: Session,
     *,
@@ -368,44 +399,65 @@ def build_leistungsnachweis_pdf(
     # Unterschriften-Feld
     story.append(
         Paragraph(
-            "<b>Unterschrift Patient</b> (letzte im Monat erfasste "
-            "Unterschrift aus FrohZeit Rakete)",
-            styles["Normal"],
+            "<b>Unterschrift Patient</b>", styles["Normal"]
         )
     )
     story.append(Spacer(1, 2 * mm))
 
-    sig_cell: Any = ""
+    # Metadaten-Zeile direkt über der Unterschrift: wer / wann
+    # (fällt weg wenn keine Signatur da ist).
     if latest_sig is not None:
         event, asset = latest_sig
+        signed_local = event.signed_at.strftime("%d.%m.%Y, %H:%M Uhr")
+        meta_line = (
+            f"Unterschrieben vom Patienten: <b>{event.signer_name}</b> · "
+            f"{signed_local}"
+        )
+        story.append(Paragraph(meta_line, styles["Normal"]))
+        story.append(Spacer(1, 2 * mm))
+
         if asset is not None and asset.svg_content:
             drawing = _render_svg_path_as_drawing(
                 asset.svg_content, 80 * mm, 25 * mm
             )
-            sig_cell = drawing
-    sig_rows = [
-        [sig_cell, ""],
-        [
-            "_________________________",
-            f"FrohZeit Rakete · erzeugt {date.today().strftime('%d.%m.%Y')}",
-        ],
-        [
-            latest_sig[0].signer_name if latest_sig else "",
-            "",
-        ],
-    ]
-    sig_table = Table(sig_rows, colWidths=[90 * mm, 75 * mm])
-    sig_table.setStyle(
-        TableStyle(
-            [
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ]
+            # Drawing in einer Tabelle für saubere Rahmen / Zentrierung
+            sig_table = Table(
+                [[drawing]],
+                colWidths=[165 * mm],
+                rowHeights=[27 * mm],
+            )
+            sig_table.setStyle(
+                TableStyle(
+                    [
+                        ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
+            story.append(sig_table)
+        else:
+            story.append(
+                Paragraph(
+                    "<i>Keine SVG-Unterschrift vorhanden.</i>",
+                    styles["Normal"],
+                )
+            )
+    else:
+        story.append(
+            Paragraph(
+                "<i>Im Monat wurde noch keine Unterschrift erfasst.</i>",
+                styles["Normal"],
+            )
+        )
+    story.append(Spacer(1, 3 * mm))
+    story.append(
+        Paragraph(
+            f"<font size=8 color=grey>FrohZeit Rakete · "
+            f"erzeugt {date.today().strftime('%d.%m.%Y')}</font>",
+            styles["Normal"],
         )
     )
-    story.append(sig_table)
 
     doc.build(story)
     return buffer.getvalue()

@@ -224,20 +224,43 @@ export default function LeistungsnachweisePage() {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {patientIds.map((pid) => (
-                          <a
+                          <div
                             key={pid}
-                            href={leistungsnachweisPdfUrl(
-                              user.id,
-                              pid,
-                              year,
-                              month
-                            )}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-brand-700"
+                            className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1"
                           >
-                            PDF Patient #{pid} ↗
-                          </a>
+                            <span className="text-xs font-medium text-slate-700">
+                              Patient #{pid}
+                            </span>
+                            <a
+                              href={leistungsnachweisPdfUrl(
+                                user.id,
+                                pid,
+                                year,
+                                month,
+                                "rakete"
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-xl bg-brand-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-brand-700"
+                            >
+                              Rakete
+                            </a>
+                            <a
+                              href={leistungsnachweisPdfUrl(
+                                user.id,
+                                pid,
+                                year,
+                                month,
+                                "patti"
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-xl bg-slate-700 px-2 py-1 text-[10px] font-medium text-white hover:bg-slate-800"
+                              title="Direkt aus Patti mit QR-Code. Fällt auf Rakete-PDF zurück wenn Patti nicht antwortet."
+                            >
+                              Patti QR
+                            </a>
+                          </div>
                         ))}
                       </div>
                     )}
