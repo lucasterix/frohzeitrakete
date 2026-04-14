@@ -96,14 +96,22 @@ class MobilePatient {
     return next.difference(today).inDays;
   }
 
-  /// Liste fehlender Pflichtfelder, die vom Büro nachgetragen werden müssen.
+  /// true wenn der Patient privat versichert ist (Patti-Company "(Privat)" etc.).
+  bool get isPrivat {
+    final name = insuranceCompanyName?.toLowerCase() ?? '';
+    return name.contains('privat');
+  }
+
+  /// Liste fehlender Pflichtfelder, die nachgetragen werden müssen.
+  /// Bei Privatversicherten wird die Versichertennummer nicht als Pflicht gezählt.
   List<String> get missingFields {
     final missing = <String>[];
     if (phone == null || phone!.trim().isEmpty) missing.add('Telefonnummer');
     if (birthday == null || birthday!.trim().isEmpty) missing.add('Geburtsdatum');
-    if (insuranceNumber == null ||
-        insuranceNumber!.trim().isEmpty ||
-        insuranceNumber!.toLowerCase() == 'fehlt') {
+    if (!isPrivat &&
+        (insuranceNumber == null ||
+            insuranceNumber!.trim().isEmpty ||
+            insuranceNumber!.toLowerCase() == 'fehlt')) {
       missing.add('Versichertennummer');
     }
     if (insuranceCompanyName == null || insuranceCompanyName!.trim().isEmpty) {

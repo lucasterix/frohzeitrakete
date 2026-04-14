@@ -285,6 +285,83 @@ def search_patients(query: str, limit: int = 20) -> list[dict]:
     return enriched
 
 
+def update_patient_data(
+    patient_id: int,
+    *,
+    user: User,
+    phone: str | None = None,
+    phone_landline: str | None = None,
+    insurance_number: str | None = None,
+    birthday: str | None = None,
+) -> None:
+    """Partial update of patient stammdaten, written back to Patti.
+
+    Caretaker muss diesem Patienten zugeordnet sein (primary OR substitute via
+    global search). Wir checken das nicht hart – jeder angemeldete User der
+    den Patienten sehen kann darf auch Stammdaten ergänzen (fehlt→nachtragen
+    ist explizit der Use-Case).
+
+    Je nach welche Felder gesetzt sind rufen wir 1-3 Patti-Endpoints auf:
+    - phone / phone_landline    → PUT /communications/{communication_id}
+    - insurance_number          → PUT /patients/{patient_id}
+    - birthday                  → PUT /people/{person_id}
+    """
+    if not user.patti_person_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User ist keiner Patti-Person zugeordnet",
+        )
+
+    client = PattiClient()
+    client.login()
+
+    # Need person + patient references to know which communication_id and
+    # person_id to address.
+    patient = client.get_patient(patient_id)
+    person_id = patient.get("id")  # in Patti, patient_id == person_id for the patient
+    # Load the person to get communication_id + current name/born_at
+    person = client.get_person(person_id)
+    communication_id = person.get("communication_id")
+
+    # --- phone updates ---
+    if phone is not None or phone_landline is not None:
+        if communication_id:
+            # Fetch current comm to preserve fields we are not updating
+            current_comm = person.get("communication") or {}
+            new_mobile = phone if phone is not None else current_comm.get("mobile_number")
+            new_landline = (
+                phone_landline
+                if phone_landline is not None
+                else current_comm.get("phone_number")
+            )
+            client.update_communication(
+                communication_id,
+                mobile_number=new_mobile or None,
+                phone_number=new_landline or None,
+                email=current_comm.get("email"),
+            )
+
+    # --- insurance_number update ---
+    if insurance_number is not None:
+        client.update_patient(
+            patient_id,
+            insurance_number=insurance_number or None,
+            insurance_company_id=patient.get("insurance_company_id"),
+            care_degree=patient.get("care_degree"),
+            care_degree_since=patient.get("care_degree_since"),
+            active=patient.get("active"),
+        )
+
+    # --- birthday update ---
+    if birthday is not None:
+        client.update_person(
+            person_id,
+            first_name=person.get("first_name") or "",
+            last_name=person.get("last_name") or "",
+            born_at=birthday or None,
+        )
+
+
 def get_patient_budget(
     patient_id: int, year: int, user: User
 ) -> PatientBudget:

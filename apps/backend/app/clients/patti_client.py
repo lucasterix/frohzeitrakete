@@ -123,6 +123,87 @@ class PattiClient:
         response.raise_for_status()
         return response.json()
 
+    def update_communication(
+        self,
+        communication_id: int,
+        *,
+        mobile_number: str | None = None,
+        phone_number: str | None = None,
+        email: str | None = None,
+    ) -> dict[str, Any]:
+        """PUT /api/v1/communications/{id} – updates phone/email fields.
+
+        Patti's endpoint expects the full shape, so pass all relevant fields.
+        None values clear the respective column in Patti.
+        """
+        response = self.session.put(
+            f"{self.base_url}/api/v1/communications/{communication_id}",
+            json={
+                "mobile_number": mobile_number,
+                "phone_number": phone_number,
+                "email": email,
+                "fax_number": None,
+                "website": None,
+            },
+            headers=self._post_headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def update_patient(
+        self,
+        patient_id: int,
+        *,
+        insurance_number: str | None = None,
+        insurance_company_id: int | None = None,
+        care_degree: str | None = None,
+        care_degree_since: str | None = None,
+        active: bool | None = None,
+    ) -> dict[str, Any]:
+        """PUT /api/v1/patients/{id} – update patient attributes.
+
+        Values that are None are passed-through unchanged – caller should
+        fetch the current patient first and merge the fields they want to
+        update into the existing shape.
+        """
+        response = self.session.put(
+            f"{self.base_url}/api/v1/patients/{patient_id}",
+            json={
+                "insurance_number": insurance_number,
+                "insurance_company_id": insurance_company_id,
+                "care_degree": care_degree,
+                "care_degree_since": care_degree_since,
+                "active": active,
+            },
+            headers=self._post_headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def update_person(
+        self,
+        person_id: int,
+        *,
+        first_name: str,
+        last_name: str,
+        born_at: str | None = None,
+    ) -> dict[str, Any]:
+        """PUT /api/v1/people/{id} – update person (birthday etc.)."""
+        response = self.session.put(
+            f"{self.base_url}/api/v1/people/{person_id}",
+            json={
+                "first_name": first_name,
+                "last_name": last_name,
+                "born_at": born_at,
+            },
+            headers=self._post_headers(),
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_person(self, person_id: int) -> dict[str, Any]:
         """GET /api/v1/people/{person_id} – includes communication & address
         automatically (Patti eager-loads these on the person detail endpoint,

@@ -9,7 +9,7 @@ from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, EntryResponse, PatientHoursSummary
-from app.schemas.patient import MobilePatient, PatientBudget
+from app.schemas.patient import MobilePatient, MobilePatientUpdate, PatientBudget
 from app.schemas.signature import MobileSignatureCreate, SignatureEventResponse
 from app.services.entry_service import (
     create_or_update_entry,
@@ -22,6 +22,7 @@ from app.services.patient_service import (
     get_patient_budget,
     get_patients_for_user,
     search_patients,
+    update_patient_data,
 )
 
 router = APIRouter()
@@ -247,6 +248,32 @@ def mobile_patient_hours_summary(
         year=year,
         month=month,
     )
+
+
+@router.patch("/patients/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def mobile_update_patient(
+    patient_id: int,
+    payload: MobilePatientUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    """Partial update von Patient-Stammdaten, direkt in Patti geschrieben.
+
+    Felder die nicht gesetzt sind bleiben unverändert. Ein leerer String
+    "" löscht das Feld in Patti (z.B. um eine Telefonnummer zu entfernen).
+
+    Wird von der Mobile-App genutzt damit Betreuungskräfte fehlende
+    Stammdaten beim Patienten direkt nachtragen können – das Büro muss
+    das nicht mehr manuell machen.
+    """
+    update_patient_data(
+        patient_id,
+        user=current_user,
+        phone=payload.phone,
+        phone_landline=payload.phone_landline,
+        insurance_number=payload.insurance_number,
+        birthday=payload.birthday,
+    )
+    return None
 
 
 @router.get(

@@ -28,6 +28,39 @@ class PatientRepository {
     }
   }
 
+  /// Partial update of patient stammdaten. Only include fields that should
+  /// be written – null fields are untouched on the Patti side.
+  ///
+  /// Passing an empty string for a field clears it in Patti.
+  Future<void> updatePatient({
+    required int patientId,
+    String? phone,
+    String? phoneLandline,
+    String? insuranceNumber,
+    String? birthday,
+  }) async {
+    try {
+      final response = await _client.dio.patch(
+        '/mobile/patients/$patientId',
+        data: <String, dynamic>{
+          'phone': phone,
+          'phone_landline': phoneLandline,
+          'insurance_number': insuranceNumber,
+          'birthday': birthday,
+        }..removeWhere((_, v) => v == null),
+      );
+      if (response.statusCode != 204 && response.statusCode != 200) {
+        final data = response.data;
+        final detail = (data is Map && data['detail'] != null)
+            ? data['detail'].toString()
+            : 'Update fehlgeschlagen';
+        throw ApiException(message: detail, statusCode: response.statusCode);
+      }
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   /// Globale Patienten-Suche für den Vertretungs-Fall.
   /// Findet auch Patienten die nicht dem aktuellen User zugewiesen sind.
   Future<List<MobilePatient>> searchPatients(String query) async {

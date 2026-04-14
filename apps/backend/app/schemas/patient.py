@@ -29,6 +29,17 @@ class MobilePatient(BaseModel):
     started_at: str | None = None
 
 
+class MobilePatientUpdate(BaseModel):
+    """Partial update from mobile app for patient stammdaten.
+
+    Alle Felder optional. Was gesetzt wird, wird in Patti aktualisiert.
+    """
+    phone: str | None = None  # setzt mobile_number
+    phone_landline: str | None = None  # setzt phone_number
+    insurance_number: str | None = None
+    birthday: str | None = None  # "YYYY-MM-DD"
+
+
 class PatientBudget(BaseModel):
     """Budget-Summary für Mobile: Reststunden Pflegesachleistung + VP."""
 

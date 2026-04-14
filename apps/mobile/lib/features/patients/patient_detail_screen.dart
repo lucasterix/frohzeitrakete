@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/models/signature_event.dart';
@@ -614,6 +615,163 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     );
   }
 
+  Future<void> _savePatientField({
+    String? phone,
+    String? insuranceNumber,
+    String? birthday,
+  }) async {
+    try {
+      await ref.read(patientRepositoryProvider).updatePatient(
+            patientId: widget.patient.patientId,
+            phone: phone,
+            insuranceNumber: insuranceNumber,
+            birthday: birthday,
+          );
+      // Patients neu laden damit die Werte aktualisiert sind
+      ref.invalidate(patientsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gespeichert · an Patti übermittelt'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      // Nach dem Refetch muss der Screen mit dem neuen Patient geschlossen
+      // und neu geöffnet werden, weil wir das Patient-Objekt als widget.patient
+      // übergeben haben. Einfacher: Pop so dass die Liste neu lädt.
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fehler: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editPhone() async {
+    final newValue = await _promptText(
+      title: 'Telefonnummer',
+      hint: 'z.B. 0175 1234567',
+      initial: widget.patient.phone ?? '',
+      keyboard: TextInputType.phone,
+    );
+    if (newValue == null) return;
+    await _savePatientField(phone: newValue.trim());
+  }
+
+  Future<void> _editInsuranceNumber() async {
+    final newValue = await _promptText(
+      title: 'Versichertennummer',
+      hint: 'z.B. R818892525',
+      initial: widget.patient.insuranceNumber ?? '',
+    );
+    if (newValue == null) return;
+    await _savePatientField(insuranceNumber: newValue.trim());
+  }
+
+  Future<void> _editBirthday() async {
+    final initial = widget.patient.birthdayDate ??
+        DateTime(DateTime.now().year - 70, 1, 1);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      helpText: 'Geburtstag wählen',
+    );
+    if (picked == null) return;
+    final iso =
+        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    await _savePatientField(birthday: iso);
+  }
+
+  Future<String?> _promptText({
+    required String title,
+    required String hint,
+    required String initial,
+    TextInputType? keyboard,
+  }) async {
+    final controller = TextEditingController(text: initial);
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: keyboard,
+          decoration: InputDecoration(hintText: hint),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  void _showEditOrActionSheet({
+    required String currentValue,
+    required String label,
+    required VoidCallback onEdit,
+    required VoidCallback onCall,
+    required VoidCallback onCopy,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.call, color: Color(0xFF4F8A5B)),
+              title: Text('$currentValue anrufen'),
+              onTap: () {
+                Navigator.of(context).pop();
+                onCall();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text('$label bearbeiten'),
+              onTap: () {
+                Navigator.of(context).pop();
+                onEdit();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.content_copy),
+              title: const Text('Kopieren'),
+              onTap: () {
+                Navigator.of(context).pop();
+                onCopy();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMissingDataBanner(List<String> missingFields) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -665,11 +823,12 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     final patient = widget.patient;
     final address = patient.fullAddress;
     final phone = patient.phone;
+    final phoneMissing = phone == null || phone.trim().isEmpty;
     final birthday = patient.birthdayDate;
     final daysUntilBd = patient.daysUntilNextBirthday;
     final age = patient.age;
 
-    String birthdayLabel = '—';
+    String birthdayLabel = 'fehlt – zum Eintragen tippen';
     String? birthdaySubtitle;
     if (birthday != null) {
       birthdayLabel =
@@ -686,6 +845,10 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         }
       }
     }
+
+    final insuranceNumberMissing = patient.insuranceNumber == null ||
+        patient.insuranceNumber!.trim().isEmpty ||
+        patient.insuranceNumber!.toLowerCase() == 'fehlt';
 
     return Container(
       decoration: BoxDecoration(
@@ -706,16 +869,34 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
               onLongPress: () => _copyToClipboard(address, 'Adresse'),
             ),
           if (address != null) const Divider(height: 1, indent: 56),
-          if (phone != null)
-            _contactTile(
-              icon: Icons.phone_iphone_outlined,
-              label: patient.phoneLandline != null ? 'Mobil' : 'Telefon',
-              value: phone,
-              trailing: const Icon(Icons.call, color: green, size: 20),
-              onTap: () => _callPhone(phone),
-              onLongPress: () => _copyToClipboard(phone, 'Telefonnummer'),
-            ),
-          if (phone != null) const Divider(height: 1, indent: 56),
+
+          // Telefon – immer anzeigen, bei fehlend gelb mit Tap-to-edit
+          _contactTile(
+            icon: Icons.phone_iphone_outlined,
+            label: patient.phoneLandline != null ? 'Mobil' : 'Telefon',
+            value: phoneMissing ? 'fehlt – zum Eintragen tippen' : phone,
+            missing: phoneMissing,
+            trailing: phoneMissing
+                ? const Icon(Icons.edit, color: Colors.orange, size: 18)
+                : const Icon(Icons.call, color: green, size: 20),
+            onTap: phoneMissing
+                ? () => _editPhone()
+                : () => _callPhone(phone),
+            onLongPress: phoneMissing
+                ? null
+                : () {
+                    _showEditOrActionSheet(
+                      currentValue: phone,
+                      label: 'Telefonnummer',
+                      onEdit: () => _editPhone(),
+                      onCall: () => _callPhone(phone),
+                      onCopy: () =>
+                          _copyToClipboard(phone, 'Telefonnummer'),
+                    );
+                  },
+          ),
+          const Divider(height: 1, indent: 56),
+
           if (patient.phoneLandline != null) ...[
             _contactTile(
               icon: Icons.phone_outlined,
@@ -728,30 +909,59 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
             ),
             const Divider(height: 1, indent: 56),
           ],
+
+          // Geburtstag – immer, bei fehlend gelb
           _contactTile(
             icon: Icons.cake_outlined,
             label: 'Geburtstag',
             value: birthdayLabel,
             subtitle: birthdaySubtitle,
+            missing: birthday == null,
+            trailing: birthday == null
+                ? const Icon(Icons.edit, color: Colors.orange, size: 18)
+                : null,
+            onTap: birthday == null ? () => _editBirthday() : null,
           ),
           const Divider(height: 1, indent: 56),
+
+          // Krankenkasse – read-only (wird vom Büro zugewiesen)
           _contactTile(
             icon: Icons.account_balance_outlined,
             label: 'Krankenkasse',
-            value: patient.insuranceCompanyName ?? '—',
+            value: patient.insuranceCompanyName ?? 'fehlt – bitte Büro',
+            missing: patient.insuranceCompanyName == null,
           ),
           const Divider(height: 1, indent: 56),
-          _contactTile(
-            icon: Icons.badge_outlined,
-            label: 'Versichertennummer',
-            value: patient.insuranceNumber ?? '—',
-            onLongPress: patient.insuranceNumber != null
-                ? () => _copyToClipboard(
-                      patient.insuranceNumber!,
-                      'Versichertennummer',
-                    )
-                : null,
-          ),
+
+          // Versichertennummer – nicht bei privat, sonst editable
+          if (!patient.isPrivat)
+            _contactTile(
+              icon: Icons.badge_outlined,
+              label: 'Versichertennummer',
+              value: insuranceNumberMissing
+                  ? 'fehlt – zum Eintragen tippen'
+                  : patient.insuranceNumber!,
+              missing: insuranceNumberMissing,
+              trailing: insuranceNumberMissing
+                  ? const Icon(Icons.edit, color: Colors.orange, size: 18)
+                  : null,
+              onTap: insuranceNumberMissing
+                  ? () => _editInsuranceNumber()
+                  : null,
+              onLongPress: insuranceNumberMissing
+                  ? null
+                  : () => _copyToClipboard(
+                        patient.insuranceNumber!,
+                        'Versichertennummer',
+                      ),
+            )
+          else
+            _contactTile(
+              icon: Icons.verified_outlined,
+              label: 'Versicherung',
+              value: 'Privat versichert',
+              subtitle: 'Keine Versichertennummer erforderlich',
+            ),
         ],
       ),
     );
@@ -765,51 +975,60 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     Widget? trailing,
     VoidCallback? onTap,
     VoidCallback? onLongPress,
+    bool missing = false,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.black54),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          color: Colors.black54,
+    final valueColor = missing
+        ? Colors.orange[800]
+        : (onTap != null ? const Color(0xFF4F8A5B) : Colors.black87);
+    final tileBg = missing ? Colors.orange.withValues(alpha: 0.08) : null;
+    return Material(
+      color: tileBg ?? Colors.transparent,
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: missing ? Colors.orange : Colors.black54,
         ),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                color: onTap != null
-                    ? const Color(0xFF4F8A5B)
-                    : Colors.black87,
-                fontWeight: FontWeight.w500,
-                decoration: onTap != null
-                    ? TextDecoration.underline
-                    : TextDecoration.none,
-                decorationColor: const Color(0xFF4F8A5B),
-              ),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 2),
+        title: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: Colors.black54,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: valueColor,
+                  fontWeight: FontWeight.w500,
+                  decoration: (onTap != null && !missing)
+                      ? TextDecoration.underline
+                      : TextDecoration.none,
+                  decorationColor: const Color(0xFF4F8A5B),
                 ),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
+        trailing: trailing,
+        onTap: onTap,
+        onLongPress: onLongPress,
       ),
-      trailing: trailing,
-      onTap: onTap,
-      onLongPress: onLongPress,
     );
   }
 
