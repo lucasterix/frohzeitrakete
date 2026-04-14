@@ -9,6 +9,7 @@ import {
   InboxIcon,
   LogoutIcon,
   RocketIcon,
+  ShieldIcon,
   SignatureIcon,
   UserCircleIcon,
   UsersIcon,
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon },
   { href: "/admin/users", label: "User", Icon: UsersIcon },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon },
+  { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
 ];
 

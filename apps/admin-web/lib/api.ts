@@ -860,6 +860,52 @@ export async function getAdminCallRequests(): Promise<AdminCallRequest[]> {
   return response.json();
 }
 
+export type AdminContract = {
+  id: number;
+  patient_id: number;
+  patient_name: string | null;
+  signer_name: string;
+  status: string;
+  source: string;
+  info_text_version: string | null;
+  note: string | null;
+  signed_at: string;
+  has_asset: boolean;
+};
+
+export async function getAdminContracts(
+  search?: string
+): Promise<AdminContract[]> {
+  const url = new URL(`${API_BASE_URL}/admin/contracts`);
+  if (search && search.trim()) url.searchParams.set("q", search.trim());
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Verträge")
+    );
+  }
+  return response.json();
+}
+
+export async function getAdminContract(id: number): Promise<SignatureEvent> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/contracts/${id}`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Vertrag konnte nicht geladen werden")
+    );
+  }
+  return response.json();
+}
+
 export async function markCallRequestDone(
   requestId: number
 ): Promise<AdminCallRequest> {

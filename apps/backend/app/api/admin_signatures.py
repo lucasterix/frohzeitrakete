@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
+from app.clients.patti_client import PattiClient
 from app.core.auth import require_admin_user
 from app.db.session import get_db
 from app.models.signature_asset import SignatureAsset
@@ -92,6 +95,93 @@ def get_signature(
             detail="Signatur nicht gefunden",
         )
 
+    return event
+
+
+@router.get("/contracts")
+def list_contracts(
+    q: str | None = Query(None, max_length=200),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    """Alle Betreuungsverträge (Signatur-Events mit document_type='betreuungsvertrag').
+
+    Enriched mit patient_name via Patti (best-effort). Optionaler `q`-Filter
+    matched gegen patient_name oder signer_name (case-insensitive).
+    """
+    events = (
+        db.query(SignatureEvent)
+        .options(joinedload(SignatureEvent.asset))
+        .filter(SignatureEvent.document_type == "betreuungsvertrag")
+        .order_by(SignatureEvent.signed_at.desc())
+        .limit(500)
+        .all()
+    )
+
+    patient_ids = {e.patient_id for e in events}
+    patient_names: dict[int, str] = {}
+    if patient_ids:
+        try:
+            client = PattiClient()
+            client.login()
+            for pid in patient_ids:
+                try:
+                    p = client.get_patient(pid)
+                    patient_names[pid] = p.get("list_name") or f"Patient {pid}"
+                except Exception:  # noqa: BLE001
+                    patient_names[pid] = f"Patient {pid}"
+        except Exception:  # noqa: BLE001
+            patient_names = {pid: f"Patient {pid}" for pid in patient_ids}
+
+    rows: list[dict[str, Any]] = []
+    for e in events:
+        rows.append(
+            {
+                "id": e.id,
+                "patient_id": e.patient_id,
+                "patient_name": patient_names.get(e.patient_id),
+                "signer_name": e.signer_name,
+                "status": e.status,
+                "source": e.source,
+                "info_text_version": e.info_text_version,
+                "note": e.note,
+                "signed_at": e.signed_at,
+                "has_asset": e.asset is not None,
+            }
+        )
+
+    if q:
+        needle = q.strip().lower()
+        rows = [
+            r
+            for r in rows
+            if needle in (r["patient_name"] or "").lower()
+            or needle in r["signer_name"].lower()
+        ]
+
+    return rows
+
+
+@router.get("/contracts/{contract_id}", response_model=SignatureEventResponse)
+def get_contract(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    event = (
+        db.query(SignatureEvent)
+        .options(joinedload(SignatureEvent.asset))
+        .filter(
+            SignatureEvent.id == contract_id,
+            SignatureEvent.document_type == "betreuungsvertrag",
+        )
+        .first()
+    )
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Betreuungsvertrag nicht gefunden",
+        )
     return event
 
 
