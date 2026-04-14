@@ -5,9 +5,11 @@ from pydantic import BaseModel, Field
 
 class PatientIntakeCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
+    # Telefonnummer ist Pflicht — das Büro muss den neu angemeldeten
+    # Patienten erreichen können bevor er in Patti angelegt wird.
+    phone: str = Field(min_length=3, max_length=100)
     birthdate: str | None = Field(default=None, max_length=20)
     address: str | None = Field(default=None, max_length=500)
-    phone: str | None = Field(default=None, max_length=100)
     contact_person: str | None = Field(default=None, max_length=255)
     care_level: str | None = Field(default=None, max_length=30)
     note: str | None = None

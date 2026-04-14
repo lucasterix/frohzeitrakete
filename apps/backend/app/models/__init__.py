@@ -7,6 +7,7 @@ from app.models.patient_intake import PatientIntakeRequest
 from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.training import Training
+from app.models.travel_cost_payment import TravelCostPayment
 from app.models.trip_segment import TripSegment
 from app.models.user import User
 from app.models.user_home_location import UserHomeLocation
@@ -23,5 +24,6 @@ __all__ = [
     "CallRequest",
     "UserHomeLocation",
     "Training",
+    "TravelCostPayment",
     "TripSegment",
 ]

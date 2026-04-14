@@ -605,6 +605,37 @@ def mobile_notification_mark_read(
     return {"ok": True}
 
 
+@router.get("/user/monthly-summary")
+def mobile_user_monthly_summary(
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Zusammenfassung für den eigenen Home-Screen: Gesamtstunden,
+    Patient-Stunden, Aufschlag, abrechenbare Stunden, Km, Zahlstatus.
+    """
+    from app.services.work_report_service import build_work_report
+    report = build_work_report(
+        db, user_id=current_user.id, year=year, month=month
+    )
+    if "error" in report:
+        raise HTTPException(status_code=404, detail=report["error"])
+    return {
+        "year": year,
+        "month": month,
+        "total_hours": report["total_hours"],
+        "patient_hours": report["patient_hours"],
+        "non_patient_hours": report["non_patient_hours"],
+        "patient_hours_with_bonus": report["patient_hours_with_bonus"],
+        "billable_hours": report["billable_hours"],
+        "bonus_pct": report["bonus_pct"],
+        "total_km": report["total_km"],
+        "working_days": report["working_days"],
+        "has_company_car": report["user"]["has_company_car"],
+    }
+
+
 @router.get("/trainings")
 def mobile_list_trainings(
     current_user: User = Depends(get_current_user),

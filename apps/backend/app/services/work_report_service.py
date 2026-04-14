@@ -14,8 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.clients.patti_client import PattiClient
 from app.models.entry import Entry
+from app.models.travel_cost_payment import TravelCostPayment
 from app.models.trip_segment import TripSegment
 from app.models.user import User
+
+PATIENT_HOURS_BONUS_PCT = 10.0
 
 
 def build_work_report(
@@ -120,9 +123,51 @@ def build_work_report(
         if t.distance_km is not None:
             d["day_km"] = round(d["day_km"] + t.distance_km, 2)
 
+    # Fahrtkosten-Zahlstatus pro Tag: welche Tage fallen in einen
+    # TravelCostPayment-Zeitraum? Mitarbeiter mit Dienstwagen sind immer
+    # "bezahlt" (grün), weil sie keine Fahrtkostenerstattung bekommen.
+    payments = (
+        db.query(TravelCostPayment)
+        .filter(TravelCostPayment.user_id == user_id)
+        .all()
+    )
+
+    def _is_paid(day_date: date) -> bool:
+        if user.has_company_car:
+            return True
+        for p in payments:
+            if p.from_date <= day_date <= p.to_date:
+                return True
+        return False
+
     day_list = sorted(days.values(), key=lambda d: d["date"])
+    # Bonus-Berechnung + Zahlstatus anreichern
+    patient_hours = 0.0
+    non_patient_hours = 0.0
+    for d in day_list:
+        d_date = date.fromisoformat(d["date"])
+        d["travel_costs_paid"] = _is_paid(d_date)
+        day_patient = 0.0
+        day_non_patient = 0.0
+        for e in d["entries"]:
+            if e["type"] == "patient":
+                day_patient += e["hours"]
+            elif e["type"] != "home_commute":
+                day_non_patient += e["hours"]
+        patient_hours += day_patient
+        non_patient_hours += day_non_patient
+        d["patient_hours"] = round(day_patient, 2)
+        d["non_patient_hours"] = round(day_non_patient, 2)
+        d["patient_hours_with_bonus"] = round(
+            day_patient * (1 + PATIENT_HOURS_BONUS_PCT / 100), 2
+        )
+
     total_hours = round(sum(d["day_hours"] for d in day_list), 2)
     total_km = round(sum(d["day_km"] for d in day_list), 2)
+    patient_hours_with_bonus = round(
+        patient_hours * (1 + PATIENT_HOURS_BONUS_PCT / 100), 2
+    )
+    billable_hours = round(patient_hours_with_bonus + non_patient_hours, 2)
 
     return {
         "user": {
@@ -130,11 +175,17 @@ def build_work_report(
             "email": user.email,
             "full_name": user.full_name,
             "role": user.role,
+            "has_company_car": user.has_company_car,
         },
         "year": year,
         "month": month,
         "total_hours": total_hours,
         "total_km": total_km,
         "working_days": len(day_list),
+        "patient_hours": round(patient_hours, 2),
+        "non_patient_hours": round(non_patient_hours, 2),
+        "patient_hours_with_bonus": patient_hours_with_bonus,
+        "billable_hours": billable_hours,
+        "bonus_pct": PATIENT_HOURS_BONUS_PCT,
         "days": day_list,
     }

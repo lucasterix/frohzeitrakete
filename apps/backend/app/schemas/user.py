@@ -8,6 +8,7 @@ class UserCreate(BaseModel):
     role: str
     is_active: bool = True
     patti_person_id: int | None = None
+    has_company_car: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -16,6 +17,7 @@ class UserUpdate(BaseModel):
     role: str
     is_active: bool
     patti_person_id: int | None = None
+    has_company_car: bool = False
     password: str | None = None
 
 
@@ -26,6 +28,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     patti_person_id: int | None = None
+    has_company_car: bool = False
 
     class Config:
         from_attributes = True

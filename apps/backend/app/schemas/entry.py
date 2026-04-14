@@ -11,16 +11,22 @@ class TripInputSchema(BaseModel):
 
 
 class EntryCreate(BaseModel):
-    # Optional für non-patient Einsätze (office/training)
+    # Optional für non-patient Einsätze (office/training/home_commute)
     patient_id: int | None = None
     entry_date: date
-    hours: float = Field(gt=0, le=8.0)
+    hours: float = Field(ge=0, le=8.0)
     activities: list[str] = Field(default_factory=list)
     note: str | None = None
     trip: TripInputSchema | None = None
-    # patient (default) | office | training | other
-    entry_type: str = Field(default="patient", pattern="^(patient|office|training|other)$")
+    # patient (default) | office | training | other | home_commute
+    entry_type: str = Field(
+        default="patient",
+        pattern="^(patient|office|training|other|home_commute)$",
+    )
     category_label: str | None = None
+    # Nur für home_commute: Start-Adresse (Patienten-Adresse oder frei).
+    # Das Ziel ist immer die Home-Adresse des Users.
+    home_commute_start_address: str | None = None
 
     @field_validator("hours")
     @classmethod
@@ -28,8 +34,6 @@ class EntryCreate(BaseModel):
         # 0.5er Schritte: v muss vielfaches von 0.5 sein (mit kleinem Float-Puffer)
         if abs((v * 2) - round(v * 2)) > 1e-9:
             raise ValueError("hours muss in 0.5-Schritten angegeben werden")
-        if v < 0.5:
-            raise ValueError("hours muss mindestens 0.5 sein")
         return v
 
     @field_validator("entry_date")

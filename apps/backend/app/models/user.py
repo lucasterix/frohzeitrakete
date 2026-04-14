@@ -16,6 +16,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="caretaker")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     patti_person_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Dienstwagen-Flag: True = Mitarbeiter hat Dienstwagen → keine Fahrtkosten-
+    # Erstattung. Im Admin-Report werden deren Km-Zeilen automatisch als
+    # "bezahlt" (grün) dargestellt.
+    has_company_car: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

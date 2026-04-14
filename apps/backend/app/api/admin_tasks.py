@@ -4,7 +4,9 @@ Diese Endpoints werden vom Admin-Web (Next.js) konsumiert damit das Büro
 sieht welche Patienten anzurufen sind und welche Stammdaten fehlen.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import date
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin_user
@@ -34,6 +36,11 @@ from app.services.training_service import (
     create_training,
     delete_training,
     list_trainings,
+)
+from app.services.travel_cost_service import (
+    create_payment,
+    delete_payment,
+    list_payments,
 )
 from app.services.trip_service import user_km_for_month
 from app.services.work_report_service import build_work_report
@@ -221,6 +228,67 @@ def admin_delete_training(
     ok = delete_training(db, training_id=training_id)
     if not ok:
         raise HTTPException(status_code=404, detail="training_not_found")
+    return None
+
+
+@router.get("/users/{user_id}/travel-cost-payments")
+def admin_list_travel_cost_payments(
+    user_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    rows = list_payments(db, user_id=user_id)
+    return [
+        {
+            "id": r.id,
+            "user_id": r.user_id,
+            "from_date": r.from_date.isoformat(),
+            "to_date": r.to_date.isoformat(),
+            "note": r.note,
+            "marked_by_user_id": r.marked_by_user_id,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/users/{user_id}/travel-cost-payments")
+def admin_create_travel_cost_payment(
+    user_id: int,
+    from_date: date = Body(...),
+    to_date: date = Body(...),
+    note: str | None = Body(default=None),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_payment(
+            db,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            marked_by_user_id=admin_user.id,
+            note=note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "id": row.id,
+        "user_id": row.user_id,
+        "from_date": row.from_date.isoformat(),
+        "to_date": row.to_date.isoformat(),
+        "note": row.note,
+    }
+
+
+@router.delete("/travel-cost-payments/{payment_id}", status_code=204)
+def admin_delete_travel_cost_payment(
+    payment_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    if not delete_payment(db, payment_id=payment_id):
+        raise HTTPException(status_code=404, detail="payment_not_found")
     return None
 
 

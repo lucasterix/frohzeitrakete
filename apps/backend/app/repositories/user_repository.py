@@ -25,6 +25,7 @@ def create_user(db: Session, payload: UserCreate) -> User:
         role=payload.role,
         is_active=payload.is_active,
         patti_person_id=payload.patti_person_id,
+        has_company_car=payload.has_company_car,
     )
 
     db.add(user)
@@ -39,6 +40,7 @@ def update_user(db: Session, user: User, payload: UserUpdate) -> User:
     user.role = payload.role
     user.is_active = payload.is_active
     user.patti_person_id = payload.patti_person_id
+    user.has_company_car = payload.has_company_car
 
     if payload.password is not None and payload.password.strip() != "":
         user.password_hash = hash_password(payload.password)

@@ -3,7 +3,9 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  connectivity_plus
   local_auth_windows
+  sentry_flutter
   url_launcher_windows
 )
 

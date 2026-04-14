@@ -143,7 +143,9 @@ def create_trip_segments(
         )
         seg_index += 1
 
-    # 2. Intermediate stops: patient → stop → patient, per stop
+    # 2. Intermediate stops: patient → stop (einfach, keine automatische
+    #    Rückfahrt — der Betreuer fährt nicht automatisch denselben Weg
+    #    zurück und erfasst seine Fahrten einzeln).
     stops = trip_input.get("intermediate_stops") or []
     for stop in stops:
         stop = (stop or "").strip()
@@ -151,7 +153,6 @@ def create_trip_segments(
             continue
         stop_coord = _coord_for_address(ors, stop)
 
-        # Patient → Stop
         segments.append(
             _build_segment(
                 entry=entry,
@@ -166,27 +167,53 @@ def create_trip_segments(
             )
         )
         seg_index += 1
-        # Stop → Patient (zurück)
-        segments.append(
-            _build_segment(
-                entry=entry,
-                user_id=user.id,
-                segment_index=seg_index,
-                kind="intermediate",
-                from_address=stop,
-                from_coord=stop_coord,
-                to_address=patient_address,
-                to_coord=patient_coord,
-                ors=ors,
-            )
-        )
-        seg_index += 1
 
     db.add_all(segments)
     db.commit()
     for s in segments:
         db.refresh(s)
     return segments
+
+
+def create_home_commute_segment(
+    db: Session,
+    *,
+    entry: Entry,
+    user: User,
+    start_address: str,
+) -> TripSegment | None:
+    """Trip für den "Heimfahrt"-Entry-Type: eine einzelne Strecke von
+    start_address (frei oder Patienten-Adresse, wird vom Mobile schon
+    aufgelöst) zur Home-Adresse des Users.
+
+    Gibt None zurück wenn keine Home-Adresse hinterlegt ist — der Entry
+    bleibt dann trotzdem bestehen, aber ohne berechnete km.
+    """
+    home = get_home_location(db, user)
+    if home is None or not start_address:
+        return None
+
+    ors = OrsClient()
+    start_coord = _coord_for_address(ors, start_address)
+    end_coord: tuple[float, float] | None = None
+    if home.latitude is not None and home.longitude is not None:
+        end_coord = (home.longitude, home.latitude)
+
+    segment = _build_segment(
+        entry=entry,
+        user_id=user.id,
+        segment_index=0,
+        kind="return",
+        from_address=start_address,
+        from_coord=start_coord,
+        to_address=home.address_line,
+        to_coord=end_coord,
+        ors=ors,
+    )
+    db.add(segment)
+    db.commit()
+    db.refresh(segment)
+    return segment
 
 
 def user_km_for_month(

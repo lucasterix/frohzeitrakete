@@ -22,7 +22,10 @@ from app.models.entry import Entry
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, PatientHoursSummary
-from app.services.trip_service import create_trip_segments
+from app.services.trip_service import (
+    create_home_commute_segment,
+    create_trip_segments,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -218,6 +221,20 @@ def create_or_update_entry(
         if payload.entry_type == "patient":
             _sync_entry_to_patti(db, entry, delta_hours=entry.hours)
             _maybe_create_trip_segments(db, entry=entry, user=user, payload=payload)
+        elif payload.entry_type == "home_commute":
+            try:
+                create_home_commute_segment(
+                    db,
+                    entry=entry,
+                    user=user,
+                    start_address=(payload.home_commute_start_address or "").strip(),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "home_commute_segment_failed entry=%s error=%s",
+                    entry.id,
+                    exc,
+                )
         return entry
 
     # Stunden addieren, aber Deckel bei 8.0
