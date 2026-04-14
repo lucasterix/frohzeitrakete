@@ -829,6 +829,61 @@ export async function getAdminCallTasks(): Promise<AdminCallTask[]> {
   return response.json();
 }
 
+export type AdminPatientIntake = {
+  id: number;
+  requested_by_user_id: number | null;
+  full_name: string;
+  birthdate: string | null;
+  address: string | null;
+  phone: string | null;
+  contact_person: string | null;
+  care_level: string | null;
+  note: string | null;
+  status: string;
+  handled_by_user_id: number | null;
+  handled_at: string | null;
+  patti_patient_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getAdminPatientIntakes(
+  status?: string
+): Promise<AdminPatientIntake[]> {
+  const url = new URL(`${API_BASE_URL}/admin/patient-intakes`);
+  if (status) url.searchParams.set("status", status);
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Neuaufnahmen")
+    );
+  }
+  return response.json();
+}
+
+export async function resolveAdminPatientIntake(
+  id: number,
+  payload: { status: "done" | "rejected"; patti_patient_id?: number | null }
+): Promise<AdminPatientIntake> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/patient-intakes/${id}/resolve`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Abschließen der Neuaufnahme")
+    );
+  }
+  return response.json();
+}
+
 export async function markCaretakerChanged(
   patientId: number
 ): Promise<void> {

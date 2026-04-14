@@ -18,6 +18,7 @@ import {
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", Icon: DashboardIcon },
   { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon },
+  { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon },
   { href: "/admin/users", label: "User", Icon: UsersIcon },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon },
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },

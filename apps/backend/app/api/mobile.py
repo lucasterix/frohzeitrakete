@@ -29,7 +29,12 @@ from app.services.entry_service import (
     get_patient_hours_summary,
     list_entries_for_user,
 )
+from app.schemas.patient_intake import (
+    PatientIntakeCreate,
+    PatientIntakeResponse,
+)
 from app.services.call_request_service import create_call_request
+from app.services.patient_intake_service import create_intake
 from app.services.notification_service import (
     count_unread,
     list_user_notifications,
@@ -547,6 +552,43 @@ def mobile_notification_mark_read(
         )
     db.commit()
     return {"ok": True}
+
+
+@router.post(
+    "/patient-intakes",
+    response_model=PatientIntakeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def mobile_create_patient_intake(
+    payload: PatientIntakeCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Betreuer erfasst Basis-Stammdaten eines neuen Patienten.
+
+    Die Daten landen als `open` im Büro-Feed. Das Büro legt den Patienten
+    in Patti an und markiert den Intake danach als `done`.
+    """
+    intake = create_intake(
+        db,
+        requested_by_user_id=current_user.id,
+        full_name=payload.full_name,
+        birthdate=payload.birthdate,
+        address=payload.address,
+        phone=payload.phone,
+        contact_person=payload.contact_person,
+        care_level=payload.care_level,
+        note=payload.note,
+    )
+    notify_all_admins(
+        db,
+        kind="patient_intake_created",
+        title="Neue Patient-Aufnahme",
+        body=f"{current_user.full_name} hat {payload.full_name} erfasst",
+        related_entity_id=intake.id,
+    )
+    db.commit()
+    return PatientIntakeResponse.model_validate(intake)
 
 
 @router.post("/notifications/read-all")

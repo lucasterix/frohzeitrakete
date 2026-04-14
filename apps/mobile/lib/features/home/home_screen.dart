@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../entries/my_entries_screen.dart';
+import '../patients/patient_intake_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -528,14 +528,17 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 14),
 
-          // Patient neu aufnehmen – direkter Call ans Büro
+          // Patient neu aufnehmen – digitales Intake-Formular ans Büro
           Card(
             color: Colors.blue.withValues(alpha: 0.04),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () async {
-                final uri = Uri.parse('tel:+4955128879514');
-                await launchUrl(uri);
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PatientIntakeScreen(),
+                  ),
+                );
               },
               child: Padding(
                 padding: const EdgeInsets.all(18),
@@ -564,7 +567,7 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Neuaufnahme telefonisch im Büro anfragen',
+                            'Stammdaten direkt ans Büro senden',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.black54,
@@ -573,7 +576,7 @@ class HomeScreen extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.phone, color: Colors.blue),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.blue),
                   ],
                 ),
               ),

@@ -15,6 +15,10 @@ from app.schemas.patient import (
     TripSegmentResponse,
     UserTripSummary,
 )
+from app.schemas.patient_intake import (
+    PatientIntakeResolve,
+    PatientIntakeResponse,
+)
 from app.services.admin_tasks_service import collect_admin_tasks
 from app.services.call_request_service import (
     list_open_call_requests,
@@ -24,6 +28,7 @@ from app.services.patient_extras_service import (
     mark_office_call_done,
     mark_primary_caretaker_changed,
 )
+from app.services.patient_intake_service import list_intakes, resolve_intake
 from app.services.trip_service import user_km_for_month
 from app.services.work_report_service import build_work_report
 
@@ -138,6 +143,37 @@ def admin_user_trips(
         ),
         "segments": [TripSegmentResponse.model_validate(s) for s in segments],
     }
+
+
+@router.get("/patient-intakes", response_model=list[PatientIntakeResponse])
+def admin_list_patient_intakes(
+    status_filter: str | None = Query(None, alias="status"),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    return list_intakes(db, status=status_filter)
+
+
+@router.post(
+    "/patient-intakes/{intake_id}/resolve",
+    response_model=PatientIntakeResponse,
+)
+def admin_resolve_patient_intake(
+    intake_id: int,
+    payload: PatientIntakeResolve,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return resolve_intake(
+            db,
+            intake_id=intake_id,
+            handler_user_id=admin_user.id,
+            status=payload.status,
+            patti_patient_id=payload.patti_patient_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/patients/{patient_id}/caretaker-changed")

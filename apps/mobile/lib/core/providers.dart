@@ -12,6 +12,7 @@ import 'models/notification.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/entry_repository.dart';
 import 'repositories/notification_repository.dart';
+import 'repositories/patient_intake_repository.dart';
 import 'repositories/patient_repository.dart';
 import 'repositories/signature_repository.dart';
 
@@ -37,6 +38,10 @@ final entryRepositoryProvider = Provider<EntryRepository>(
 
 final notificationRepositoryProvider = Provider<NotificationRepository>(
   (ref) => NotificationRepository(ref.watch(apiClientProvider)),
+);
+
+final patientIntakeRepositoryProvider = Provider<PatientIntakeRepository>(
+  (ref) => PatientIntakeRepository(ref.watch(apiClientProvider)),
 );
 
 final notificationsProvider =
