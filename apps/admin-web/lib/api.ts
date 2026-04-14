@@ -231,6 +231,29 @@ export async function logout(): Promise<void> {
   });
 }
 
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/auth/change-password`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Ändern des Passworts")
+    );
+  }
+}
+
 export async function getMe(): Promise<User> {
   const response = await fetchWithRefresh(
     `${API_BASE_URL}/auth/me`,

@@ -22,7 +22,9 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       const data = await login({ email, password });
       onLoginSuccess(data.user);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Login fehlgeschlagen");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Login fehlgeschlagen"
+      );
     } finally {
       setLoading(false);
     }
@@ -31,30 +33,44 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      className="w-full rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50"
     >
-      <h2 className="mb-5 text-xl font-semibold">Login</h2>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+          Anmelden
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Melde dich mit deinem Account bei der Admin Console an.
+        </p>
+      </div>
 
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Email</span>
+          <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Email
+          </span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+            autoComplete="email"
+            placeholder="name@froehlichdienste.de"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-brand-400 focus:bg-white"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Passwort</span>
+          <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Passwort
+          </span>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+            autoComplete="current-password"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm outline-none transition focus:border-brand-400 focus:bg-white"
           />
         </label>
       </div>
@@ -62,16 +78,16 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-brand-600 px-4 py-3 text-sm font-medium text-white shadow-lg shadow-brand-900/30 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {loading ? "Loggt ein..." : "Einloggen"}
+        {loading ? "Anmelden …" : "Anmelden"}
       </button>
 
-      {errorMessage ? (
-        <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+      {errorMessage && (
+        <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {errorMessage}
         </p>
-      ) : null}
+      )}
     </form>
   );
 }
