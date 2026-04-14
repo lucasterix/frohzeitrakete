@@ -93,11 +93,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F3F7),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
+      // Kein GestureDetector-Wrap mehr: auf macOS/Web schluckt der manchmal
+      // die Text-Events. Auf Desktop gibt es kein Software-Keyboard, das wir
+      // per "Tap außerhalb" schließen müssten.
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -147,6 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _usernameController,
+                  autofocus: true,
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
                   enableSuggestions: false,
@@ -298,7 +300,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }
