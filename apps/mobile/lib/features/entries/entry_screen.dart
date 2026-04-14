@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/models/entry.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/models/signature_event.dart';
 import '../../core/models/user_home.dart';
 import '../../core/providers.dart';
+import '../../shared/widgets/address_autocomplete.dart';
 import '../signatures/signature_screen.dart';
 
 class EntryScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     'Begleitung',
   ];
 
+  EntryType _entryType = EntryType.patient;
+  final _categoryLabelCtrl = TextEditingController();
   MobilePatient? _selectedPatient;
   DateTime _selectedDate = DateTime.now();
   double? _hours;
@@ -41,8 +45,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   bool _tripInfoLoaded = false;
   UserHome? _userHome;
   bool _startFromHome = true;
-  final _startAddressCtrl = TextEditingController();
-  final List<TextEditingController> _intermediateStopCtrls = [];
+  String? _startAddress; // confirmed ORS label
+  final List<String?> _intermediateStopLabels = []; // confirmed labels
 
   @override
   void initState() {
@@ -53,10 +57,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   @override
   void dispose() {
-    _startAddressCtrl.dispose();
-    for (final c in _intermediateStopCtrls) {
-      c.dispose();
-    }
+    _categoryLabelCtrl.dispose();
     super.dispose();
   }
 
@@ -80,29 +81,30 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   }
 
   TripInput? _buildTripInput() {
-    // Nur Trip-Info senden wenn wir tatsächlich etwas erfassen wollen
+    // Nur für Patient-Einsätze Trip-Info senden
+    if (_entryType != EntryType.patient) return null;
     final hasStart = _isFirstEntryToday &&
-        (_startFromHome || _startAddressCtrl.text.trim().isNotEmpty);
-    final stops = _intermediateStopCtrls
-        .map((c) => c.text.trim())
-        .where((s) => s.isNotEmpty)
+        (_startFromHome ||
+            (_startAddress != null && _startAddress!.isNotEmpty));
+    final stops = _intermediateStopLabels
+        .where((s) => s != null && s.isNotEmpty)
+        .cast<String>()
         .toList();
     if (!hasStart && stops.isEmpty) return null;
     return TripInput(
       startFromHome: _startFromHome,
-      startAddress: _startFromHome ? null : _startAddressCtrl.text.trim(),
+      startAddress: _startFromHome ? null : _startAddress,
       intermediateStops: stops,
     );
   }
 
   void _addIntermediateStop() {
-    setState(() => _intermediateStopCtrls.add(TextEditingController()));
+    setState(() => _intermediateStopLabels.add(null));
   }
 
   void _removeIntermediateStop(int index) {
     setState(() {
-      _intermediateStopCtrls[index].dispose();
-      _intermediateStopCtrls.removeAt(index);
+      _intermediateStopLabels.removeAt(index);
     });
   }
 
@@ -135,11 +137,24 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   }
 
   Future<void> _save() async {
-    if (_selectedPatient == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte Patient wählen.')),
-      );
-      return;
+    if (_entryType == EntryType.patient) {
+      if (_selectedPatient == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bitte Patient wählen.')),
+        );
+        return;
+      }
+    } else {
+      if (_categoryLabelCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Bitte Beschreibung angeben (z.B. "${_entryType == EntryType.training ? 'Demenz-Schulung' : 'Monatsmeeting'}")',
+            ),
+          ),
+        );
+        return;
+      }
     }
     if (_hours == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -147,16 +162,15 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
       );
       return;
     }
-    if (_selectedActivities.isEmpty) {
+    if (_entryType == EntryType.patient && _selectedActivities.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte mindestens eine Tätigkeit.')),
       );
       return;
     }
 
-    // Budget-Check: wenn Patient nicht privat und die neuen Stunden das
-    // Restbudget überschreiten → Patient-Bestätigung einholen.
-    if (!_selectedPatient!.isPrivat) {
+    // Budget-Check nur für Patient-Einsätze und nicht-Privat
+    if (_entryType == EntryType.patient && !_selectedPatient!.isPrivat) {
       final budget = await ref.read(
         pattiBudgetProvider(
           PattiBudgetParams(
@@ -192,10 +206,18 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
     try {
       await ref.read(entryRepositoryProvider).createOrUpdateEntry(
-            patientId: _selectedPatient!.patientId,
+            patientId: _entryType == EntryType.patient
+                ? _selectedPatient?.patientId
+                : null,
+            entryType: _entryType,
+            categoryLabel: _entryType == EntryType.patient
+                ? null
+                : _categoryLabelCtrl.text.trim(),
             entryDate: _selectedDate,
             hours: _hours!,
-            activities: _selectedActivities.toList(),
+            activities: _entryType == EntryType.patient
+                ? _selectedActivities.toList()
+                : const [],
             trip: _buildTripInput(),
           );
 
@@ -209,23 +231,34 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
       if (!mounted) return;
 
-      // Direkt zur Unterschrift – der Patient unterschreibt jeden einzelnen Einsatz.
-      final patient = _selectedPatient!;
-      final dateStr =
-          '${_selectedDate.day.toString().padLeft(2, '0')}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.year}';
-      final signed = await Navigator.of(context).pushReplacement<bool, void>(
-        MaterialPageRoute(
-          builder: (_) => SignatureScreen(
-            patient: patient,
-            documentType: DocumentType.leistungsnachweis,
-            documentTitle:
-                'Einsatz vom $dateStr · ${_formatHours(_hours!)}',
+      // Signatur nur für Patient-Einsätze
+      if (_entryType == EntryType.patient) {
+        final patient = _selectedPatient!;
+        final dateStr =
+            '${_selectedDate.day.toString().padLeft(2, '0')}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.year}';
+        final signed = await Navigator.of(context).pushReplacement<bool, void>(
+          MaterialPageRoute(
+            builder: (_) => SignatureScreen(
+              patient: patient,
+              documentType: DocumentType.leistungsnachweis,
+              documentTitle:
+                  'Einsatz vom $dateStr · ${_formatHours(_hours!)}',
+            ),
           ),
-        ),
-      );
-
-      if (signed == true) {
-        ref.invalidate(mySignaturesProvider);
+        );
+        if (signed == true) {
+          ref.invalidate(mySignaturesProvider);
+        }
+      } else {
+        // Office/Training: direkt zurück mit Erfolgs-SnackBar
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_entryType.label} gespeichert: ${_formatHours(_hours!)}',
+            ),
+          ),
+        );
       }
       return;
     } on ApiException catch (e) {
@@ -250,10 +283,13 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     }
   }
 
-  bool get _canSave =>
-      _selectedPatient != null &&
-      _hours != null &&
-      _selectedActivities.isNotEmpty;
+  bool get _canSave {
+    if (_hours == null) return false;
+    if (_entryType == EntryType.patient) {
+      return _selectedPatient != null && _selectedActivities.isNotEmpty;
+    }
+    return _categoryLabelCtrl.text.trim().isNotEmpty;
+  }
 
   Future<bool?> _showOverBudgetConfirm({
     required double remaining,
@@ -331,10 +367,68 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Patient
-                  _label('Patient'),
+                  // Typ-Selector
+                  _label('Art des Einsatzes'),
                   const SizedBox(height: 8),
-                  _buildPatientDropdown(),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: EntryType.values.map((t) {
+                      final selected = _entryType == t;
+                      return ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(t.icon),
+                            const SizedBox(width: 4),
+                            Text(t.label),
+                          ],
+                        ),
+                        selected: selected,
+                        onSelected: (_) => setState(() {
+                          _entryType = t;
+                          if (t != EntryType.patient) {
+                            _selectedActivities.clear();
+                          }
+                        }),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Patient-Dropdown oder Label-Field
+                  if (_entryType == EntryType.patient) ...[
+                    _label('Patient'),
+                    const SizedBox(height: 8),
+                    _buildPatientDropdown(),
+                  ] else ...[
+                    _label(_entryType == EntryType.training
+                        ? 'Fortbildungs-Titel'
+                        : 'Beschreibung'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _categoryLabelCtrl,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: _entryType == EntryType.training
+                            ? 'z.B. Demenz verstehen'
+                            : _entryType == EntryType.office
+                                ? 'z.B. Monats-Teamsitzung'
+                                : 'Worum ging es?',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Colors.black12),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 20),
 
@@ -427,72 +521,74 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                     }).toList(),
                   ),
 
-                  const SizedBox(height: 24),
-
-                  // Aktivitäten als Chips
-                  Row(
-                    children: [
-                      _label('Tätigkeiten'),
-                      if (_selectedActivities.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: green.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${_selectedActivities.length}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: green,
-                              fontWeight: FontWeight.w700,
+                  if (_entryType == EntryType.patient) ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        _label('Tätigkeiten'),
+                        if (_selectedActivities.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: green.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${_selectedActivities.length}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: green,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _activities.map((activity) {
-                      final selected = _selectedActivities.contains(activity);
-                      return FilterChip(
-                        label: Text(activity),
-                        selected: selected,
-                        onSelected: (v) {
-                          setState(() {
-                            if (v) {
-                              _selectedActivities.add(activity);
-                            } else {
-                              _selectedActivities.remove(activity);
-                            }
-                          });
-                        },
-                        selectedColor: green.withValues(alpha: 0.2),
-                        checkmarkColor: green,
-                        labelStyle: TextStyle(
-                          color: selected ? green : Colors.black87,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.normal,
-                        ),
-                        backgroundColor: Colors.white,
-                        side: BorderSide(
-                          color: selected
-                              ? green.withValues(alpha: 0.5)
-                              : Colors.black12,
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _activities.map((activity) {
+                        final selected =
+                            _selectedActivities.contains(activity);
+                        return FilterChip(
+                          label: Text(activity),
+                          selected: selected,
+                          onSelected: (v) {
+                            setState(() {
+                              if (v) {
+                                _selectedActivities.add(activity);
+                              } else {
+                                _selectedActivities.remove(activity);
+                              }
+                            });
+                          },
+                          selectedColor: green.withValues(alpha: 0.2),
+                          checkmarkColor: green,
+                          labelStyle: TextStyle(
+                            color: selected ? green : Colors.black87,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: selected
+                                ? green.withValues(alpha: 0.5)
+                                : Colors.black12,
+                          ),
+                        );
+                      }).toList(),
+                    ),
 
-                  const SizedBox(height: 24),
-                  _buildTripSection(),
+                    const SizedBox(height: 24),
+                    _buildTripSection(),
+                  ],
                 ],
               ),
             ),
@@ -685,13 +781,14 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                 ],
                 if (!_startFromHome) ...[
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _startAddressCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Start-Adresse',
-                      hintText: 'z.B. Musterstraße 12, 37073 Göttingen',
-                      isDense: true,
-                    ),
+                  AddressAutocomplete(
+                    label: 'Start-Adresse',
+                    hint: 'z.B. Musterstraße 12, 37073 Göttingen',
+                    initialValue: _startAddress ?? '',
+                    onAddressSelected: (label) {
+                      setState(() => _startAddress = label);
+                    },
+                    onCleared: () => setState(() => _startAddress = null),
                   ),
                 ],
               ],
@@ -737,7 +834,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ),
-              if (_intermediateStopCtrls.isEmpty)
+              if (_intermediateStopLabels.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 6),
                   child: Text(
@@ -750,19 +847,24 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                   ),
                 )
               else
-                ..._intermediateStopCtrls.asMap().entries.map(
+                ..._intermediateStopLabels.asMap().entries.map(
                       (e) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
                             Expanded(
-                              child: TextField(
-                                controller: e.value,
-                                decoration: InputDecoration(
-                                  labelText: 'Ziel ${e.key + 1}',
-                                  hintText: 'Adresse des Ziels',
-                                  isDense: true,
-                                ),
+                              child: AddressAutocomplete(
+                                label: 'Ziel ${e.key + 1}',
+                                hint: 'Adresse tippen…',
+                                initialValue: e.value ?? '',
+                                onAddressSelected: (label) {
+                                  setState(() {
+                                    _intermediateStopLabels[e.key] = label;
+                                  });
+                                },
+                                onCleared: () => setState(() {
+                                  _intermediateStopLabels[e.key] = null;
+                                }),
                               ),
                             ),
                             IconButton(

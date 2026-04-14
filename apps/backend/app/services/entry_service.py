@@ -143,45 +143,70 @@ def _resolve_patient_address(patient_id: int) -> str | None:
 def create_or_update_entry(
     db: Session, user: User, payload: EntryCreate
 ) -> Entry:
-    """Wenn für (user, patient, date) schon ein Eintrag existiert: Stunden
-    addieren (bis max 8.0), Tätigkeiten mergen. Sonst neu anlegen.
+    """Erzeugt oder addiert einen Einsatz.
 
-    Nach dem Speichern in unserer DB wird best-effort in Patti synchronisiert
-    (nicht-blockierend – Patti-Fehler sollen den Mobile-Flow nicht aufhalten).
+    3 Fälle:
+    - entry_type=patient + patient_id gesetzt: pro (user, patient, date)
+      wird gesucht. Existiert schon einer → Stunden addieren + Tätigkeiten
+      mergen. Ansonsten neu anlegen. Patti-Sync läuft danach (delta_hours).
+    - entry_type!=patient (office/training/other): pro (user, date, type)
+      wird gesucht. Stunden addieren bei Match. Kein Patient, kein Patti-Sync.
     """
 
     user_id = user.id
 
-    # Lock-Check
-    if _month_is_locked(
-        db,
-        user_id=user_id,
-        patient_id=payload.patient_id,
-        year=payload.entry_date.year,
-        month=payload.entry_date.month,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Der Leistungsnachweis für diesen Monat wurde bereits unterschrieben. "
-            "Einträge können nicht mehr geändert werden.",
-        )
+    # Validierung für Patient-Einsätze
+    if payload.entry_type == "patient":
+        if payload.patient_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="patient_id ist für entry_type=patient erforderlich",
+            )
+        # Lock-Check nur für Patient-Einsätze (Leistungsnachweis ist pro Patient+Monat)
+        if _month_is_locked(
+            db,
+            user_id=user_id,
+            patient_id=payload.patient_id,
+            year=payload.entry_date.year,
+            month=payload.entry_date.month,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Der Leistungsnachweis für diesen Monat wurde bereits unterschrieben. "
+                "Einträge können nicht mehr geändert werden.",
+            )
 
-    existing = (
-        db.query(Entry)
-        .filter(
-            Entry.user_id == user_id,
-            Entry.patient_id == payload.patient_id,
-            Entry.entry_date == payload.entry_date,
+        existing = (
+            db.query(Entry)
+            .filter(
+                Entry.user_id == user_id,
+                Entry.patient_id == payload.patient_id,
+                Entry.entry_date == payload.entry_date,
+                Entry.entry_type == "patient",
+            )
+            .first()
         )
-        .first()
-    )
+    else:
+        # Office/Training/Other: pro (user, date, type) max 1 Eintrag
+        existing = (
+            db.query(Entry)
+            .filter(
+                Entry.user_id == user_id,
+                Entry.entry_date == payload.entry_date,
+                Entry.entry_type == payload.entry_type,
+                Entry.patient_id.is_(None),
+            )
+            .first()
+        )
 
     new_activities_str = ", ".join(payload.activities) if payload.activities else ""
 
     if existing is None:
         entry = Entry(
             user_id=user_id,
-            patient_id=payload.patient_id,
+            patient_id=payload.patient_id if payload.entry_type == "patient" else None,
+            entry_type=payload.entry_type,
+            category_label=payload.category_label,
             entry_date=payload.entry_date,
             hours=payload.hours,
             activities=new_activities_str,
@@ -190,9 +215,9 @@ def create_or_update_entry(
         db.add(entry)
         db.commit()
         db.refresh(entry)
-        # Erstaufnahme → komplette Stunden nach Patti
-        _sync_entry_to_patti(db, entry, delta_hours=entry.hours)
-        _maybe_create_trip_segments(db, entry=entry, user=user, payload=payload)
+        if payload.entry_type == "patient":
+            _sync_entry_to_patti(db, entry, delta_hours=entry.hours)
+            _maybe_create_trip_segments(db, entry=entry, user=user, payload=payload)
         return entry
 
     # Stunden addieren, aber Deckel bei 8.0
@@ -220,16 +245,14 @@ def create_or_update_entry(
 
     db.commit()
     db.refresh(existing)
-    # Nur das Delta nach Patti, sonst doppelt gezählt
-    _sync_entry_to_patti(db, existing, delta_hours=payload.hours)
-    # Bei same-day-append: Trip-Segmente nur generieren wenn der User
-    # tatsächlich welche mitgeschickt hat. Der Start-Trip wurde beim
-    # ersten Einsatz des Tages angelegt und soll nicht dupliziert werden.
-    if payload.trip is not None and (
-        payload.trip.intermediate_stops
-        or not payload.trip.start_from_home  # manuelle Start-Adresse
-    ):
-        _maybe_create_trip_segments(db, entry=existing, user=user, payload=payload)
+    # Patti-Sync und Trip-Segments nur für Patient-Einsätze
+    if payload.entry_type == "patient":
+        _sync_entry_to_patti(db, existing, delta_hours=payload.hours)
+        if payload.trip is not None and (
+            payload.trip.intermediate_stops
+            or not payload.trip.start_from_home
+        ):
+            _maybe_create_trip_segments(db, entry=existing, user=user, payload=payload)
     return existing
 
 

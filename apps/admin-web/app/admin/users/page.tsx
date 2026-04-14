@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import UserForm from "@/components/user-form";
+import Link from "next/link";
 import UserEditForm from "@/components/user-edit-form";
 import UserSessionList from "@/components/user-session-list";
 import UserDangerZone from "@/components/user-danger-zone";
@@ -233,6 +234,14 @@ export default function AdminUsersPage() {
 
                     {isExpanded && (
                       <div className="border-t border-slate-200 bg-white px-4 py-5">
+                        <div className="mb-4">
+                          <Link
+                            href={`/admin/users/${user.id}/report`}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                          >
+                            📊 Monats-Report öffnen (Stunden + km)
+                          </Link>
+                        </div>
                         <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
                           <div className="space-y-5">
                             <UserEditForm user={user} onUpdated={loadUsers} />

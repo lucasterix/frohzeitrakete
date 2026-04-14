@@ -16,16 +16,19 @@ from app.db.base import Base
 
 
 class Entry(Base):
-    """Tageseinsatz einer Betreuungskraft bei einem Patienten.
+    """Einsatz einer Betreuungskraft. Kann ein Patient-Einsatz sein (Default)
+    oder ein interner Einsatz wie Büro-Tag / Fortbildung — dann ist
+    patient_id NULL und entry_type entsprechend gesetzt.
 
-    MVP-Fachregeln (siehe docs):
-    - Pro (user_id, patient_id, entry_date) genau 1 Eintrag → UniqueConstraint.
-      Gleicher Tag = Stunden addieren, kein neuer Datensatz (im Service gelöst).
-    - hours: 0.5-Schritte, 0.5 <= x <= 8.0 → Validierung im Schema/Service.
-    - Einträge in der Zukunft nicht erlaubt → Service prüft entry_date <= today.
-    - Keine Bemerkungen im MVP (note bleibt vorerst leer aber Spalte da).
-    - activities: kommagetrennter String (z.B. "Hauswirtschaft, Vorlesen").
-      Einfach, index-bar, keine JSON-Column nötig für MVP.
+    MVP-Fachregeln:
+    - Für Patient-Einsätze: pro (user, patient, date) genau 1 Eintrag,
+      Stunden werden sonst addiert. (UniqueConstraint funktioniert nur für
+      non-null patient_id; NULL-Werte umgeht der Constraint automatisch.)
+    - Für non-patient Einsätze: pro (user, date, entry_type) genau 1 Eintrag,
+      Stunden werden im Service addiert (kein DB-Constraint weil sonst
+      partial-unique-index nötig wäre).
+    - hours: 0.5-Schritte, 0.5 <= x <= 8.0 → Schema/Service.
+    - Keine Zukunftsdaten → Schema prüft entry_date <= today.
     """
 
     __tablename__ = "entries"
@@ -43,7 +46,18 @@ class Entry(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    patient_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # Null bei non-patient Einsätzen (Büro, Fortbildung, …)
+    patient_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
+
+    # entry_type: "patient" (default) | "office" | "training" | "other"
+    entry_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="patient", index=True
+    )
+    # Freitext-Label bei non-patient Einsätzen, z.B.
+    # "Büro-Tag", "Fortbildung: Demenz verstehen"
+    category_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     entry_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     hours: Mapped[float] = mapped_column(Float, nullable=False)

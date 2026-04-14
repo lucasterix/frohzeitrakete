@@ -103,6 +103,58 @@ class OrsClient:
         wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
         reraise=True,
     )
+    def autocomplete(
+        self, query: str, size: int = 5
+    ) -> list[dict[str, object]]:
+        """Autocomplete address search.
+
+        Returns a list of candidates: [{label, lon, lat}]. Used by the mobile
+        app to validate addresses while the user types them, preventing typos
+        and invalid strings from going into the database.
+        """
+        self._require_key()
+        try:
+            response = requests.get(
+                f"{self.base_url}/geocode/autocomplete",
+                params={
+                    "api_key": self.api_key,
+                    "text": query,
+                    "size": str(size),
+                    "boundary.country": "DE",
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            results: list[dict[str, object]] = []
+            for feature in data.get("features", []):
+                coords = feature.get("geometry", {}).get("coordinates") or []
+                props = feature.get("properties", {})
+                label = props.get("label")
+                if not label or len(coords) != 2:
+                    continue
+                results.append(
+                    {
+                        "label": label,
+                        "longitude": coords[0],
+                        "latitude": coords[1],
+                    }
+                )
+            return results
+        except requests.exceptions.HTTPError as e:
+            logger.warning(
+                "ors_autocomplete_failed",
+                query=query,
+                status=e.response.status_code if e.response else None,
+            )
+            return []
+
+    @retry(
+        retry=retry_if_exception_type(_TRANSIENT_EXCEPTIONS),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+        reraise=True,
+    )
     def route_distance_km(
         self,
         from_coords: tuple[float, float],

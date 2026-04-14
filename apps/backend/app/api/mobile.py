@@ -313,6 +313,25 @@ def mobile_patient_caretaker_history(
     return get_caretaker_history(patient_id)
 
 
+@router.get("/geocode/autocomplete")
+def mobile_geocode_autocomplete(
+    q: str = Query(..., min_length=3, max_length=200),
+    current_user: User = Depends(get_current_user),
+):
+    """Live-Adress-Autocomplete während der Nutzer tippt.
+
+    Hits OpenRouteService. Returns a list of {label, longitude, latitude}
+    candidates. Used by the mobile app to validate addresses for trip
+    tracking — user can tap a result and we save the exact ORS-normalized
+    label, eliminating typos.
+    """
+    from app.clients.ors_client import OrsClient
+    client = OrsClient()
+    if not client.is_configured:
+        return []
+    return client.autocomplete(q.strip(), size=6)
+
+
 @router.get("/user/home", response_model=UserHomeResponse | None)
 def mobile_get_user_home(
     current_user: User = Depends(get_current_user),

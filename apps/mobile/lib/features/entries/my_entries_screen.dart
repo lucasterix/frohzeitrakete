@@ -70,7 +70,8 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
     );
     final patientsAsync = ref.watch(patientsProvider);
 
-    String patientName(int id) {
+    String patientName(int? id) {
+      if (id == null) return 'Büro / Fortbildung';
       final patients = patientsAsync.valueOrNull ?? const [];
       final match = patients.where((p) => p.patientId == id);
       return match.isEmpty ? 'Patient #$id' : match.first.displayName;
@@ -276,7 +277,7 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
 
   Widget _buildCalendarView(
     List<Entry> entries,
-    String Function(int) patientName,
+    String Function(int?) patientName,
   ) {
     const green = Color(0xFF4F8A5B);
 
@@ -447,7 +448,7 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
 
   List<Widget> _groupedEntries(
     List<Entry> entries,
-    String Function(int) patientName,
+    String Function(int?) patientName,
   ) {
     const green = Color(0xFF4F8A5B);
 

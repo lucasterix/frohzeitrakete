@@ -1,8 +1,31 @@
+/// Typ des Einsatzes. Patient = normaler Betreuungseinsatz, Büro/Fortbildung
+/// sind interne Arbeitszeit ohne Patient.
+enum EntryType {
+  patient('patient', 'Patient', '👤'),
+  office('office', 'Büro', '🏢'),
+  training('training', 'Fortbildung', '🎓'),
+  other('other', 'Sonstiges', '📋');
+
+  final String apiValue;
+  final String label;
+  final String icon;
+  const EntryType(this.apiValue, this.label, this.icon);
+
+  static EntryType fromApi(String value) {
+    for (final t in EntryType.values) {
+      if (t.apiValue == value) return t;
+    }
+    return EntryType.patient;
+  }
+}
+
 class Entry {
   final int id;
   final int userId;
   final String? userName;
-  final int patientId;
+  final int? patientId;
+  final EntryType entryType;
+  final String? categoryLabel;
   final DateTime entryDate;
   final double hours;
   final List<String> activities;
@@ -15,7 +38,9 @@ class Entry {
     required this.id,
     required this.userId,
     this.userName,
-    required this.patientId,
+    this.patientId,
+    this.entryType = EntryType.patient,
+    this.categoryLabel,
     required this.entryDate,
     required this.hours,
     required this.activities,
@@ -30,7 +55,9 @@ class Entry {
       id: json['id'] as int,
       userId: json['user_id'] as int,
       userName: json['user_name'] as String?,
-      patientId: json['patient_id'] as int,
+      patientId: json['patient_id'] as int?,
+      entryType: EntryType.fromApi((json['entry_type'] as String?) ?? 'patient'),
+      categoryLabel: json['category_label'] as String?,
       entryDate: DateTime.parse(json['entry_date'] as String),
       hours: (json['hours'] as num).toDouble(),
       activities: (json['activities'] as List).cast<String>(),
@@ -42,6 +69,28 @@ class Entry {
   }
 
   bool get isLocked => signatureEventId != null;
+  bool get isPatientEntry => entryType == EntryType.patient;
+}
+
+/// Autocomplete-Vorschlag vom ORS Geocode Service.
+class AddressSuggestion {
+  final String label;
+  final double longitude;
+  final double latitude;
+
+  const AddressSuggestion({
+    required this.label,
+    required this.longitude,
+    required this.latitude,
+  });
+
+  factory AddressSuggestion.fromJson(Map<String, dynamic> json) {
+    return AddressSuggestion(
+      label: json['label'] as String,
+      longitude: (json['longitude'] as num).toDouble(),
+      latitude: (json['latitude'] as num).toDouble(),
+    );
+  }
 }
 
 class PatientHoursSummary {

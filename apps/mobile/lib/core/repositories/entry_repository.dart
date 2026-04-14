@@ -11,18 +11,23 @@ class EntryRepository {
   EntryRepository(this._client);
 
   Future<Entry> createOrUpdateEntry({
-    required int patientId,
+    int? patientId,
     required DateTime entryDate,
     required double hours,
     required List<String> activities,
     String? note,
     TripInput? trip,
+    EntryType entryType = EntryType.patient,
+    String? categoryLabel,
   }) async {
     try {
       final response = await _client.dio.post(
         '/mobile/entries',
         data: <String, dynamic>{
-          'patient_id': patientId,
+          if (patientId != null) 'patient_id': patientId,
+          'entry_type': entryType.apiValue,
+          if (categoryLabel != null && categoryLabel.isNotEmpty)
+            'category_label': categoryLabel,
           'entry_date':
               '${entryDate.year}-${entryDate.month.toString().padLeft(2, '0')}-${entryDate.day.toString().padLeft(2, '0')}',
           'hours': hours,
@@ -129,6 +134,27 @@ class EntryRepository {
       return true; // Im Zweifel: fragen (defensiv)
     } on DioException {
       return true;
+    }
+  }
+
+  /// Live-Adress-Autocomplete. Ruft den Backend-Proxy auf, der ORS
+  /// anfragt. Mindestens 3 Zeichen, debouncing macht der Caller.
+  Future<List<AddressSuggestion>> autocompleteAddress(String query) async {
+    if (query.trim().length < 3) return [];
+    try {
+      final response = await _client.dio.get(
+        '/mobile/geocode/autocomplete',
+        queryParameters: {'q': query},
+      );
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .map((e) =>
+                AddressSuggestion.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } on DioException {
+      return [];
     }
   }
 

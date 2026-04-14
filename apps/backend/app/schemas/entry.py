@@ -11,12 +11,16 @@ class TripInputSchema(BaseModel):
 
 
 class EntryCreate(BaseModel):
-    patient_id: int
+    # Optional für non-patient Einsätze (office/training)
+    patient_id: int | None = None
     entry_date: date
     hours: float = Field(gt=0, le=8.0)
     activities: list[str] = Field(default_factory=list)
     note: str | None = None
     trip: TripInputSchema | None = None
+    # patient (default) | office | training | other
+    entry_type: str = Field(default="patient", pattern="^(patient|office|training|other)$")
+    category_label: str | None = None
 
     @field_validator("hours")
     @classmethod
@@ -40,7 +44,9 @@ class EntryResponse(BaseModel):
     id: int
     user_id: int
     user_name: str | None = None
-    patient_id: int
+    patient_id: int | None = None
+    entry_type: str = "patient"
+    category_label: str | None = None
     entry_date: date
     hours: float
     activities: list[str]
@@ -53,14 +59,13 @@ class EntryResponse(BaseModel):
 
     @classmethod
     def from_orm_entry(cls, entry, user_name: str | None = None) -> "EntryResponse":
-        """Helper: Entry ORM hat `activities` als String, wir splitten zu Liste.
-        `user_name` wird für Vertretungs-Anzeige durchgereicht.
-        """
         return cls(
             id=entry.id,
             user_id=entry.user_id,
             user_name=user_name,
             patient_id=entry.patient_id,
+            entry_type=entry.entry_type or "patient",
+            category_label=entry.category_label,
             entry_date=entry.entry_date,
             hours=entry.hours,
             activities=[a.strip() for a in entry.activities.split(",") if a.strip()]

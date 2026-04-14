@@ -25,6 +25,7 @@ from app.services.patient_extras_service import (
     mark_primary_caretaker_changed,
 )
 from app.services.trip_service import user_km_for_month
+from app.services.work_report_service import build_work_report
 
 router = APIRouter()
 
@@ -79,6 +80,34 @@ def admin_mark_office_call(
     """Markiert einen Büro-Anruf als erledigt (setzt last_office_call_at)."""
     mark_office_call_done(db, patient_id)
     return {"ok": True}
+
+
+@router.get("/users/{user_id}/work-report")
+def admin_user_work_report(
+    user_id: int,
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Vollständiger Mitarbeiter-Bericht für einen Monat.
+
+    Response:
+        {
+          user: {id, email, full_name, role},
+          year, month,
+          total_hours, total_km, working_days,
+          days: [
+            {
+              date,
+              entries: [{type, patient_name|label, hours, activities, ...}],
+              trips:   [{kind, from, to, km}],
+              day_hours, day_km
+            }
+          ]
+        }
+    """
+    return build_work_report(db, user_id=user_id, year=year, month=month)
 
 
 @router.get("/users/{user_id}/trips")

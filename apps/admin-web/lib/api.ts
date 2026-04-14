@@ -708,3 +708,123 @@ export async function getMyMobileSignature(
 
   return response.json();
 }
+
+/* =========================
+   WORK REPORT (ADMIN)
+========================= */
+
+export type WorkReportEntry = {
+  id: number;
+  type: "patient" | "office" | "training" | "other";
+  patient_id: number | null;
+  patient_name: string | null;
+  label: string | null;
+  hours: number;
+  activities: string[];
+  note: string | null;
+};
+
+export type WorkReportTrip = {
+  id: number;
+  kind: "start" | "intermediate" | "return";
+  from_address: string;
+  to_address: string;
+  distance_km: number | null;
+};
+
+export type WorkReportDay = {
+  date: string;
+  entries: WorkReportEntry[];
+  trips: WorkReportTrip[];
+  day_hours: number;
+  day_km: number;
+};
+
+export type WorkReport = {
+  user: {
+    id: number;
+    email: string;
+    full_name: string;
+    role: string;
+  };
+  year: number;
+  month: number;
+  total_hours: number;
+  total_km: number;
+  working_days: number;
+  days: WorkReportDay[];
+};
+
+export async function getUserWorkReport(
+  userId: number,
+  year: number,
+  month: number
+): Promise<WorkReport> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/work-report?year=${year}&month=${month}`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden des Work-Reports")
+    );
+  }
+
+  return response.json();
+}
+
+/* =========================
+   ADMIN CALL TASKS
+========================= */
+
+export type AdminCallTask = {
+  kind:
+    | "call_request"
+    | "new_caretaker_followup"
+    | "half_year_check"
+    | "no_invoice_2_months"
+    | "missing_emergency_contact"
+    | "missing_contract";
+  priority: "high" | "medium" | "low";
+  patient_id: number;
+  title: string;
+  subtitle: string;
+  created_at: string;
+  source_id: number | null;
+  requested_by_user_id?: number | null;
+};
+
+export async function getAdminCallTasks(): Promise<AdminCallTask[]> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/call-tasks`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Aufgaben")
+    );
+  }
+  return response.json();
+}
+
+export async function markOfficeCallDone(patientId: number): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/patients/${patientId}/office-call-done`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Markieren als erledigt")
+    );
+  }
+}
