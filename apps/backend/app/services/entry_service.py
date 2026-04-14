@@ -358,12 +358,12 @@ def delete_entry_for_user(db: Session, user_id: int, entry_id: int) -> None:
             client = PattiClient()
             client.login()
             client.delete_service_entry(patti_id)
-            logger.info("patti_service_entry_deleted", patti_id=patti_id)
+            logger.info("patti_service_entry_deleted id=%s", patti_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "patti_service_entry_delete_failed",
-                patti_id=patti_id,
-                error=str(exc),
+                "patti_service_entry_delete_failed id=%s: %s",
+                patti_id,
+                exc,
             )
 
 
@@ -422,9 +422,9 @@ def update_entry_for_user(
         _sync_entry_to_patti(db, entry, delta_hours=delta_hours)
     elif entry.entry_type == "patient" and delta_hours < 0:
         logger.warning(
-            "entry_hours_reduced_patti_out_of_sync",
-            entry_id=entry.id,
-            delta_hours=delta_hours,
+            "entry_hours_reduced_patti_out_of_sync entry=%s delta=%s",
+            entry.id,
+            delta_hours,
         )
 
     return entry

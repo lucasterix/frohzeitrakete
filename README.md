@@ -82,6 +82,9 @@ Detailliertes Architektur-Dokument: [`docs/architecture.md`](docs/architecture.m
 - **Riverpod** — State Management
 - **Dio** + **dio_cookie_manager** — HTTP-Client mit persistenten Cookies
 - **shared_preferences** — lokale Einstellungen
+- **sqflite** + **connectivity_plus** — Offline-Queue mit automatischem Sync
+- **sentry_flutter** — Error-Monitoring (per `--dart-define=SENTRY_DSN=...`)
+- **local_auth** — FaceID / TouchID / Android-Biometrie
 
 ### Infrastruktur (`infra/staging`)
 - **Docker Compose** — Postgres, Backend, Admin Web, Caddy
@@ -185,6 +188,9 @@ jedem Push auf `main` — Details siehe [`docs/deployment.md`](docs/deployment.m
 - [Architektur](docs/architecture.md) — Komponenten, Datenflüsse, Auth-Modell, Datenmodell
 - [API-Referenz](docs/api.md) — Alle HTTP-Endpunkte mit Beispielen
 - [Deployment](docs/deployment.md) — CI/CD, Server-Setup, Migrationen, Rollback
+- [Ops-Handbuch](infra/OPS.md) — Monitoring, Prod/Staging-Split, Incident-Response
+- [Mobile Release Guide](infra/mobile/RELEASE.md) — Bundle-IDs, Keystore, TestFlight, Play Store
+- [Erst-Setup Script](infra/setup/first_time_setup.sh) — One-Shot Bootstrap für neue Hetzner-Hosts
 
 ---
 
