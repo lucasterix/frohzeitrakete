@@ -324,12 +324,29 @@ def mobile_geocode_autocomplete(
     candidates. Used by the mobile app to validate addresses for trip
     tracking — user can tap a result and we save the exact ORS-normalized
     label, eliminating typos.
+
+    Error cases:
+    - ORS_API_KEY not set → 503 Service Unavailable, mobile app shows
+      a fallback "Freitext trotzdem übernehmen" option
+    - ORS call fails (quota, 5xx) → 502 Bad Gateway so the mobile app
+      can tell the user to retry
     """
     from app.clients.ors_client import OrsClient
     client = OrsClient()
     if not client.is_configured:
-        return []
-    return client.autocomplete(q.strip(), size=6)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Adress-Autocomplete ist nicht konfiguriert "
+            "(ORS_API_KEY fehlt auf dem Server).",
+        )
+    try:
+        results = client.autocomplete(q.strip(), size=6)
+        return results
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Adress-Dienst nicht erreichbar: {exc}",
+        )
 
 
 @router.get("/user/home", response_model=UserHomeResponse | None)

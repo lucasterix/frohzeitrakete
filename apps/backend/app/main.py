@@ -77,6 +77,38 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/health/ors")
+def health_ors():
+    """Status der OpenRouteService-Integration für Km-/Fahrtkosten-Tracking.
+
+    - configured: ORS_API_KEY ist gesetzt?
+    - live_ok: ein Mini-Test-Request an ORS hat funktioniert?
+
+    Ohne Auth bewusst – das Debugging wäre sonst pain, wenn das Mobile
+    App nichts findet. Leakt nur ob ein Key gesetzt ist, nicht welcher.
+    """
+    from app.clients.ors_client import OrsClient
+    client = OrsClient()
+    configured = client.is_configured
+    live_ok = False
+    error: str | None = None
+    if configured:
+        try:
+            results = client.autocomplete("Berlin", size=1)
+            live_ok = len(results) > 0
+            if not live_ok:
+                error = "autocomplete returned 0 results for 'Berlin'"
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)[:200]
+    else:
+        error = "ORS_API_KEY env var not set"
+    return {
+        "configured": configured,
+        "live_ok": live_ok,
+        "error": error,
+    }
+
+
 @app.get("/health/ready")
 def ready():
     """Readiness: prüft DB-Verbindung. Wird von Docker-Healthcheck genutzt."""
