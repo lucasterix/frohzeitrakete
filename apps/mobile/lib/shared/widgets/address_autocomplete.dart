@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/models/entry.dart';
 import '../../core/providers.dart';
 
@@ -47,6 +48,7 @@ class _AddressAutocompleteState extends ConsumerState<AddressAutocomplete> {
   bool _loading = false;
   bool _confirmed = false;
   String? _error;
+  bool _serviceUnavailable = false; // 503/502 → Freitext-Fallback
 
   @override
   void initState() {
@@ -86,15 +88,41 @@ class _AddressAutocompleteState extends ConsumerState<AddressAutocomplete> {
       setState(() {
         _suggestions = results;
         _loading = false;
-        _error = results.isEmpty ? 'Keine Treffer' : null;
+        _serviceUnavailable = false;
+        _error = results.isEmpty
+            ? 'Keine Treffer – Adresse genauer eingeben oder trotzdem verwenden'
+            : null;
       });
-    } catch (e) {
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _suggestions = const [];
+        // 503 / 502 → Backend oder ORS nicht erreichbar
+        _serviceUnavailable =
+            e.statusCode == 503 || e.statusCode == 502;
+        _error = _serviceUnavailable
+            ? 'Adress-Prüfung aktuell nicht verfügbar'
+            : e.message;
+      });
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Suche fehlgeschlagen';
       });
     }
+  }
+
+  void _acceptFreitext() {
+    final value = _ctrl.text.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      _confirmed = true;
+      _suggestions = const [];
+      _error = null;
+    });
+    widget.onAddressSelected(value);
   }
 
   void _pick(AddressSuggestion s) {
@@ -158,19 +186,62 @@ class _AddressAutocompleteState extends ConsumerState<AddressAutocomplete> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.black12),
+              border: Border.all(
+                color: _serviceUnavailable
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.black12,
+              ),
             ),
             child: Column(
               children: [
                 if (_error != null && _suggestions.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _serviceUnavailable
+                                  ? Icons.cloud_off
+                                  : Icons.info_outline,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                _error!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _acceptFreitext,
+                            icon: const Icon(Icons.check, size: 16),
+                            label: const Text(
+                              'Trotzdem verwenden',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                              foregroundColor: Colors.orange[800],
+                              side: BorderSide(
+                                color: Colors.orange.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ..._suggestions.asMap().entries.map((e) {

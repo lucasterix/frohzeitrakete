@@ -139,6 +139,9 @@ class EntryRepository {
 
   /// Live-Adress-Autocomplete. Ruft den Backend-Proxy auf, der ORS
   /// anfragt. Mindestens 3 Zeichen, debouncing macht der Caller.
+  ///
+  /// Wirft [ApiException] bei 503 (Backend hat keinen ORS-Key) und 502
+  /// (ORS selbst down). Das Widget fängt das und zeigt eine Fallback-UI.
   Future<List<AddressSuggestion>> autocompleteAddress(String query) async {
     if (query.trim().length < 3) return [];
     try {
@@ -152,9 +155,14 @@ class EntryRepository {
                 AddressSuggestion.fromJson(e as Map<String, dynamic>))
             .toList();
       }
-      return [];
-    } on DioException {
-      return [];
+      // 503 oder 502 → explicit Fehler damit Widget Fallback zeigt
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Adress-Dienst nicht verfügbar';
+      throw ApiException(message: detail, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
     }
   }
 
