@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
-import '../../shared/widgets/notification_bell.dart';
 import '../entries/entry_screen.dart';
 import '../entries/my_entries_screen.dart';
 import '../patients/patient_intake_screen.dart';
@@ -61,30 +60,29 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTasksSection() {
+  Widget _buildTasksSection(WidgetRef ref) {
     const green = Color(0xFF4F8A5B);
-    // MOCK: Aufgaben/Termine – bis Backend ein tasks/events Endpoint hat,
-    // stehen hier statische Einträge als Gedächtnisstützen.
-    final tasks = <Map<String, dynamic>>[
-      {
-        'icon': Icons.school_outlined,
-        'title': 'Fortbildung "Demenz verstehen"',
-        'subtitle': '20.04.2026 · 14:00–17:00 Uhr · Online',
-        'color': Colors.blue,
-      },
-      {
-        'icon': Icons.assignment_turned_in_outlined,
-        'title': 'Monatsabrechnung abgeben',
-        'subtitle': 'Bis zum 30.04.2026 im Büro',
-        'color': Colors.orange,
-      },
-      {
-        'icon': Icons.event_available_outlined,
-        'title': 'Teamsitzung',
-        'subtitle': 'Jeden 1. Montag im Monat · 10:00 Uhr',
-        'color': green,
-      },
-    ];
+    final asyncTrainings = ref.watch(trainingsProvider);
+
+    String fmt(DateTime dt) {
+      final d = dt.toLocal();
+      return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year} · '
+          '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} Uhr';
+    }
+
+    final tasks = asyncTrainings.maybeWhen(
+      data: (items) => items.map((t) {
+        final starts = DateTime.parse(t['starts_at'] as String);
+        final loc = (t['location'] as String?) ?? '';
+        return {
+          'icon': Icons.school_outlined,
+          'title': t['title'] as String,
+          'subtitle': loc.isEmpty ? fmt(starts) : '${fmt(starts)} · $loc',
+          'color': Colors.blue,
+        };
+      }).toList(),
+      orElse: () => <Map<String, dynamic>>[],
+    );
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -123,6 +121,11 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 14),
+          if (tasks.isEmpty)
+            const Text(
+              'Keine anstehenden Fortbildungen.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
           ...tasks.asMap().entries.map((entry) {
             final isLast = entry.key == tasks.length - 1;
             final t = entry.value;
@@ -175,43 +178,67 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _showContact(BuildContext context) {
+  void _showContact(BuildContext context, WidgetRef ref) {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Ansprechpartner Büro'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Einsatzleitung',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-            ),
-            SizedBox(height: 4),
-            Text('FrohZeit Büro'),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.phone_outlined, size: 18),
-                SizedBox(width: 8),
-                Text('+49 551 28879514'),
-              ],
-            ),
-            SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.mail_outline, size: 18),
-                SizedBox(width: 8),
-                Text('daniel.rupp@froehlichdienste.de'),
-              ],
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Erreichbar Mo–Fr, 09:00–16:00 Uhr',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-          ],
+        content: Consumer(
+          builder: (context, ref, _) {
+            final asyncContact = ref.watch(orgContactProvider);
+            return asyncContact.when(
+              loading: () => const SizedBox(
+                height: 80,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Text(
+                'Konnte Kontakt nicht laden:\n$e',
+                style: const TextStyle(color: Colors.red),
+              ),
+              data: (c) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (c['name'] as String?) ?? '—',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text((c['org'] as String?) ?? ''),
+                  const SizedBox(height: 12),
+                  if ((c['phone'] as String?)?.isNotEmpty ?? false)
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_outlined, size: 18),
+                        const SizedBox(width: 8),
+                        Text(c['phone'] as String),
+                      ],
+                    ),
+                  const SizedBox(height: 8),
+                  if ((c['email'] as String?)?.isNotEmpty ?? false)
+                    Row(
+                      children: [
+                        const Icon(Icons.mail_outline, size: 18),
+                        const SizedBox(width: 8),
+                        Text(c['email'] as String),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  if ((c['hours'] as String?)?.isNotEmpty ?? false)
+                    Text(
+                      c['hours'] as String,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -300,7 +327,6 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
-              const NotificationBell(),
               IconButton(
                 onPressed: () {
                   Navigator.of(context).push(
@@ -468,7 +494,7 @@ class HomeScreen extends ConsumerWidget {
           const SizedBox(height: 20),
 
           // Aufgaben & Termine
-          _buildTasksSection(),
+          _buildTasksSection(ref),
 
           const SizedBox(height: 20),
 
@@ -589,7 +615,7 @@ class HomeScreen extends ConsumerWidget {
           Card(
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () => _showContact(context),
+              onTap: () => _showContact(context, ref),
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Row(

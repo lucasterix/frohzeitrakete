@@ -56,6 +56,26 @@ class SignatureRepository {
     }
   }
 
+  Future<List<SignatureEvent>> getSignaturesForPatient(int patientId) async {
+    try {
+      final response =
+          await _client.dio.get('/mobile/patients/$patientId/signatures');
+      if (response.statusCode == 200) {
+        final list = response.data as List;
+        return list
+            .map((item) =>
+                SignatureEvent.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      throw ApiException(
+        message: 'Signaturen konnten nicht geladen werden',
+        statusCode: response.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   Future<List<SignatureEvent>> getMySignatures() async {
     try {
       final response = await _client.dio.get('/mobile/signatures');

@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     password_reset_base_url: str = "https://admin.froehlichdienste.de/reset-password"
     password_reset_token_ttl_minutes: int = 60
 
+    # Org-Contact (Ansprechpartner Büro – wird von der Mobile-App angezeigt)
+    org_contact_name: str = "Einsatzleitung"
+    org_contact_org: str = "FrohZeit Büro"
+    org_contact_phone: str = "+49 551 28879514"
+    org_contact_email: str = "daniel.rupp@froehlichdienste.de"
+    org_contact_hours: str = "Erreichbar Mo–Fr, 09:00–16:00 Uhr"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

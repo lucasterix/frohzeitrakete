@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/providers.dart';
+import '../../shared/widgets/address_autocomplete.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -227,6 +228,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
 
           const SizedBox(height: 24),
+          _sectionTitle('Home-Adresse'),
+          _card(
+            children: [
+              _tile(
+                icon: Icons.home_outlined,
+                title: 'Home-Adresse verwalten',
+                subtitle:
+                    'Wird als Startpunkt für Fahrtkosten-Berechnung verwendet',
+                onTap: _openHomeAddress,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
           _sectionTitle('Sicherheit'),
           _card(
             children: [
@@ -391,15 +406,182 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _tile({
     required IconData icon,
     required String title,
+    String? subtitle,
     VoidCallback? onTap,
     Widget? trailing,
   }) {
     return ListTile(
       leading: Icon(icon),
       title: Text(title, style: const TextStyle(fontSize: 16)),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle, style: const TextStyle(fontSize: 12)),
       trailing: trailing ??
           (onTap != null ? const Icon(Icons.chevron_right) : null),
       onTap: onTap,
     );
   }
+
+  Future<void> _openHomeAddress() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const _HomeAddressScreen()),
+    );
+  }
 }
+
+class _HomeAddressScreen extends ConsumerStatefulWidget {
+  const _HomeAddressScreen();
+
+  @override
+  ConsumerState<_HomeAddressScreen> createState() => _HomeAddressScreenState();
+}
+
+class _HomeAddressScreenState extends ConsumerState<_HomeAddressScreen> {
+  bool _loading = true;
+  bool _saving = false;
+  String? _currentAddress;
+  String _picked = '';
+  String? _error;
+  String? _flash;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final home = await ref.read(entryRepositoryProvider).getUserHome();
+      if (!mounted) return;
+      setState(() {
+        _currentAddress = home?.addressLine;
+        _picked = home?.addressLine ?? '';
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Konnte Home-Adresse nicht laden: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (_picked.trim().isEmpty) {
+      setState(() => _error = 'Bitte Adresse auswählen');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+      _flash = null;
+    });
+    try {
+      final updated =
+          await ref.read(entryRepositoryProvider).setUserHome(_picked.trim());
+      if (!mounted) return;
+      setState(() {
+        _currentAddress = updated.addressLine;
+        _flash = 'Home-Adresse gespeichert.';
+      });
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Unbekannter Fehler: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF4F8A5B);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Home-Adresse')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  const Text(
+                    'Wird verwendet um die Kilometer vom Zuhause zum ersten Patienten zu berechnen. Du kannst die Adresse jederzeit ändern.',
+                    style: TextStyle(height: 1.4, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_currentAddress != null &&
+                      _currentAddress!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.home, color: green),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _currentAddress!,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Neue Adresse auswählen:',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  AddressAutocomplete(
+                    label: 'Adresse',
+                    hint: 'Straße, PLZ, Ort',
+                    initialValue: _currentAddress ?? '',
+                    onAddressSelected: (v) => _picked = v,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ],
+                  if (_flash != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _flash!,
+                      style: const TextStyle(color: green),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: green,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(_saving ? 'Speichere …' : 'Speichern'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+

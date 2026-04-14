@@ -346,8 +346,88 @@ def delete_entry_for_user(db: Session, user_id: int, entry_id: int) -> None:
             detail="Monat ist bereits unterschrieben – Eintrag kann nicht gelöscht werden.",
         )
 
+    patti_id = entry.patti_service_entry_id
     db.delete(entry)
     db.commit()
+
+    # Nach erfolgreichem DB-Delete: Patti bescheid geben, damit die Reststunden
+    # dort stimmen. Fehler werden geloggt aber nicht propagiert — das Büro
+    # kann in Patti notfalls manuell nacharbeiten.
+    if patti_id is not None:
+        try:
+            client = PattiClient()
+            client.login()
+            client.delete_service_entry(patti_id)
+            logger.info("patti_service_entry_deleted", patti_id=patti_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "patti_service_entry_delete_failed",
+                patti_id=patti_id,
+                error=str(exc),
+            )
+
+
+def update_entry_for_user(
+    db: Session,
+    user: User,
+    entry_id: int,
+    *,
+    hours: float | None = None,
+    activities: list[str] | None = None,
+    note: str | None = None,
+) -> Entry:
+    """Bearbeitet einen bestehenden Einsatz.
+
+    Nur hours/activities/note sind editierbar — Datum, Patient und Typ
+    bleiben fix, damit die Patti-Sync-Invariante nicht kaputt geht.
+    Änderungen der Stunden werden als Delta an Patti geschickt.
+    """
+    entry = get_entry_for_user(db, user.id, entry_id)
+
+    if _month_is_locked(
+        db,
+        user_id=user.id,
+        patient_id=entry.patient_id,
+        year=entry.entry_date.year,
+        month=entry.entry_date.month,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Monat ist bereits unterschrieben – Eintrag kann nicht mehr geändert werden.",
+        )
+
+    delta_hours = 0.0
+    if hours is not None:
+        if hours <= 0 or hours > MAX_HOURS_PER_DAY:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Stunden müssen zwischen 0 und {MAX_HOURS_PER_DAY} liegen",
+            )
+        delta_hours = round(hours - entry.hours, 4)
+        entry.hours = hours
+
+    if activities is not None:
+        entry.activities = ", ".join(a for a in activities if a)
+
+    if note is not None:
+        entry.note = note if note else None
+
+    db.commit()
+    db.refresh(entry)
+
+    # Delta-Stunden an Patti schicken (nur bei patient-Entries und
+    # positivem Delta; negative Deltas kann Patti's kind='serviced'-
+    # Aggregation aktuell nicht abbilden und werden geloggt).
+    if entry.entry_type == "patient" and delta_hours > 0:
+        _sync_entry_to_patti(db, entry, delta_hours=delta_hours)
+    elif entry.entry_type == "patient" and delta_hours < 0:
+        logger.warning(
+            "entry_hours_reduced_patti_out_of_sync",
+            entry_id=entry.id,
+            delta_hours=delta_hours,
+        )
+
+    return entry
 
 
 def get_patient_hours_summary(
@@ -387,5 +467,6 @@ __all__ = [
     "list_entries_for_user",
     "get_entry_for_user",
     "delete_entry_for_user",
+    "update_entry_for_user",
     "get_patient_hours_summary",
 ]

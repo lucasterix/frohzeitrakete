@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/entry.dart';
 import '../../core/providers.dart';
-import 'entry_screen.dart';
 
 class EntryDetailScreen extends ConsumerStatefulWidget {
   final Entry entry;
@@ -24,6 +23,13 @@ class EntryDetailScreen extends ConsumerStatefulWidget {
 
 class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
   bool _isDeleting = false;
+  late Entry _entry;
+
+  @override
+  void initState() {
+    super.initState();
+    _entry = widget.entry;
+  }
 
   String _formatHours(double h) {
     final full = h.truncate();
@@ -60,7 +66,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     setState(() => _isDeleting = true);
 
     try {
-      await ref.read(entryRepositoryProvider).deleteEntry(widget.entry.id);
+      await ref.read(entryRepositoryProvider).deleteEntry(_entry.id);
       ref.invalidate(patientEntriesProvider);
       ref.invalidate(hoursSummaryProvider);
       ref.invalidate(myEntriesProvider);
@@ -91,11 +97,27 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
     }
   }
 
+  Future<void> _openEditDialog() async {
+    final updated = await showDialog<Entry>(
+      context: context,
+      builder: (_) => _EditEntryDialog(entry: _entry),
+    );
+    if (updated != null && mounted) {
+      setState(() => _entry = updated);
+      ref.invalidate(patientEntriesProvider);
+      ref.invalidate(hoursSummaryProvider);
+      ref.invalidate(myEntriesProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Einsatz aktualisiert.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const green = Color(0xFF4F8A5B);
     final isLocked = widget.monthLocked;
-    final entry = widget.entry;
+    final entry = _entry;
 
     return Scaffold(
       appBar: AppBar(
@@ -103,11 +125,7 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
         actions: [
           if (!isLocked)
             IconButton(
-              onPressed: () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const EntryScreen()),
-                );
-              },
+              onPressed: _openEditDialog,
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Bearbeiten',
             ),
@@ -250,7 +268,26 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
             ],
 
             if (!isLocked) ...[
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: green,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: _openEditDialog,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text(
+                    'Einsatz bearbeiten',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -283,5 +320,147 @@ class _EntryDetailScreenState extends ConsumerState<EntryDetailScreen> {
         ),
       ),
     );
+  }
+}
+
+class _EditEntryDialog extends ConsumerStatefulWidget {
+  final Entry entry;
+
+  const _EditEntryDialog({required this.entry});
+
+  @override
+  ConsumerState<_EditEntryDialog> createState() => _EditEntryDialogState();
+}
+
+class _EditEntryDialogState extends ConsumerState<_EditEntryDialog> {
+  late double _hours;
+  late TextEditingController _activitiesCtrl;
+  late TextEditingController _noteCtrl;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _hours = widget.entry.hours;
+    _activitiesCtrl =
+        TextEditingController(text: widget.entry.activities.join(', '));
+    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+  }
+
+  @override
+  void dispose() {
+    _activitiesCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final activities = _activitiesCtrl.text
+        .split(',')
+        .map((a) => a.trim())
+        .where((a) => a.isNotEmpty)
+        .toList();
+    try {
+      final updated = await ref.read(entryRepositoryProvider).updateEntry(
+            widget.entry.id,
+            hours: _hours,
+            activities: activities,
+            note: _noteCtrl.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop(updated);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Unbekannter Fehler: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF4F8A5B);
+
+    return AlertDialog(
+      title: const Text('Einsatz bearbeiten'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Text('Dauer: '),
+                Expanded(
+                  child: Slider(
+                    value: _hours,
+                    min: 0.5,
+                    max: 8.0,
+                    divisions: 15,
+                    label: _formatHours(_hours),
+                    activeColor: green,
+                    onChanged: (v) => setState(() => _hours = v),
+                  ),
+                ),
+                Text(
+                  _formatHours(_hours),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _activitiesCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Tätigkeiten (Komma-getrennt)',
+                isDense: true,
+              ),
+              minLines: 1,
+              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Notiz',
+                isDense: true,
+              ),
+              minLines: 1,
+              maxLines: 3,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: green),
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Speichere …' : 'Speichern'),
+        ),
+      ],
+    );
+  }
+
+  String _formatHours(double h) {
+    final full = h.truncate();
+    final half = (h - full) >= 0.5;
+    return '$full,${half ? '5' : '0'} h';
   }
 }

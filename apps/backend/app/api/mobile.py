@@ -4,11 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.auth import get_current_user
+from app.core.settings import settings
 from app.db.session import get_db
 from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
-from app.schemas.entry import EntryCreate, EntryResponse, PatientHoursSummary
+from app.schemas.entry import (
+    EntryCreate,
+    EntryResponse,
+    EntryUpdate,
+    PatientHoursSummary,
+)
 from app.schemas.patient import (
     CallRequestCreate,
     CallRequestResponse,
@@ -28,6 +34,7 @@ from app.services.entry_service import (
     get_entry_for_user,
     get_patient_hours_summary,
     list_entries_for_user,
+    update_entry_for_user,
 )
 from app.schemas.patient_intake import (
     PatientIntakeCreate,
@@ -148,6 +155,30 @@ def mobile_list_my_signatures(
     )
 
 
+@router.get(
+    "/patients/{patient_id}/signatures",
+    response_model=list[SignatureEventResponse],
+)
+def mobile_list_signatures_for_patient(
+    patient_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Komplette Signatur-Historie eines Patienten (egal von welchem Betreuer).
+
+    Damit der Betreuer im PatientDetail sehen kann welche Leistungsnachweise,
+    VP-Anträge und Betreuungsverträge bereits existieren.
+    """
+    return (
+        db.query(SignatureEvent)
+        .options(joinedload(SignatureEvent.asset))
+        .filter(SignatureEvent.patient_id == patient_id)
+        .order_by(SignatureEvent.signed_at.desc())
+        .limit(200)
+        .all()
+    )
+
+
 @router.get("/signatures/{signature_id}", response_model=SignatureEventResponse)
 def mobile_get_signature(
     signature_id: int,
@@ -259,6 +290,26 @@ def mobile_delete_entry(
 ):
     delete_entry_for_user(db, user_id=current_user.id, entry_id=entry_id)
     return None
+
+
+@router.patch("/entries/{entry_id}", response_model=EntryResponse)
+def mobile_update_entry(
+    entry_id: int,
+    payload: EntryUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    entry = update_entry_for_user(
+        db,
+        current_user,
+        entry_id,
+        hours=payload.hours,
+        activities=payload.activities,
+        note=payload.note,
+    )
+    return EntryResponse.from_orm_entry(
+        entry, user_name=current_user.full_name
+    )
 
 
 @router.get(
@@ -552,6 +603,39 @@ def mobile_notification_mark_read(
         )
     db.commit()
     return {"ok": True}
+
+
+@router.get("/trainings")
+def mobile_list_trainings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Kommende und kürzlich vergangene Fortbildungen für den Home-Feed."""
+    from app.services.training_service import list_trainings
+    items = list_trainings(db, upcoming_only=False, limit=30)
+    return [
+        {
+            "id": t.id,
+            "title": t.title,
+            "description": t.description,
+            "location": t.location,
+            "starts_at": t.starts_at,
+            "ends_at": t.ends_at,
+        }
+        for t in items
+    ]
+
+
+@router.get("/org-contact")
+def mobile_org_contact(current_user: User = Depends(get_current_user)):
+    """Ansprechpartner-Infos aus den Settings für den Ansprechpartner-Dialog."""
+    return {
+        "name": settings.org_contact_name,
+        "org": settings.org_contact_org,
+        "phone": settings.org_contact_phone,
+        "email": settings.org_contact_email,
+        "hours": settings.org_contact_hours,
+    }
 
 
 @router.post(

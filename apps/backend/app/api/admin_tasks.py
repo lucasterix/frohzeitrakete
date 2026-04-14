@@ -28,7 +28,13 @@ from app.services.patient_extras_service import (
     mark_office_call_done,
     mark_primary_caretaker_changed,
 )
+from app.schemas.training import TrainingCreate, TrainingResponse
 from app.services.patient_intake_service import list_intakes, resolve_intake
+from app.services.training_service import (
+    create_training,
+    delete_training,
+    list_trainings,
+)
 from app.services.trip_service import user_km_for_month
 from app.services.work_report_service import build_work_report
 
@@ -174,6 +180,48 @@ def admin_resolve_patient_intake(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/trainings", response_model=list[TrainingResponse])
+def admin_list_trainings(
+    upcoming_only: bool = False,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    return list_trainings(db, upcoming_only=upcoming_only, limit=200)
+
+
+@router.post(
+    "/trainings",
+    response_model=TrainingResponse,
+    status_code=201,
+)
+def admin_create_training(
+    payload: TrainingCreate,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    return create_training(
+        db,
+        created_by_user_id=admin_user.id,
+        title=payload.title,
+        description=payload.description,
+        location=payload.location,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+
+
+@router.delete("/trainings/{training_id}", status_code=204)
+def admin_delete_training(
+    training_id: int,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    ok = delete_training(db, training_id=training_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="training_not_found")
+    return None
 
 
 @router.post("/patients/{patient_id}/caretaker-changed")

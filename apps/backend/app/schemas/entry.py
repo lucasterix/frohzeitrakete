@@ -40,6 +40,23 @@ class EntryCreate(BaseModel):
         return v
 
 
+class EntryUpdate(BaseModel):
+    hours: float | None = Field(default=None, gt=0, le=8.0)
+    activities: list[str] | None = None
+    note: str | None = None
+
+    @field_validator("hours")
+    @classmethod
+    def hours_must_be_half_step(cls, v: float | None) -> float | None:
+        if v is None:
+            return v
+        if abs((v * 2) - round(v * 2)) > 1e-9:
+            raise ValueError("hours muss in 0.5-Schritten angegeben werden")
+        if v < 0.5:
+            raise ValueError("hours muss mindestens 0.5 sein")
+        return v
+
+
 class EntryResponse(BaseModel):
     id: int
     user_id: int

@@ -82,6 +82,34 @@ class EntryRepository {
     }
   }
 
+  Future<Entry> updateEntry(
+    int entryId, {
+    double? hours,
+    List<String>? activities,
+    String? note,
+  }) async {
+    try {
+      final response = await _client.dio.patch(
+        '/mobile/entries/$entryId',
+        data: <String, dynamic>{
+          if (hours != null) 'hours': hours,
+          if (activities != null) 'activities': activities,
+          if (note != null) 'note': note,
+        },
+      );
+      if (response.statusCode == 200) {
+        return Entry.fromJson(response.data as Map<String, dynamic>);
+      }
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Einsatz konnte nicht aktualisiert werden';
+      throw ApiException(message: detail, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   Future<void> deleteEntry(int entryId) async {
     try {
       final response = await _client.dio.delete('/mobile/entries/$entryId');

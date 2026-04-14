@@ -884,6 +884,67 @@ export async function resolveAdminPatientIntake(
   return response.json();
 }
 
+export type AdminTraining = {
+  id: number;
+  title: string;
+  description: string | null;
+  location: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getAdminTrainings(
+  upcomingOnly = false
+): Promise<AdminTraining[]> {
+  const url = new URL(`${API_BASE_URL}/admin/trainings`);
+  if (upcomingOnly) url.searchParams.set("upcoming_only", "true");
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Fortbildungen")
+    );
+  }
+  return response.json();
+}
+
+export async function createAdminTraining(payload: {
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  starts_at: string;
+  ends_at?: string | null;
+}): Promise<AdminTraining> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/trainings`, {
+    method: "POST",
+    headers: buildHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fortbildung konnte nicht angelegt werden")
+    );
+  }
+  return response.json();
+}
+
+export async function deleteAdminTraining(id: number): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/trainings/${id}`,
+    { method: "DELETE", headers: buildHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fortbildung konnte nicht gelöscht werden")
+    );
+  }
+}
+
 export async function requestPasswordReset(email: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
     method: "POST",

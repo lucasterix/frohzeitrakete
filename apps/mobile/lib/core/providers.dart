@@ -55,6 +55,27 @@ final unreadNotificationCountProvider = FutureProvider<int>((ref) async {
   return repo.unreadCount();
 });
 
+final patientSignaturesProvider =
+    FutureProvider.family<List<SignatureEvent>, int>((ref, patientId) async {
+  final repo = ref.watch(signatureRepositoryProvider);
+  return repo.getSignaturesForPatient(patientId);
+});
+
+final orgContactProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final client = ref.watch(apiClientProvider);
+  final response = await client.dio.get('/mobile/org-contact');
+  return (response.data as Map).cast<String, dynamic>();
+});
+
+final trainingsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final client = ref.watch(apiClientProvider);
+  final response = await client.dio.get('/mobile/trainings');
+  final list = response.data as List;
+  return list.map((e) => (e as Map).cast<String, dynamic>()).toList();
+});
+
 // ---------------- Auth State ----------------
 
 /// Aktuell eingeloggter User (null = nicht eingeloggt).

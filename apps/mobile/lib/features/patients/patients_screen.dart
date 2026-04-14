@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
 import '../../core/providers.dart';
-import '../../shared/widgets/notification_bell.dart';
 import '../settings/settings_screen.dart';
 import 'patient_detail_screen.dart';
 
@@ -133,7 +132,6 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
           Row(
             children: [
               const Spacer(),
-              const NotificationBell(),
               IconButton(
                 onPressed: () {
                   Navigator.of(context).push(

@@ -10,7 +10,7 @@ import '../../core/models/mobile_patient.dart';
 import '../../core/models/patient_extras.dart';
 import '../../core/models/signature_event.dart';
 import '../../core/providers.dart';
-import '../../shared/widgets/notification_bell.dart';
+import '../signatures/signature_history_screen.dart';
 import '../signatures/signature_screen.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
@@ -187,7 +187,6 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   children: [
                     const BackButton(),
                     const Spacer(),
-                    const NotificationBell(),
                     IconButton(
                       onPressed: () {
                         Navigator.of(context).push(
@@ -366,6 +365,38 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.blue[700],
                     side: BorderSide(color: Colors.blue.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    minimumSize: const Size.fromHeight(50),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Unterschriften-Historie für diesen Patient
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SignatureHistoryScreen(
+                          patientId: widget.patient.patientId,
+                          patientName: widget.patient.displayName,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.draw_outlined, size: 18),
+                  label: const Text('Unterschriften ansehen'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF4F8A5B),
+                    side: BorderSide(
+                      color: const Color(0xFF4F8A5B).withValues(alpha: 0.4),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
