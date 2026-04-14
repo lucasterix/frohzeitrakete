@@ -1,10 +1,41 @@
 import re
 
+from cachetools import TTLCache, cached
+from cachetools.keys import hashkey
 from fastapi import HTTPException, status
 
 from app.clients.patti_client import PattiClient
+from app.core.logging import get_logger
+from app.core.settings import settings
 from app.models.user import User
 from app.schemas.patient import CaretakerHistoryEntry, PatientBudget
+
+logger = get_logger("patient_service")
+
+# Modul-weite TTL-Caches für die teuersten Patti-Aufrufe.
+# Pro Caretaker rufen wir /mobile/patients oft hintereinander auf
+# (PullToRefresh, Tab-Wechsel, etc) – ohne Cache ist das jedes Mal eine
+# Login + N HTTP-Calls zu Patti. TTL ist bewusst kurz gewählt damit Updates
+# (z.B. nach einer Stammdaten-Änderung) schnell sichtbar werden.
+_patients_cache: TTLCache = TTLCache(maxsize=128, ttl=settings.patti_cache_ttl_seconds)
+_assigned_patient_ids_cache: TTLCache = TTLCache(
+    maxsize=128, ttl=settings.patti_cache_ttl_seconds
+)
+
+
+def invalidate_patient_caches(person_id: int | None = None) -> None:
+    """Wirft die Patient-Caches weg – nach Stammdaten-Updates aufrufen damit
+    der nächste GET die frischen Daten zieht statt der alten Cache-Version.
+
+    Wenn person_id übergeben wird, wird nur dieser User-Cache invalidiert,
+    sonst alles.
+    """
+    if person_id is None:
+        _patients_cache.clear()
+        _assigned_patient_ids_cache.clear()
+        return
+    _patients_cache.pop(hashkey(person_id), None)
+    _assigned_patient_ids_cache.pop(hashkey(person_id), None)
 
 
 def _parse_care_degree(raw: str | None) -> int:
@@ -127,7 +158,15 @@ def _enrich_patient(
     return mapped
 
 
+@cached(_patients_cache, key=lambda person_id: hashkey(person_id))
 def get_mobile_patients_for_person(person_id: int) -> list[dict]:
+    """Liste der dem Caretaker zugeordneten primären Patienten.
+
+    Cached für `PATTI_CACHE_TTL_SECONDS` (default 60s) damit wiederholte
+    Aufrufe (Pull-to-Refresh, Tab-Wechsel) Patti nicht überlasten. Cache
+    wird invalidated wenn Stammdaten geändert werden, siehe
+    `invalidate_patient_caches`.
+    """
     client = PattiClient()
     client.login()
 
@@ -153,7 +192,27 @@ def get_mobile_patients_for_person(person_id: int) -> list[dict]:
         ).get("id")
         result.append(_enrich_patient(client, mapped, insurance_cache))
 
+    logger.debug("patti_patients_loaded", person_id=person_id, count=len(result))
     return result
+
+
+@cached(_assigned_patient_ids_cache, key=lambda person_id: hashkey(person_id))
+def _get_assigned_patient_ids_for_person(person_id: int) -> set[int]:
+    """Set der Patient-IDs denen ein Caretaker als primary zugewiesen ist.
+
+    Wird für die Authz-Checks in `get_patient_budget` und ähnlichen Routen
+    genutzt. Cached weil der Authz-Check sonst bei jedem Patient-Detail
+    Open einen extra Patti-Roundtrip macht.
+    """
+    client = PattiClient()
+    client.login()
+    response = client.get_service_histories_by_person_id(person_id)
+    rows = response.get("data", []) if isinstance(response, dict) else []
+    return {
+        row.get("patient_id")
+        for row in rows
+        if row.get("is_primary") and row.get("ended_at") is None
+    }
 
 
 def get_patients_for_user(db, user: User) -> list[dict]:
@@ -412,6 +471,10 @@ def update_patient_data(
             born_at=birthday or None,
         )
 
+    # Stammdaten haben sich geändert → Patient-Cache wegwerfen damit der
+    # nächste GET die frischen Werte zieht.
+    invalidate_patient_caches(user.patti_person_id)
+
 
 def get_patient_budget(
     patient_id: int, year: int, user: User
@@ -428,28 +491,17 @@ def get_patient_budget(
             detail="User ist keiner Patti-Person zugeordnet",
         )
 
-    client = PattiClient()
-    client.login()
-
-    # Berechtigung prüfen: ist der Patient dem User zugewiesen?
-    service_histories = client.get_service_histories_by_person_id(
-        user.patti_person_id
-    )
-    rows = (
-        service_histories.get("data", [])
-        if isinstance(service_histories, dict)
-        else []
-    )
-    assigned_patient_ids = {
-        row.get("patient_id")
-        for row in rows
-        if row.get("is_primary") and row.get("ended_at") is None
-    }
+    # Berechtigung prüfen über den gecachten Helper – spart bei wiederholten
+    # Patient-Detail-Opens einen Patti-Roundtrip.
+    assigned_patient_ids = _get_assigned_patient_ids_for_person(user.patti_person_id)
     if patient_id not in assigned_patient_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Zugriff auf diesen Patienten nicht erlaubt",
         )
+
+    client = PattiClient()
+    client.login()
 
     care_response = client.get_remaining_care_service_budget(patient_id, year)
     respite_response = client.get_remaining_respite_care_budget(patient_id, year)

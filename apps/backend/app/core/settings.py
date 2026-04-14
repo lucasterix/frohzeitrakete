@@ -35,8 +35,7 @@ class Settings(BaseSettings):
     admin_seed_full_name: str = "Admin"
 
     # Patti Resilienz
-    patti_timeout_seconds: float = 10.0
-    patti_max_retries: int = 2
+    patti_timeout_seconds: float = 15.0
     patti_cache_ttl_seconds: int = 60
 
     @property
