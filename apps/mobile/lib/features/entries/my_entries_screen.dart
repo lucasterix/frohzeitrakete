@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../../core/models/entry.dart';
 import '../../core/providers.dart';
@@ -13,13 +14,17 @@ class MyEntriesScreen extends ConsumerStatefulWidget {
   ConsumerState<MyEntriesScreen> createState() => _MyEntriesScreenState();
 }
 
+enum _ViewMode { list, calendar }
+
 class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
   static const _monthNames = [
     'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
   ];
 
+  _ViewMode _mode = _ViewMode.list;
   late DateTime _currentMonth;
+  DateTime? _selectedDay;
   final DateTime _now = DateTime.now();
 
   @override
@@ -74,6 +79,25 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Meine Einsätze'),
+        actions: [
+          IconButton(
+            tooltip: _mode == _ViewMode.list
+                ? 'Kalender-Ansicht'
+                : 'Listen-Ansicht',
+            icon: Icon(
+              _mode == _ViewMode.list
+                  ? Icons.calendar_month
+                  : Icons.view_list,
+            ),
+            onPressed: () {
+              setState(() {
+                _mode = _mode == _ViewMode.list
+                    ? _ViewMode.calendar
+                    : _ViewMode.list;
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -139,6 +163,9 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
                 ),
               ),
               data: (entries) {
+                if (_mode == _ViewMode.calendar) {
+                  return _buildCalendarView(entries, patientName);
+                }
                 final totalHours = entries.fold<double>(
                   0.0,
                   (sum, e) => sum + e.hours,
@@ -244,6 +271,177 @@ class _MyEntriesScreenState extends ConsumerState<MyEntriesScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCalendarView(
+    List<Entry> entries,
+    String Function(int) patientName,
+  ) {
+    const green = Color(0xFF4F8A5B);
+
+    // entries nach Tag gruppieren für den Event-Loader
+    final byDay = <DateTime, List<Entry>>{};
+    for (final e in entries) {
+      final k = DateTime(e.entryDate.year, e.entryDate.month, e.entryDate.day);
+      byDay.putIfAbsent(k, () => []).add(e);
+    }
+
+    List<Entry> eventsFor(DateTime day) {
+      final k = DateTime(day.year, day.month, day.day);
+      return byDay[k] ?? const [];
+    }
+
+    final selected = _selectedDay ?? _now;
+    final selectedEntries = eventsFor(selected);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: TableCalendar<Entry>(
+              firstDay: DateTime(2020),
+              lastDay: _now,
+              focusedDay: _currentMonth,
+              locale: 'de_DE',
+              selectedDayPredicate: (d) => isSameDay(d, selected),
+              eventLoader: eventsFor,
+              headerVisible: false,
+              startingDayOfWeek: StartingDayOfWeek.monday,
+              calendarStyle: CalendarStyle(
+                outsideDaysVisible: false,
+                todayDecoration: BoxDecoration(
+                  color: green.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                todayTextStyle: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                selectedDecoration: const BoxDecoration(
+                  color: green,
+                  shape: BoxShape.circle,
+                ),
+                markerDecoration: const BoxDecoration(
+                  color: green,
+                  shape: BoxShape.circle,
+                ),
+                markersMaxCount: 3,
+              ),
+              onDaySelected: (selectedDay, _) {
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _currentMonth = DateTime(selectedDay.year, selectedDay.month);
+                });
+              },
+              onPageChanged: (focusedDay) {
+                setState(() {
+                  _currentMonth = DateTime(focusedDay.year, focusedDay.month);
+                });
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: selectedEntries.isEmpty
+              ? Center(
+                  child: Text(
+                    'Keine Einsätze am ${_fmtDate(selected)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black54,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  itemCount: selectedEntries.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final entry = selectedEntries[i];
+                    final name = patientName(entry.patientId);
+                    return Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EntryDetailScreen(
+                                entry: entry,
+                                patientName: name,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor:
+                                    green.withValues(alpha: 0.12),
+                                child: const Icon(
+                                  Icons.event,
+                                  color: green,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      entry.activities.join(', '),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.black54,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                _fmtHours(entry.hours),
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 

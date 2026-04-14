@@ -1,15 +1,199 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/providers.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _biometricEnabled = false;
+  bool _biometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricState();
+  }
+
+  Future<void> _loadBiometricState() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool available = false;
+    try {
+      final auth = LocalAuthentication();
+      available = await auth.canCheckBiometrics;
+    } catch (_) {
+      available = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _biometricEnabled = prefs.getBool('biometric_auth_enabled') ?? false;
+      _biometricAvailable = available;
+    });
+  }
+
+  Future<void> _toggleBiometric(bool enable) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (enable) {
+      try {
+        final auth = LocalAuthentication();
+        final ok = await auth.authenticate(
+          localizedReason: 'Biometrische Anmeldung aktivieren',
+          options: const AuthenticationOptions(
+            biometricOnly: false,
+            stickyAuth: true,
+          ),
+        );
+        if (!ok) return;
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Biometrie nicht verfügbar: $e')),
+        );
+        return;
+      }
+    }
+    await prefs.setBool('biometric_auth_enabled', enable);
+    if (!mounted) return;
+    setState(() => _biometricEnabled = enable);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          enable
+              ? 'Biometrische Anmeldung aktiviert'
+              : 'Biometrische Anmeldung deaktiviert',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openChangePassword() async {
+    final current = TextEditingController();
+    final newPw = TextEditingController();
+    final confirmPw = TextEditingController();
+    String? error;
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSt) => AlertDialog(
+            title: const Text('Passwort ändern'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: current,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Aktuelles Passwort',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newPw,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Neues Passwort',
+                    helperText: 'Mindestens 8 Zeichen',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPw,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Neues Passwort wiederholen',
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              TextButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (newPw.text != confirmPw.text) {
+                          setSt(() => error = 'Passwörter stimmen nicht überein');
+                          return;
+                        }
+                        if (newPw.text.length < 8) {
+                          setSt(() => error = 'Mindestens 8 Zeichen');
+                          return;
+                        }
+                        setSt(() {
+                          saving = true;
+                          error = null;
+                        });
+                        try {
+                          await ref
+                              .read(authRepositoryProvider)
+                              .changePassword(
+                                currentPassword: current.text,
+                                newPassword: newPw.text,
+                              );
+                          if (!ctx.mounted) return;
+                          Navigator.of(ctx).pop();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Passwort geändert'),
+                            ),
+                          );
+                        } on ApiException catch (e) {
+                          setSt(() {
+                            saving = false;
+                            error = e.message;
+                          });
+                        } catch (e) {
+                          setSt(() {
+                            saving = false;
+                            error = 'Fehler: $e';
+                          });
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Speichern'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    current.dispose();
+    newPw.dispose();
+    confirmPw.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     const green = Color(0xFF4F8A5B);
 
     return Scaffold(
@@ -37,7 +221,28 @@ class SettingsScreen extends ConsumerWidget {
               _tile(
                 icon: Icons.lock_outline,
                 title: 'Passwort ändern',
-                onTap: () {},
+                onTap: _openChangePassword,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+          _sectionTitle('Sicherheit'),
+          _card(
+            children: [
+              SwitchListTile(
+                value: _biometricEnabled,
+                onChanged:
+                    _biometricAvailable ? _toggleBiometric : null,
+                activeThumbColor: green,
+                secondary: const Icon(Icons.fingerprint),
+                title: const Text('FaceID / TouchID'),
+                subtitle: Text(
+                  _biometricAvailable
+                      ? 'Schneller Login beim App-Start'
+                      : 'Nicht auf diesem Gerät verfügbar',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -98,7 +303,7 @@ class SettingsScreen extends ConsumerWidget {
             width: double.infinity,
             height: 52,
             child: OutlinedButton.icon(
-              onPressed: () => _confirmLogout(context, ref),
+              onPressed: () => _confirmLogout(context),
               icon: const Icon(Icons.logout, color: Colors.red),
               label: const Text(
                 'Abmelden',
@@ -121,7 +326,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmLogout(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -144,6 +349,10 @@ class SettingsScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
+      // Biometric-Flag auch zurücksetzen
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('biometric_auth_enabled', false);
+
       await ref.read(authControllerProvider.notifier).logout();
       if (!context.mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

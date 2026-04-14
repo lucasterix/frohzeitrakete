@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/providers.dart';
 import '../features/auth/login_screen.dart';
+import '../navigation/main_navigation.dart';
 
 class CareApp extends StatelessWidget {
   const CareApp({super.key});
@@ -12,6 +19,13 @@ class CareApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'FrohZeit',
+      locale: const Locale('de', 'DE'),
+      supportedLocales: const [Locale('de', 'DE'), Locale('en', 'US')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: lightBackground,
@@ -33,7 +47,93 @@ class CareApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const LoginScreen(),
+      home: const _Bootstrap(),
     );
+  }
+}
+
+/// Bootstrap-Gate: versucht beim App-Start automatisch einzuloggen.
+///
+/// Ablauf:
+/// 1. ApiClient wartet bis PersistCookieJar fertig geladen ist
+/// 2. Falls "biometric_auth_enabled" in SharedPreferences → FaceID/TouchID prompt
+/// 3. /auth/me call (Cookies sind noch gültig?)
+/// 4. → MainNavigation wenn erfolgreich, sonst LoginScreen
+class _Bootstrap extends ConsumerStatefulWidget {
+  const _Bootstrap();
+
+  @override
+  ConsumerState<_Bootstrap> createState() => _BootstrapState();
+}
+
+class _BootstrapState extends ConsumerState<_Bootstrap> {
+  bool _done = false;
+  bool _authed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restore());
+  }
+
+  Future<void> _restore() async {
+    // Cookie-Jar muss geladen sein bevor wir einen Request machen
+    final client = ref.read(apiClientProvider);
+    await client.ready();
+
+    final hasCookie = await client.hasAuthCookie();
+    if (!hasCookie) {
+      if (mounted) setState(() => _done = true);
+      return;
+    }
+
+    // Biometrie prüfen wenn aktiviert
+    final prefs = await SharedPreferences.getInstance();
+    final biometricEnabled = prefs.getBool('biometric_auth_enabled') ?? false;
+    if (biometricEnabled) {
+      try {
+        final localAuth = LocalAuthentication();
+        final canCheck = await localAuth.canCheckBiometrics;
+        if (canCheck) {
+          final ok = await localAuth.authenticate(
+            localizedReason: 'Mit FaceID/TouchID anmelden',
+            options: const AuthenticationOptions(
+              biometricOnly: false,
+              stickyAuth: true,
+            ),
+          );
+          if (!ok) {
+            // User hat abgebrochen → zeige Login
+            if (mounted) setState(() => _done = true);
+            return;
+          }
+        }
+      } catch (_) {
+        // Fallback: einfach weiter mit /auth/me
+      }
+    }
+
+    // /auth/me um User wiederherzustellen
+    await ref.read(authControllerProvider.notifier).restoreSession();
+    final user = ref.read(authControllerProvider).valueOrNull;
+
+    if (mounted) {
+      setState(() {
+        _authed = user != null;
+        _done = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_done) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    return _authed ? const MainNavigation() : const LoginScreen();
   }
 }

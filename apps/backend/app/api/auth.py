@@ -1,13 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.logging import get_logger
 from app.core.rate_limit import limiter
+from app.core.security import hash_password, verify_password
 from app.core.settings import settings
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, SessionResponse
+from app.repositories.refresh_token_repository import (
+    revoke_all_refresh_sessions_for_user,
+)
+from app.schemas.auth import (
+    AuthResponse,
+    ChangePasswordRequest,
+    LoginRequest,
+    SessionResponse,
+)
 from app.schemas.user import UserResponse
 from app.services.auth_service import (
     list_sessions_for_user,
@@ -124,6 +133,39 @@ def logout(
 @router.get("/me", response_model=UserResponse)
 def auth_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password", status_code=204)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Der User ändert sein eigenes Passwort.
+
+    Prüft das aktuelle Passwort, setzt das neue, invalidiert alle Refresh-
+    Sessions (außer der aktuellen – die muss der User dann neu aufbauen,
+    aber da er sowieso angemeldet ist reicht der access_token bis zum Ablauf).
+    """
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aktuelles Passwort ist falsch",
+        )
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Neues Passwort muss mindestens 8 Zeichen haben",
+        )
+
+    current_user.password_hash = hash_password(payload.new_password)
+    db.add(current_user)
+    db.commit()
+
+    # Alle anderen Sessions abmelden als Sicherheitsmaßnahme
+    revoke_all_refresh_sessions_for_user(db, current_user.id)
+    return None
 
 
 @router.get("/sessions", response_model=list[SessionResponse])

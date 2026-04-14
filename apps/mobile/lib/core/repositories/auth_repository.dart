@@ -60,4 +60,27 @@ class AuthRepository {
       await _client.clearCookies();
     }
   }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await _client.dio.post(
+        '/auth/change-password',
+        data: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        },
+      );
+      if (response.statusCode == 204 || response.statusCode == 200) return;
+      final data = response.data;
+      final detail = (data is Map && data['detail'] != null)
+          ? data['detail'].toString()
+          : 'Passwort konnte nicht geändert werden';
+      throw ApiException(message: detail, statusCode: response.statusCode);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
 }

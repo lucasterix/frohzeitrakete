@@ -30,8 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
+  intl: any
 
   # HTTP + Cookie-based Auth
   dio: ^5.7.0
@@ -44,8 +47,17 @@ dependencies:
   # Local Settings (base url, last-login etc.)
   shared_preferences: ^2.3.2
 
+  # Filesystem for persistent cookie jar
+  path_provider: ^2.1.5
+
   # Launcher for tel:, https:, maps: URLs
   url_launcher: ^6.3.1
+
+  # Biometrics (TouchID/FaceID/Android)
+  local_auth: ^2.3.0
+
+  # Calendar widget for month view
+  table_calendar: ^3.1.2
 
 dev_dependencies:
   flutter_test:

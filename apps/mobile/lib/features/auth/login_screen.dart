@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/providers.dart';
 import '../../navigation/main_navigation.dart';
@@ -51,6 +53,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authControllerProvider.notifier).login(username, password);
 
       if (!mounted) return;
+
+      // Biometrie anbieten beim ersten Login auf diesem Gerät
+      await _maybeOfferBiometric();
+
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
@@ -66,6 +73,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _isLoading = false;
         _generalError = 'Unerwarteter Fehler: $e';
       });
+    }
+  }
+
+  Future<void> _maybeOfferBiometric() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('biometric_auth_enabled') == true) return;
+      if (prefs.getBool('biometric_offer_dismissed') == true) return;
+
+      final auth = LocalAuthentication();
+      final available = await auth.canCheckBiometrics;
+      if (!available) return;
+
+      if (!mounted) return;
+      final accept = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Schneller anmelden?'),
+          content: const Text(
+            'Du kannst beim nächsten App-Start FaceID / TouchID statt '
+            'Passwort nutzen. Das geht viel schneller.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Nein, danke'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Aktivieren'),
+            ),
+          ],
+        ),
+      );
+
+      if (accept == true) {
+        final ok = await auth.authenticate(
+          localizedReason: 'Biometrie aktivieren',
+          options: const AuthenticationOptions(stickyAuth: true),
+        );
+        if (ok) {
+          await prefs.setBool('biometric_auth_enabled', true);
+        }
+      } else {
+        await prefs.setBool('biometric_offer_dismissed', true);
+      }
+    } catch (_) {
+      // Biometrie ist optional – Fehler verschlucken
     }
   }
 

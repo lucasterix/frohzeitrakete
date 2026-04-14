@@ -51,6 +51,21 @@ class AuthController extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
+  /// Beim App-Start: falls Cookies noch gültig sind, /auth/me aufrufen und
+  /// ohne erneuten Login in die App gehen. Wenn Cookies abgelaufen sind
+  /// oder /auth/me fehlschlägt bleiben wir im "data(null)"-State und der
+  /// LoginScreen wird gezeigt.
+  Future<void> restoreSession() async {
+    try {
+      final user = await _authRepo.me();
+      if (user != null) {
+        state = AsyncValue.data(user);
+      }
+    } catch (_) {
+      // ignore – einfach im ausgeloggten Zustand bleiben
+    }
+  }
+
   Future<void> logout() async {
     await _authRepo.logout();
     state = const AsyncValue.data(null);

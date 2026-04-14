@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/providers.dart';
 import '../../shared/widgets/notification_bell.dart';
@@ -522,6 +523,60 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Patient neu aufnehmen – direkter Call ans Büro
+          Card(
+            color: Colors.blue.withValues(alpha: 0.04),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () async {
+                final uri = Uri.parse('tel:+4955128879514');
+                await launchUrl(uri);
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundColor: Colors.blue.withValues(alpha: 0.15),
+                      child: const Icon(
+                        Icons.person_add_alt_1,
+                        size: 26,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Patient neu aufnehmen',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Neuaufnahme telefonisch im Büro anfragen',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.phone, color: Colors.blue),
+                  ],
+                ),
+              ),
             ),
           ),
 
