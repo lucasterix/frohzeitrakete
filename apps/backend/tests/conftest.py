@@ -23,14 +23,23 @@ from app.db.base import Base
 from app.models import *  # noqa: F401,F403 – register all mappers
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def engine():
+    """Fresh in-memory SQLite pro Test.
+
+    Wir teilen keinen Engine zwischen Tests, damit commit()s aus einem
+    Test nicht in den nächsten durchsickern. In-memory ist schnell genug
+    dass pro-Test-Setup kein Problem ist.
+    """
     eng = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(eng)
-    return eng
+    try:
+        yield eng
+    finally:
+        eng.dispose()
 
 
 @pytest.fixture()
@@ -40,5 +49,4 @@ def db(engine):
     try:
         yield session
     finally:
-        session.rollback()
         session.close()
