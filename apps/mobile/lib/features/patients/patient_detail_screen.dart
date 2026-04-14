@@ -68,6 +68,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
       ];
       // Signatur-Cache invalidieren damit Provider neu lädt
       ref.invalidate(mySignaturesProvider);
+      ref.invalidate(patientSignaturesProvider(widget.patient.patientId));
       setState(() {
         _vpStateOverride = 'signed';
         _vpMonthOverride = '${monthNames[now.month - 1]} ${now.year}';
@@ -141,7 +142,11 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         ),
       ),
     );
-    final signaturesAsync = ref.watch(mySignaturesProvider);
+    // patientSignaturesProvider liefert alle Unterschriften (auch von
+    // Kolleg:innen im Vertretungs-Fall), deswegen bevorzugt. Fällt auf
+    // mySignaturesProvider zurück solange der erste Request läuft.
+    final signaturesAsync =
+        ref.watch(patientSignaturesProvider(patient.patientId));
     final vp = _resolveVpState(signaturesAsync.valueOrNull ?? const []);
     final extrasAsync = ref.watch(patientExtrasProvider(patient.patientId));
 
@@ -166,6 +171,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
             ref.invalidate(hoursSummaryProvider);
             ref.invalidate(patientEntriesProvider);
             ref.invalidate(mySignaturesProvider);
+            ref.invalidate(patientSignaturesProvider(patient.patientId));
             try {
               await ref.read(pattiBudgetProvider(
                 PattiBudgetParams(
@@ -340,6 +346,9 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                           );
                           if (ok == true) {
                             ref.invalidate(mySignaturesProvider);
+                            ref.invalidate(
+                              patientSignaturesProvider(patient.patientId),
+                            );
                           }
                         },
                       ),
@@ -976,6 +985,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
     if (ok == true && mounted) {
       ref.invalidate(patientExtrasProvider);
       ref.invalidate(mySignaturesProvider);
+      ref.invalidate(patientSignaturesProvider(widget.patient.patientId));
     }
   }
 

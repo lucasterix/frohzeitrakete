@@ -283,7 +283,11 @@ def _maybe_create_trip_segments(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("trip_segment_create_failed", entry_id=entry.id, error=str(exc))
+        logger.warning(
+            "trip_segment_create_failed entry=%s error=%s",
+            entry.id,
+            exc,
+        )
 
 
 def list_entries_for_user(
