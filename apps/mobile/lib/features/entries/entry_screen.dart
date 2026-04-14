@@ -280,6 +280,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           'note': null,
         }..removeWhere((_, v) => v == null);
         await OfflineQueue.enqueue(payload);
+        if (!mounted) return;
         ref.invalidate(pendingOfflineCountProvider);
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(

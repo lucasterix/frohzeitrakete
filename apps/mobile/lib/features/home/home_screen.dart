@@ -62,7 +62,6 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildTasksSection(WidgetRef ref) {
-    const green = Color(0xFF4F8A5B);
     final asyncTrainings = ref.watch(trainingsProvider);
 
     String fmt(DateTime dt) {
