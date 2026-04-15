@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,9 +25,10 @@ class EntryScreen extends ConsumerStatefulWidget {
 
 class _EntryScreenState extends ConsumerState<EntryScreen> {
 
-  // Häufigste Stundenwerte als Quick-Presets
+  // Alle 0.5h-Schritte von 0.5 bis 8.0
   static const List<double> _hourPresets = [
-    0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 6.0,
+    0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0,
+    4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0,
   ];
 
   static const List<String> _activities = [
@@ -44,7 +47,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   // Trip tracking state
   bool _isFirstEntryToday = false;
-  bool _tripInfoLoaded = false;
+  // _tripInfoLoaded gibt es nicht mehr — die Trip-Sektion rendert sofort
+  // und die Daten kommen async per setState rein.
   UserHome? _userHome;
   bool _startFromHome = true;
   String? _startAddress; // confirmed ORS label
@@ -69,19 +73,20 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   Future<void> _loadTripInfo() async {
     try {
       final repo = ref.read(entryRepositoryProvider);
-      final results = await Future.wait([
-        repo.isFirstEntryToday(),
-        repo.getUserHome(),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _isFirstEntryToday = results[0] as bool;
-        _userHome = results[1] as UserHome?;
-        _tripInfoLoaded = true;
-      });
+      // Beide Calls parallel, jeder updated den State sobald er fertig
+      // ist — kein Blocking auf das langsamere von beiden.
+      unawaited(
+        repo.isFirstEntryToday().then((v) {
+          if (mounted) setState(() => _isFirstEntryToday = v);
+        }),
+      );
+      unawaited(
+        repo.getUserHome().then((v) {
+          if (mounted) setState(() => _userHome = v);
+        }),
+      );
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _tripInfoLoaded = true);
+      // ignored — Trip-Section rendert auch ohne diese Daten
     }
   }
 
@@ -792,16 +797,10 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
 
   Widget _buildTripSection() {
     const green = Color(0xFF4F8A5B);
-
-    if (!_tripInfoLoaded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: SizedBox(
-          height: 20,
-          child: LinearProgressIndicator(),
-        ),
-      );
-    }
+    // Kein blockierender Loading-Indicator mehr — die Trip-Sektion
+    // rendert sofort. Wenn die Home-Adresse oder isFirstEntryToday
+    // noch nicht da sind, läuft der API-Call im Hintergrund weiter
+    // und der State wird per setState aktualisiert.
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
