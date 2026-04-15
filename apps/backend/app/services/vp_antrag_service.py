@@ -30,16 +30,17 @@ logger = logging.getLogger(__name__)
 # Ebenfalls noch zu kalibrieren wenn das erste echte VP-Antrag-PDF
 # vorliegt — alle Werte sind Schätzungen.
 
-# Patient-Unterschrift unten auf der "_______ (Unterschrift)"-Linie
+# Patient-Unterschrift auf der "Datum/Unterschrift der/des
+# Versicherten"-Strichlinie unten auf Seite 1.
 SIG_IMG_X = 75
-SIG_IMG_Y = 90
-SIG_IMG_W = 220
-SIG_IMG_H = 40
+SIG_IMG_Y = 120
+SIG_IMG_W = 200
+SIG_IMG_H = 32
 
-# Meta-Zeile direkt unter dem Signatur-Bild: "Unterschrieben von
-# <Patient> · 14.04.2026, 09:30 Uhr"
+# Meta-Zeile direkt unter dem Signatur-Bild, knapp über dem
+# abschließenden Fließtext.
 SIG_META_X = 75
-SIG_META_Y = 70
+SIG_META_Y = 108
 
 # Pflegeperson auf der oberen "_______"-Linie. Wird normalerweise
 # direkt von Patti via Query-Param ausgefüllt; Backup-Overlay falls
@@ -103,16 +104,16 @@ def _draw_signature_svg(
 def _build_overlay(
     *,
     signature_svg: str | None,
-    signer_name: str | None,
+    patient_name: str | None,
     signed_at: datetime | None,
 ) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
 
-    if signer_name and signed_at:
-        c.setFont("Helvetica", 9)
+    if patient_name and signed_at:
+        c.setFont("Helvetica", 8)
         meta = (
-            f"Unterschrieben vom Patienten: {signer_name} · "
+            f"Elektronisch unterschrieben vom Patienten: {patient_name} · "
             f"{signed_at.strftime('%d.%m.%Y, %H:%M Uhr')}"
         )
         c.drawString(SIG_META_X, SIG_META_Y, meta)
@@ -187,9 +188,17 @@ def fetch_filled_vp_antrag_pdf(
     start = date(today.year, today.month, 1).isoformat()
     end = date(today.year, 12, 31).isoformat()
 
+    patient_name: str | None = None
     try:
         client = PattiClient()
         client.login()
+        try:
+            p = client.get_patient(event.patient_id)
+            first = (p.get("firstName") or p.get("first_name") or "").strip()
+            last = (p.get("lastName") or p.get("last_name") or "").strip()
+            patient_name = (f"{first} {last}").strip() or None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("patti_patient_fetch_failed: %s", exc)
         patti_pdf = client.get_verhinderungspflegeantrag_pdf(
             event.patient_id,
             start=start,
@@ -205,7 +214,7 @@ def fetch_filled_vp_antrag_pdf(
 
     overlay = _build_overlay(
         signature_svg=asset.svg_content if asset else None,
-        signer_name=event.signer_name,
+        patient_name=patient_name,
         signed_at=event.signed_at,
     )
     return _overlay_on_pdf(patti_pdf, overlay)
