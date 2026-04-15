@@ -46,19 +46,20 @@ HEADER_Y = 732
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
 # Häkchen in die Zellen.
 #
-# Wir kreuzen NUR Alltagshilfe / Gespräch-Aktivierung / Begleitung an.
-# "Besuch im KH oder Kurzeitpflegeeinr." ist für die Rakete out-of-scope.
-LEFT_HOURS_X = 92
-LEFT_KM_X = 128
+# Stunden und Km werden mit drawCentredString an einem Mittelpunkt
+# gezeichnet — so liegen 4-stellige Km-Werte (z.B. 589,6) genauso
+# mittig im Kästchen wie die kurzen "4,5".
+LEFT_HOURS_CENTER_X = 100
+LEFT_KM_CENTER_X = 138
 LEFT_CHECK_ALLTAG_X = 153
 LEFT_CHECK_GESPR_X = 175
 LEFT_CHECK_BEGL_X = 197
 
-RIGHT_HOURS_X = 342
-RIGHT_KM_X = 378
-RIGHT_CHECK_ALLTAG_X = 403
-RIGHT_CHECK_GESPR_X = 425
-RIGHT_CHECK_BEGL_X = 447
+RIGHT_HOURS_CENTER_X = 360
+RIGHT_KM_CENTER_X = 398
+RIGHT_CHECK_ALLTAG_X = 412
+RIGHT_CHECK_GESPR_X = 434
+RIGHT_CHECK_BEGL_X = 456
 
 # Y-Baseline der Zeile für Tag 1 bzw. Tag 17. Der Wert ist die
 # vertikale Mitte des Kästchens: Stunden, Km und Checkbox-Kreuze
@@ -210,8 +211,8 @@ def build_overlay(
     for day, hours, km, activities in day_rows:
         if 1 <= day <= 16:
             row_index = day - 1
-            x_hours = LEFT_HOURS_X
-            x_km = LEFT_KM_X
+            cx_hours = LEFT_HOURS_CENTER_X
+            cx_km = LEFT_KM_CENTER_X
             check_x = {
                 "alltag": LEFT_CHECK_ALLTAG_X,
                 "gespr": LEFT_CHECK_GESPR_X,
@@ -219,8 +220,8 @@ def build_overlay(
             }
         elif 17 <= day <= 31:
             row_index = day - 17
-            x_hours = RIGHT_HOURS_X
-            x_km = RIGHT_KM_X
+            cx_hours = RIGHT_HOURS_CENTER_X
+            cx_km = RIGHT_KM_CENTER_X
             check_x = {
                 "alltag": RIGHT_CHECK_ALLTAG_X,
                 "gespr": RIGHT_CHECK_GESPR_X,
@@ -231,10 +232,10 @@ def build_overlay(
         y = ROW_FIRST_BASELINE - row_index * ROW_HEIGHT
         if hours > 0:
             c.setFont("Helvetica-Bold", HOURS_FONT_SIZE)
-            c.drawString(x_hours, y, _format_hours(hours))
+            c.drawCentredString(cx_hours, y, _format_hours(hours))
         if km:
             c.setFont("Helvetica", KM_FONT_SIZE)
-            c.drawString(x_km, y, _format_km(km))
+            c.drawCentredString(cx_km, y, _format_km(km))
 
         # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox.
         checks = _checks_for_activities(activities)
