@@ -2,6 +2,7 @@ from app.models.announcement import Announcement
 from app.models.call_request import CallRequest
 from app.models.entry import Entry
 from app.models.hr_request import HrRequest
+from app.models.leistungsnachweis_office_state import LeistungsnachweisOfficeState
 from app.models.notification import Notification
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient_extras import PatientExtras
@@ -21,6 +22,7 @@ __all__ = [
     "CallRequest",
     "Entry",
     "HrRequest",
+    "LeistungsnachweisOfficeState",
     "Notification",
     "PasswordResetToken",
     "PatientExtras",

@@ -10,6 +10,7 @@ import {
   getUsers,
   leistungsnachweisPdfUrl,
   leistungsnachweiseZipUrl,
+  setLeistungsnachweisOfficeProcessed,
 } from "@/lib/api";
 import { AlertCircleIcon, SparkleIcon } from "@/components/icons";
 
@@ -105,6 +106,43 @@ export default function LeistungsnachweisePage() {
   async function loadAll() {
     for (const r of rows) {
       await loadPatientsFor(r.user.id);
+    }
+  }
+
+  async function toggleProcessed(
+    userId: number,
+    patient: LeistungsnachweisPatient
+  ) {
+    const newState = !patient.office_processed_at;
+    try {
+      await setLeistungsnachweisOfficeProcessed(
+        userId,
+        patient.id,
+        year,
+        month,
+        newState
+      );
+      setRows((rows) =>
+        rows.map((r) =>
+          r.user.id === userId && r.patients
+            ? {
+                ...r,
+                patients: r.patients.map((p) =>
+                  p.id === patient.id
+                    ? {
+                        ...p,
+                        office_processed_at: newState
+                          ? new Date().toISOString()
+                          : null,
+                      }
+                    : p
+                ),
+              }
+            : r
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler");
     }
   }
 
@@ -238,30 +276,54 @@ export default function LeistungsnachweisePage() {
                       </p>
                     ) : (
                       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
-                        {patients.map((p) => (
-                          <li
-                            key={p.id}
-                            className="flex items-center justify-between gap-3 px-3 py-2"
-                          >
-                            <span className="truncate text-sm text-slate-800">
-                              {p.name}
-                            </span>
-                            <a
-                              href={leistungsnachweisPdfUrl(
-                                user.id,
-                                p.id,
-                                year,
-                                month,
-                                "patti"
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-brand-700"
+                        {patients.map((p) => {
+                          const done = !!p.office_processed_at;
+                          return (
+                            <li
+                              key={p.id}
+                              className={`flex items-center justify-between gap-3 px-3 py-2 ${
+                                done ? "bg-emerald-50/50" : ""
+                              }`}
                             >
-                              Leistungsnachweis PDF ↗
-                            </a>
-                          </li>
-                        ))}
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-sm text-slate-800">
+                                  {p.name}
+                                </span>
+                                {done && (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">
+                                    Bearbeitet
+                                  </span>
+                                )}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <a
+                                  href={leistungsnachweisPdfUrl(
+                                    user.id,
+                                    p.id,
+                                    year,
+                                    month,
+                                    "patti"
+                                  )}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-brand-700"
+                                >
+                                  PDF ↗
+                                </a>
+                                <button
+                                  onClick={() => toggleProcessed(user.id, p)}
+                                  className={`inline-flex items-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-medium transition ${
+                                    done
+                                      ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {done ? "↶ Zurücksetzen" : "✓ Bearbeitet"}
+                                </button>
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>

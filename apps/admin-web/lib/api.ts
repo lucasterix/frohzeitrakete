@@ -324,7 +324,34 @@ export async function deleteTravelCostPayment(id: number): Promise<void> {
 export type LeistungsnachweisPatient = {
   id: number;
   name: string;
+  office_processed_at?: string | null;
 };
+
+export async function setLeistungsnachweisOfficeProcessed(
+  userId: number,
+  patientId: number,
+  year: number,
+  month: number,
+  processed: boolean
+): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/leistungsnachweis-office-state`,
+    {
+      method: "POST",
+      headers: { ...buildHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        patient_id: patientId,
+        year,
+        month,
+        processed,
+      }),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Fehler beim Speichern"));
+  }
+}
 
 export async function getLeistungsnachweisPatients(
   userId: number,

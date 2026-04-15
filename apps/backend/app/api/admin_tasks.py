@@ -258,8 +258,7 @@ def admin_list_patient_ids_for_month(
     db: Session = Depends(get_db),
 ):
     """Gibt alle Patienten (id + name) zurück, für die der User in dem
-    Monat tatsächlich Stunden erfasst hat. Patienten ohne Einsätze
-    tauchen nicht auf — für die gibt es auch keinen Leistungsnachweis."""
+    Monat tatsächlich Stunden erfasst hat, inkl. office-processed-State."""
     from calendar import monthrange
     from datetime import date as _date
 
@@ -267,6 +266,9 @@ def admin_list_patient_ids_for_month(
     end = _date(year, month, monthrange(year, month)[1])
     from app.clients.patti_client import PattiClient
     from app.models.entry import Entry
+    from app.models.leistungsnachweis_office_state import (
+        LeistungsnachweisOfficeState,
+    )
 
     rows = (
         db.query(Entry.patient_id)
@@ -282,7 +284,18 @@ def admin_list_patient_ids_for_month(
     )
     patient_ids = [p[0] for p in rows]
 
-    # Patient-Namen best-effort via Patti auflösen
+    # Office-State für (user, year, month) nachladen
+    state_rows = (
+        db.query(LeistungsnachweisOfficeState)
+        .filter(
+            LeistungsnachweisOfficeState.user_id == user_id,
+            LeistungsnachweisOfficeState.year == year,
+            LeistungsnachweisOfficeState.month == month,
+        )
+        .all()
+    )
+    state_by_pid = {s.patient_id: s for s in state_rows}
+
     names: dict[int, str] = {}
     if patient_ids:
         try:
@@ -297,13 +310,83 @@ def admin_list_patient_ids_for_month(
         except Exception:  # noqa: BLE001
             names = {pid: f"Patient {pid}" for pid in patient_ids}
 
-    # Keep the old key for backwards-compat, add the new one
     return {
         "patient_ids": patient_ids,
         "patients": [
-            {"id": pid, "name": names.get(pid, f"Patient {pid}")}
+            {
+                "id": pid,
+                "name": names.get(pid, f"Patient {pid}"),
+                "office_processed_at": (
+                    state_by_pid[pid].processed_at.isoformat()
+                    if pid in state_by_pid
+                    and state_by_pid[pid].processed_at is not None
+                    else None
+                ),
+            }
             for pid in patient_ids
         ],
+    }
+
+
+@router.post("/leistungsnachweis-office-state")
+def admin_set_leistungsnachweis_office_state(
+    payload: dict,
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Markiert einen LN als 'vom Büro bearbeitet' (an KK geschickt)
+    oder nimmt die Markierung zurück. Payload: {user_id, patient_id,
+    year, month, processed: bool}."""
+    from datetime import datetime as _dt
+    from app.models.leistungsnachweis_office_state import (
+        LeistungsnachweisOfficeState,
+    )
+
+    try:
+        user_id = int(payload["user_id"])
+        patient_id = int(payload["patient_id"])
+        year = int(payload["year"])
+        month = int(payload["month"])
+        processed = bool(payload["processed"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"bad_payload: {exc}")
+
+    row = (
+        db.query(LeistungsnachweisOfficeState)
+        .filter(
+            LeistungsnachweisOfficeState.user_id == user_id,
+            LeistungsnachweisOfficeState.patient_id == patient_id,
+            LeistungsnachweisOfficeState.year == year,
+            LeistungsnachweisOfficeState.month == month,
+        )
+        .first()
+    )
+    if row is None:
+        row = LeistungsnachweisOfficeState(
+            user_id=user_id,
+            patient_id=patient_id,
+            year=year,
+            month=month,
+        )
+        db.add(row)
+
+    if processed:
+        row.processed_at = _dt.utcnow()
+        row.processed_by_user_id = admin_user.id
+    else:
+        row.processed_at = None
+        row.processed_by_user_id = None
+
+    db.commit()
+    db.refresh(row)
+    return {
+        "user_id": row.user_id,
+        "patient_id": row.patient_id,
+        "year": row.year,
+        "month": row.month,
+        "office_processed_at": (
+            row.processed_at.isoformat() if row.processed_at else None
+        ),
     }
 
 
