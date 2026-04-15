@@ -46,68 +46,115 @@ def _month_is_locked(
     return False
 
 
+def _sync_patti_total_for_month(
+    db: Session,
+    *,
+    user_id: int,
+    patient_id: int,
+    year: int,
+    month: int,
+) -> None:
+    """Schreibt den Gesamtstand für (patient, monat) in Patti.
+
+    Strategie: löscht alle Patti-Service-Entries die wir in diesem
+    Monat angelegt haben (entries.patti_service_entry_id), legt dann
+    eine einzige neue mit der aktuellen Summe an. So ist Patti immer
+    auf dem aktuellen Stand der Rakete-Datenbank, egal ob bei "ab" in
+    der Zeiterfassung vorher 0 oder ein anderer Wert stand.
+
+    Fehler werden geloggt aber nicht propagiert — das lokale Save
+    geht durch.
+    """
+    from calendar import monthrange
+
+    try:
+        first = date(year, month, 1)
+        last = date(year, month, monthrange(year, month)[1])
+
+        entries_in_month = (
+            db.query(Entry)
+            .filter(
+                Entry.user_id == user_id,
+                Entry.patient_id == patient_id,
+                Entry.entry_type == "patient",
+                Entry.entry_date >= first,
+                Entry.entry_date <= last,
+            )
+            .all()
+        )
+        total_hours = round(sum(e.hours for e in entries_in_month), 4)
+        old_patti_ids = [
+            e.patti_service_entry_id
+            for e in entries_in_month
+            if e.patti_service_entry_id is not None
+        ]
+
+        client = PattiClient()
+        client.login()
+
+        # Erst alle alten Patti-IDs aus diesem Monat löschen, damit
+        # nichts doppelt gezählt wird.
+        for pid in old_patti_ids:
+            try:
+                client.delete_service_entry(pid)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "patti_delete_failed id=%s err=%s", pid, exc
+                )
+        # patti_service_entry_id bei den alten Einträgen leeren
+        for e in entries_in_month:
+            e.patti_service_entry_id = None
+        db.commit()
+
+        if total_hours <= 0:
+            logger.info(
+                "patti_sync_month total=0 user=%s patient=%s %s-%s — nichts zu posten",
+                user_id, patient_id, year, month,
+            )
+            return
+
+        response = client.create_service_entry(
+            patient_id=patient_id,
+            year=year,
+            month=month,
+            hours=total_hours,
+        )
+        new_patti_id = (
+            response.get("id") if isinstance(response, dict) else None
+        )
+        if new_patti_id and entries_in_month:
+            # Wir hängen die neue Patti-ID an den ältesten Eintrag des
+            # Monats — dieser fungiert als "Master" für den Monats-Stand.
+            entries_in_month.sort(key=lambda e: e.id)
+            entries_in_month[0].patti_service_entry_id = new_patti_id
+            db.commit()
+        logger.info(
+            "patti_sync_month total=%s user=%s patient=%s %s-%s patti_id=%s",
+            total_hours, user_id, patient_id, year, month, new_patti_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "patti_sync_month_failed user=%s patient=%s %s-%s err=%s",
+            user_id, patient_id, year, month, exc,
+        )
+
+
 def _sync_entry_to_patti(
     db: Session,
     entry: Entry,
     *,
     delta_hours: float,
 ) -> None:
-    """Legt die (Delta-) Stunden in Patti an, damit die Reststunden-Berechnung
-    dort sofort stimmt.
-
-    Confirmed Patti shape (live-tested):
-        POST /api/v1/service-entries
-        {
-          "patient_id": int,
-          "type": "careService",
-          "kind": "serviced",
-          "year": YYYY,
-          "month": M,
-          "hours": float
-        }
-
-    Beim Update (same-day-hours-addition) wollen wir nur das *Delta* an Patti
-    schicken, nicht die neue Gesamtsumme — sonst würde Patti doppelt zählen.
-
-    Fehler werden als Warning geloggt aber nicht hochgeschickt. Die Mobile
-    App zeigt dem User den Einsatz als gespeichert, auch wenn der Patti-Sync
-    fehlschlägt — das Büro kann ihn dann manuell nacharbeiten.
-    """
-    if delta_hours <= 0:
-        return
-
-    try:
-        client = PattiClient()
-        client.login()
-
-        response = client.create_service_entry(
-            patient_id=entry.patient_id,
-            year=entry.entry_date.year,
-            month=entry.entry_date.month,
-            hours=round(delta_hours, 4),
-        )
-
-        new_patti_id = response.get("id") if isinstance(response, dict) else None
-        if new_patti_id:
-            # Nur beim allerersten Sync die ID speichern – für addierte
-            # Einsätze erzeugen wir separate service-entries in Patti, das
-            # ist konsistent mit Patti's eigener kind="serviced"-Aggregation.
-            if entry.patti_service_entry_id is None:
-                entry.patti_service_entry_id = new_patti_id
-                db.commit()
-            logger.info(
-                "Patti sync ok for entry %s: patti_id=%s delta=%sh",
-                entry.id,
-                new_patti_id,
-                delta_hours,
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Patti sync failed for entry %s (delta %sh): %s",
-            entry.id,
-            delta_hours,
-            exc,
-        )
+    """Wrapper für Rückwärts-Kompatibilität — leitet auf den neuen
+    Monats-Sync weiter. delta_hours wird ignoriert, wir senden immer
+    die volle Monats-Summe."""
+    _sync_patti_total_for_month(
+        db,
+        user_id=entry.user_id,
+        patient_id=entry.patient_id,
+        year=entry.entry_date.year,
+        month=entry.entry_date.month,
+    )
 
 
 def _resolve_patient_address(patient_id: int) -> str | None:
@@ -359,25 +406,39 @@ def delete_entry_for_user(db: Session, user_id: int, entry_id: int) -> None:
             detail="Monat ist bereits unterschrieben – Eintrag kann nicht gelöscht werden.",
         )
 
-    patti_id = entry.patti_service_entry_id
+    was_patient_entry = entry.entry_type == "patient" and entry.patient_id
+    patient_id = entry.patient_id
+    year = entry.entry_date.year
+    month = entry.entry_date.month
+    captured_patti_id = entry.patti_service_entry_id
     db.delete(entry)
     db.commit()
 
-    # Nach erfolgreichem DB-Delete: Patti bescheid geben, damit die Reststunden
-    # dort stimmen. Fehler werden geloggt aber nicht propagiert — das Büro
-    # kann in Patti notfalls manuell nacharbeiten.
-    if patti_id is not None:
-        try:
-            client = PattiClient()
-            client.login()
-            client.delete_service_entry(patti_id)
-            logger.info("patti_service_entry_deleted id=%s", patti_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "patti_service_entry_delete_failed id=%s: %s",
-                patti_id,
-                exc,
-            )
+    if was_patient_entry:
+        # Erst die Patti-ID des gelöschten Eintrags wegputzen,
+        # dann den vollen Monats-Sync laufen lassen.
+        if captured_patti_id is not None:
+            try:
+                client = PattiClient()
+                client.login()
+                client.delete_service_entry(captured_patti_id)
+                logger.info(
+                    "patti_delete_after_entry_delete id=%s",
+                    captured_patti_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "patti_delete_after_entry_delete_failed id=%s err=%s",
+                    captured_patti_id,
+                    exc,
+                )
+        _sync_patti_total_for_month(
+            db,
+            user_id=user_id,
+            patient_id=patient_id,
+            year=year,
+            month=month,
+        )
 
 
 def update_entry_for_user(
