@@ -433,6 +433,99 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
+          const SizedBox(height: 12),
+
+          // Stunden-Saldo + Soll-Stunden aus der Google-Stundenübersicht
+          Builder(builder: (ctx) {
+            final me = ref.watch(currentUserProvider);
+            if (me == null ||
+                (me.overtimeBalanceHours == null &&
+                    me.targetHoursPerDay == null)) {
+              return const SizedBox.shrink();
+            }
+            final bal = me.overtimeBalanceHours;
+            final tgt = me.targetHoursPerDay;
+            final balPositive = bal != null && bal >= 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Stundensaldo',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        if (bal != null)
+                          Text(
+                            '${balPositive ? "+" : ""}${bal.toStringAsFixed(1)} h',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: balPositive
+                                  ? const Color(0xFF059669)
+                                  : const Color(0xFFDC2626),
+                            ),
+                          )
+                        else
+                          const Text(
+                            '—',
+                            style: TextStyle(
+                              fontSize: 22,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 40,
+                    color: const Color(0xFFE2E8F0),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Soll / Tag',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          tgt != null ? '${tgt.toStringAsFixed(1)} h' : '—',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
           const SizedBox(height: 18),
 
           // Aktionen: Neuer Einsatz + Meine Einsätze

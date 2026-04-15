@@ -774,3 +774,26 @@ def admin_resolve_sync_error(
     row.resolved_by_user_id = admin_user.id
     db.commit()
     return {"ok": True}
+
+
+@router.post("/sheets-sync")
+def admin_sheets_sync(
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Zieht Überstunden-Saldo und Soll-Stunden/Woche aus der Google
+    'Stundenübersicht' und schreibt die Werte auf die User. Matching
+    erfolgt fuzzy über den full_name."""
+    from app.services.sheets_service import sync_users_from_sheet
+
+    try:
+        result = sync_users_from_sheet(db)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502, detail=f"sheets_sync_failed: {exc}"
+        )
+    return {
+        "matched": result.matched,
+        "unmatched_sheet_names": result.unmatched_sheet_names,
+        "unmatched_user_ids": result.unmatched_user_ids,
+    }

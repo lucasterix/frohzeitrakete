@@ -7,7 +7,7 @@ import Link from "next/link";
 import UserEditForm from "@/components/user-edit-form";
 import UserSessionList from "@/components/user-session-list";
 import UserDangerZone from "@/components/user-danger-zone";
-import { User, getMe, getUsers } from "@/lib/api";
+import { User, getMe, getUsers, runSheetsSync } from "@/lib/api";
 import { AlertCircleIcon, RefreshIcon, UsersIcon } from "@/components/icons";
 
 export default function AdminUsersPage() {
@@ -27,6 +27,8 @@ export default function AdminUsersPage() {
     "all"
   );
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
+  const [sheetsSyncing, setSheetsSyncing] = useState(false);
+  const [sheetsFlash, setSheetsFlash] = useState("");
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -110,18 +112,53 @@ export default function AdminUsersPage() {
             </p>
           </div>
 
-          <button
-            onClick={loadUsers}
-            disabled={usersLoading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshIcon
-              className={`h-4 w-4 ${usersLoading ? "animate-spin" : ""}`}
-            />
-            Neu laden
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={async () => {
+                setSheetsFlash("");
+                setUsersError("");
+                setSheetsSyncing(true);
+                try {
+                  const r = await runSheetsSync();
+                  setSheetsFlash(
+                    `Sheets-Sync OK: ${r.matched} gematched, ` +
+                      `${r.unmatched_sheet_names.length} Sheet-Namen ohne Treffer.`
+                  );
+                  await loadUsers();
+                } catch (err) {
+                  setUsersError(
+                    err instanceof Error ? err.message : "Sheets-Sync Fehler"
+                  );
+                } finally {
+                  setSheetsSyncing(false);
+                }
+              }}
+              disabled={sheetsSyncing}
+              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshIcon
+                className={`h-4 w-4 ${sheetsSyncing ? "animate-spin" : ""}`}
+              />
+              {sheetsSyncing ? "Synchronisiere …" : "📊 Sheets-Sync"}
+            </button>
+            <button
+              onClick={loadUsers}
+              disabled={usersLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshIcon
+                className={`h-4 w-4 ${usersLoading ? "animate-spin" : ""}`}
+              />
+              Neu laden
+            </button>
+          </div>
         </div>
       </div>
+      {sheetsFlash && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {sheetsFlash}
+        </div>
+      )}
 
       {usersError && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -223,6 +260,24 @@ export default function AdminUsersPage() {
                           {user.patti_person_id && (
                             <span className="ml-2 text-amber-600">
                               · Patti #{user.patti_person_id}
+                            </span>
+                          )}
+                          {user.overtime_balance_hours != null && (
+                            <span
+                              className={`ml-2 ${
+                                user.overtime_balance_hours >= 0
+                                  ? "text-emerald-700"
+                                  : "text-red-700"
+                              }`}
+                            >
+                              · Saldo{" "}
+                              {user.overtime_balance_hours >= 0 ? "+" : ""}
+                              {user.overtime_balance_hours.toFixed(1)} h
+                            </span>
+                          )}
+                          {user.target_hours_per_day != null && (
+                            <span className="ml-2 text-slate-600">
+                              · Soll {user.target_hours_per_day.toFixed(1)} h/Tag
                             </span>
                           )}
                         </p>

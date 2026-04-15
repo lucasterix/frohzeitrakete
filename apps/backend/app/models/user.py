@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -31,6 +31,20 @@ class User(Base):
     # vom Mobile-Client beim Login gesetzt. platform = "ios"/"android".
     push_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
     push_platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Aus Google-Sheet "2026 Stundenübersicht" gezogen. Wird regelmäßig
+    # und per Button im Admin-Web resynct. Der Name-Match wird einmal
+    # gesetzt und kann manuell überschrieben werden wenn fuzzy daneben
+    # liegt.
+    overtime_balance_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_hours_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sheets_name_match: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sheets_last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def target_hours_per_day(self) -> float | None:
+        if self.target_hours_per_week is None:
+            return None
+        return round(self.target_hours_per_week / 5.0, 2)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

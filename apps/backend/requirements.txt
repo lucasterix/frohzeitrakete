@@ -47,3 +47,8 @@ pytest==8.3.3
 # PDF-Generator + Overlay für Leistungsnachweis-Export
 reportlab==4.2.5
 pypdf==5.1.0
+
+# Google Sheets (Stundenübersicht-Sync)
+google-auth==2.49.2
+google-auth-httplib2==0.3.1
+google-api-python-client==2.194.0

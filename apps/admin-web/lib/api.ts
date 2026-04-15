@@ -13,7 +13,29 @@ export type User = {
   is_active: boolean;
   patti_person_id: number | null;
   has_company_car?: boolean;
+  overtime_balance_hours?: number | null;
+  target_hours_per_week?: number | null;
+  target_hours_per_day?: number | null;
+  sheets_name_match?: string | null;
+  sheets_last_synced_at?: string | null;
 };
+
+export type SheetsSyncResult = {
+  matched: number;
+  unmatched_sheet_names: string[];
+  unmatched_user_ids: number[];
+};
+
+export async function runSheetsSync(): Promise<SheetsSyncResult> {
+  const res = await fetchWithRefresh(`${API_BASE_URL}/admin/sheets-sync`, {
+    method: "POST",
+    headers: buildHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Sheets-Sync fehlgeschlagen"));
+  }
+  return res.json();
+}
 
 export type CreateUserPayload = {
   email: string;

@@ -176,6 +176,9 @@ def create_sick_leave(
     to_date: date,
     note: str | None,
 ) -> SickLeave:
+    from datetime import timedelta as _td
+    from app.models.entry import Entry
+
     if to_date < from_date:
         raise ValueError("to_date_before_from_date")
     row = SickLeave(
@@ -187,6 +190,41 @@ def create_sick_leave(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    # Soll-Stunden/Tag aus Sheet-Daten → pro Krank-Tag einen "sick"-
+    # Entry anlegen, sodass die Stunden automatisch dem Mitarbeiter
+    # angerechnet werden. Wochenenden werden ausgelassen (Soll=0).
+    sick_user = db.query(User).filter(User.id == user_id).first()
+    if sick_user is not None and sick_user.target_hours_per_day is not None:
+        hrs = sick_user.target_hours_per_day
+        if hrs and hrs > 0:
+            d = from_date
+            while d <= to_date:
+                if d.weekday() < 5:  # Mo–Fr
+                    exists = (
+                        db.query(Entry.id)
+                        .filter(
+                            Entry.user_id == user_id,
+                            Entry.entry_date == d,
+                            Entry.entry_type == "sick",
+                        )
+                        .first()
+                    )
+                    if exists is None:
+                        db.add(
+                            Entry(
+                                user_id=user_id,
+                                patient_id=None,
+                                entry_type="sick",
+                                category_label="Krankmeldung",
+                                entry_date=d,
+                                hours=hrs,
+                                activities="",
+                                note=f"Auto-Eintrag aus Krankmeldung #{row.id}",
+                            )
+                        )
+                d += _td(days=1)
+            db.commit()
 
     # Admins benachrichtigen damit die Krankmeldung im Büro-Feed auftaucht
     admins = db.query(User).filter(User.role.in_(["admin", "buero"])).all()

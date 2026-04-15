@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -32,6 +34,11 @@ class UserResponse(BaseModel):
     patti_person_id: int | None = None
     has_company_car: bool = False
     initials: str | None = None
+    overtime_balance_hours: float | None = None
+    target_hours_per_week: float | None = None
+    target_hours_per_day: float | None = None
+    sheets_name_match: str | None = None
+    sheets_last_synced_at: datetime | None = None
 
     class Config:
         from_attributes = True

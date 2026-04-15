@@ -136,3 +136,31 @@ async def on_startup():
         sentry_enabled=bool(settings.sentry_dsn),
         log_level=settings.log_level,
     )
+
+    # Google-Sheets-Sync alle 30 Minuten. Läuft als Hintergrund-Task
+    # im selben Event-Loop — kein zusätzliches Scheduler-Paket nötig.
+    import asyncio
+
+    async def _sheets_sync_loop() -> None:
+        from app.db.session import SessionLocal
+        from app.services.sheets_service import sync_users_from_sheet
+
+        # Beim allerersten Start 60s warten damit DB/Migrations sicher up sind
+        await asyncio.sleep(60)
+        while True:
+            try:
+                db = SessionLocal()
+                try:
+                    result = sync_users_from_sheet(db)
+                    logger.info(
+                        "sheets_sync_periodic matched=%s unmatched_sheet=%s",
+                        result.matched,
+                        len(result.unmatched_sheet_names),
+                    )
+                finally:
+                    db.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("sheets_sync_periodic_failed err=%s", exc)
+            await asyncio.sleep(30 * 60)
+
+    asyncio.create_task(_sheets_sync_loop())
