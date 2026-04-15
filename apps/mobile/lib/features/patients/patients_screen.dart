@@ -419,15 +419,17 @@ class _PatientCard extends ConsumerWidget {
                     ),
                     error: (_, _) => const SizedBox.shrink(),
                     data: (b) {
-                      final remaining = b.careServiceRemainingHours;
-                      final color = remaining < 2
+                      // Gesamt-Reststunden über alle Töpfe — der
+                      // Betreuer braucht nur EINE Zahl.
+                      final total = b.careServiceRemainingHours +
+                          b.respiteCareRemainingHours;
+                      final color = total < 2
                           ? Colors.red
-                          : remaining < 5
+                          : total < 5
                               ? Colors.orange
                               : green;
                       return _chip(
-                        label:
-                            '${remaining.toStringAsFixed(1)}h Rest',
+                        label: '${total.toStringAsFixed(1)}h Rest',
                         color: color,
                         icon: Icons.schedule,
                       );

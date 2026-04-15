@@ -46,6 +46,52 @@ def _month_is_locked(
     return False
 
 
+# Patti type-Strings für die zwei Töpfe.
+_PATTI_TYPE_BL = "careService"   # Betreuungsleistung §45b
+_PATTI_TYPE_VP = "respiteCare"   # Verhinderungspflege §39
+
+
+def _allocate_to_pots(
+    entries: list[Entry],
+    *,
+    bl_remaining: float,
+    vp_remaining: float,
+    month: int,
+) -> tuple[float, float, list[Entry]]:
+    """Verteilt Einsätze auf BL und VP nach Fachregel.
+
+    - Jan–Jun: Betreuungsleistung zuerst, VP nur als Overflow
+    - Jul–Dez: Verhinderungspflege zuerst, BL nur als Overflow
+    - Ein Eintrag ist atomar: passt er nicht ganz in einen Topf,
+      wandert er als Ganzes in den anderen
+    - Passt er in keinen Topf → wird nicht zu Patti gesendet (dropped)
+
+    Returns (total_bl_hours, total_vp_hours, dropped_entries).
+    """
+    priority = ["bl", "vp"] if month <= 6 else ["vp", "bl"]
+    pots = {"bl": bl_remaining, "vp": vp_remaining}
+    placed_bl = 0.0
+    placed_vp = 0.0
+    dropped: list[Entry] = []
+    for entry in sorted(entries, key=lambda e: (e.entry_date, e.id)):
+        h = entry.hours
+        if h <= 0:
+            continue
+        placed = False
+        for pot in priority:
+            if pots[pot] + 1e-9 >= h:
+                pots[pot] -= h
+                if pot == "bl":
+                    placed_bl += h
+                else:
+                    placed_vp += h
+                placed = True
+                break
+        if not placed:
+            dropped.append(entry)
+    return (round(placed_bl, 4), round(placed_vp, 4), dropped)
+
+
 def _sync_patti_total_for_month(
     db: Session,
     *,
@@ -54,16 +100,14 @@ def _sync_patti_total_for_month(
     year: int,
     month: int,
 ) -> None:
-    """Schreibt den Gesamtstand für (patient, monat) in Patti.
+    """Schreibt den Monats-Stand zu Patti, verteilt nach Fachregel auf
+    Betreuungsleistung und Verhinderungspflege.
 
-    Strategie: löscht alle Patti-Service-Entries die wir in diesem
-    Monat angelegt haben (entries.patti_service_entry_id), legt dann
-    eine einzige neue mit der aktuellen Summe an. So ist Patti immer
-    auf dem aktuellen Stand der Rakete-Datenbank, egal ob bei "ab" in
-    der Zeiterfassung vorher 0 oder ein anderer Wert stand.
-
-    Fehler werden geloggt aber nicht propagiert — das lokale Save
-    geht durch.
+    Ablauf:
+    1. Eigene alten Patti-IDs für (patient, monat) löschen
+    2. Aktuellen Restbudget-Stand bei Patti abfragen (jetzt ohne uns)
+    3. Allokation pro Eintrag in BL/VP nach Monats-Priorität
+    4. Pro Topf max 1 service-entry mit aggregierter Summe POSTen
     """
     from calendar import monthrange
 
@@ -82,7 +126,6 @@ def _sync_patti_total_for_month(
             )
             .all()
         )
-        total_hours = round(sum(e.hours for e in entries_in_month), 4)
         old_patti_ids = [
             e.patti_service_entry_id
             for e in entries_in_month
@@ -92,8 +135,7 @@ def _sync_patti_total_for_month(
         client = PattiClient()
         client.login()
 
-        # Erst alle alten Patti-IDs aus diesem Monat löschen, damit
-        # nichts doppelt gezählt wird.
+        # 1. Alte Patti-IDs aus diesem Monat löschen
         for pid in old_patti_ids:
             try:
                 client.delete_service_entry(pid)
@@ -101,37 +143,88 @@ def _sync_patti_total_for_month(
                 logger.warning(
                     "patti_delete_failed id=%s err=%s", pid, exc
                 )
-        # patti_service_entry_id bei den alten Einträgen leeren
         for e in entries_in_month:
             e.patti_service_entry_id = None
         db.commit()
 
-        if total_hours <= 0:
-            logger.info(
-                "patti_sync_month total=0 user=%s patient=%s %s-%s — nichts zu posten",
-                user_id, patient_id, year, month,
-            )
+        if not entries_in_month:
             return
 
-        response = client.create_service_entry(
-            patient_id=patient_id,
-            year=year,
+        # 2. Frische Restbudgets abfragen — jetzt ohne unsere Anteile
+        try:
+            bl_budget = client.get_remaining_care_service_budget(
+                patient_id, year
+            )
+            bl_remaining = float(
+                bl_budget.get("remaining_hours")
+                or bl_budget.get("remainingHours")
+                or 0.0
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("patti_bl_budget_fetch_failed err=%s", exc)
+            bl_remaining = 0.0
+        try:
+            vp_budget = client.get_remaining_respite_care_budget(
+                patient_id, year
+            )
+            vp_remaining = float(
+                vp_budget.get("remaining_hours")
+                or vp_budget.get("remainingHours")
+                or 0.0
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("patti_vp_budget_fetch_failed err=%s", exc)
+            vp_remaining = 0.0
+
+        # 3. Allokation
+        total_bl, total_vp, dropped = _allocate_to_pots(
+            entries_in_month,
+            bl_remaining=bl_remaining,
+            vp_remaining=vp_remaining,
             month=month,
-            hours=total_hours,
         )
-        new_patti_id = (
-            response.get("id") if isinstance(response, dict) else None
-        )
-        if new_patti_id and entries_in_month:
-            # Wir hängen die neue Patti-ID an den ältesten Eintrag des
-            # Monats — dieser fungiert als "Master" für den Monats-Stand.
-            entries_in_month.sort(key=lambda e: e.id)
-            entries_in_month[0].patti_service_entry_id = new_patti_id
-            db.commit()
+        if dropped:
+            logger.warning(
+                "patti_sync_dropped user=%s patient=%s %s-%s "
+                "ids=%s reason=insufficient_budget bl=%s vp=%s",
+                user_id, patient_id, year, month,
+                [e.id for e in dropped], bl_remaining, vp_remaining,
+            )
+
         logger.info(
-            "patti_sync_month total=%s user=%s patient=%s %s-%s patti_id=%s",
-            total_hours, user_id, patient_id, year, month, new_patti_id,
+            "patti_sync_alloc user=%s patient=%s %s-%s bl=%s vp=%s",
+            user_id, patient_id, year, month, total_bl, total_vp,
         )
+
+        # 4. POST pro Topf (max 1 entry pro Topf)
+        master_entry = sorted(entries_in_month, key=lambda e: e.id)[0]
+        for total, type_ in (
+            (total_bl, _PATTI_TYPE_BL),
+            (total_vp, _PATTI_TYPE_VP),
+        ):
+            if total <= 0:
+                continue
+            try:
+                response = client.create_service_entry(
+                    patient_id=patient_id,
+                    year=year,
+                    month=month,
+                    hours=total,
+                    type_=type_,
+                )
+                new_id = (
+                    response.get("id")
+                    if isinstance(response, dict)
+                    else None
+                )
+                if new_id:
+                    master_entry.patti_service_entry_id = new_id
+                    db.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "patti_post_failed type=%s total=%s err=%s",
+                    type_, total, exc,
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "patti_sync_month_failed user=%s patient=%s %s-%s err=%s",

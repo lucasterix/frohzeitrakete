@@ -202,7 +202,10 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           ),
         ).future,
       );
-      final remaining = budget.careServiceRemainingHours;
+      // Budget-Check gegen Gesamt-Reststunden (BL + VP) — der Backend-
+      // Sync sucht sich später automatisch den richtigen Topf.
+      final remaining = budget.careServiceRemainingHours +
+          budget.respiteCareRemainingHours;
       if (_hours! > remaining) {
         final accepted = await _showOverBudgetConfirm(
           remaining: remaining,

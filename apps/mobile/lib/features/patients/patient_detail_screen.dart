@@ -687,12 +687,16 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
         ),
       ),
       data: (budget) {
-        final remaining = budget.careServiceRemainingHours as double;
-        final used = budget.careServiceUsedHours as double;
-        final total = remaining + used;
-        final progress = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
+        // Gesamt-Reststunden über alle Töpfe — der Betreuer braucht
+        // nur EINE Zahl. BL + VP zusammengezogen.
+        final blRemaining = budget.careServiceRemainingHours as double;
+        final blUsed = budget.careServiceUsedHours as double;
         final respiteHours = budget.respiteCareRemainingHours as double;
-        final respiteMoney = budget.respiteCareRemainingMoneyCents as int;
+        final remaining = blRemaining + respiteHours;
+        final used = blUsed; // BL-Verbrauch — VP wird selten verbraucht
+        final total = remaining + used;
+        final progress =
+            total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
         final locked = lockAsync.valueOrNull?.isLocked == true;
 
         return _heroShell(
@@ -704,7 +708,7 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   const Icon(Icons.schedule, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   const Text(
-                    'Reststunden · Betreuungsleistung',
+                    'Reststunden · Gesamt',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13,
@@ -769,47 +773,17 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                   fontSize: 12,
                 ),
               ),
-              if (respiteHours > 0) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.assignment_outlined,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Verhinderungspflege',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '${_formatHours(respiteHours)} · ${(respiteMoney / 100).toStringAsFixed(0)} €',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+              // Aufschlüsselung BL/VP nur als kleine Hilfslinie — die
+              // Hauptzahl oben ist die Summe.
+              const SizedBox(height: 8),
+              Text(
+                'Davon Betreuungsleistung: ${_formatHours(blRemaining)} · '
+                'Verhinderungspflege: ${_formatHours(respiteHours)}',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 11,
                 ),
-              ],
+              ),
             ],
           ),
         );
