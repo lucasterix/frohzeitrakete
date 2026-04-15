@@ -41,41 +41,19 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
 
   bool get _isEmpty => _strokes.isEmpty && _currentStroke.isEmpty;
 
-  /// Unterschriften-Qualitäts-Check. Eine "gültige" Unterschrift muss:
-  ///   - mindestens 2 getrennte Striche haben (ein einzelner Strich ist
-  ///     meistens nur ein "Krackel")
-  ///   - insgesamt mindestens 25 Punkte enthalten
-  ///   - eine Bounding-Box von mindestens 60×25 px aufspannen
-  /// Wenn das nicht erfüllt ist, wird der User gebeten sauberer zu
-  /// unterschreiben. Das ist kein absoluter OCR-Test, aber fängt die
-  /// häufigsten "aus Versehen einen Strich gemalt"-Fälle ab.
+  /// Lockerer Qualitäts-Check: soll nur echte "nur ein kurzer Krackel"-
+  /// Fälle abfangen. Alles was nach einer ernst gemeinten Unterschrift
+  /// aussieht (mehrere Striche ODER genug Punkte) wird akzeptiert.
   ({bool ok, String? reason}) _validateSignature() {
-    if (_strokes.length < 2) {
-      return (ok: false, reason: 'Bitte mit vollständigem Namen unterschreiben — ein einzelner Strich reicht nicht.');
-    }
-    final totalPoints = _strokes.fold<int>(
-      0,
-      (sum, s) => sum + s.length,
-    );
-    if (totalPoints < 25) {
-      return (ok: false, reason: 'Unterschrift ist zu kurz. Bitte erneut und vollständig unterschreiben.');
-    }
-    double minX = double.infinity;
-    double maxX = -double.infinity;
-    double minY = double.infinity;
-    double maxY = -double.infinity;
-    for (final s in _strokes) {
-      for (final p in s) {
-        if (p.dx < minX) minX = p.dx;
-        if (p.dx > maxX) maxX = p.dx;
-        if (p.dy < minY) minY = p.dy;
-        if (p.dy > maxY) maxY = p.dy;
-      }
-    }
-    final width = maxX - minX;
-    final height = maxY - minY;
-    if (width < 60 || height < 25) {
-      return (ok: false, reason: 'Unterschrift ist zu klein. Bitte den kompletten Bereich nutzen und erneut unterschreiben.');
+    final totalPoints =
+        _strokes.fold<int>(0, (sum, s) => sum + s.length);
+    // Genau ein Strich mit sehr wenigen Punkten → ablehnen
+    if (_strokes.length <= 1 && totalPoints < 8) {
+      return (
+        ok: false,
+        reason: 'Bitte vollständig unterschreiben — ein einzelner '
+            'kurzer Strich reicht nicht.',
+      );
     }
     return (ok: true, reason: null);
   }

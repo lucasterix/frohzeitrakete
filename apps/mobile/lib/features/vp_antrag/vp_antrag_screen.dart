@@ -184,34 +184,12 @@ class _VpAntragScreenState extends ConsumerState<VpAntragScreen> {
       setState(() => _uploadError = 'Bitte zuerst unterschreiben.');
       return;
     }
-    // Qualitäts-Check: min 2 Strokes, min 25 Points, min 60x25 Bounding-Box
-    if (_strokes.length < 2) {
-      setState(() => _uploadError =
-          'Bitte mit vollständigem Namen unterschreiben — ein einzelner Strich reicht nicht.');
-      return;
-    }
+    // Lockerer Qualitäts-Check — nur echte Krackel ablehnen
     final totalPoints =
         _strokes.fold<int>(0, (sum, s) => sum + s.length);
-    if (totalPoints < 25) {
+    if (_strokes.length <= 1 && totalPoints < 8) {
       setState(() => _uploadError =
-          'Unterschrift ist zu kurz. Bitte erneut und vollständig unterschreiben.');
-      return;
-    }
-    double minX = double.infinity;
-    double maxX = -double.infinity;
-    double minY = double.infinity;
-    double maxY = -double.infinity;
-    for (final s in _strokes) {
-      for (final p in s) {
-        if (p.dx < minX) minX = p.dx;
-        if (p.dx > maxX) maxX = p.dx;
-        if (p.dy < minY) minY = p.dy;
-        if (p.dy > maxY) maxY = p.dy;
-      }
-    }
-    if ((maxX - minX) < 60 || (maxY - minY) < 25) {
-      setState(() => _uploadError =
-          'Unterschrift ist zu klein. Bitte den kompletten Bereich nutzen und erneut unterschreiben.');
+          'Bitte vollständig unterschreiben — ein einzelner kurzer Strich reicht nicht.');
       return;
     }
 

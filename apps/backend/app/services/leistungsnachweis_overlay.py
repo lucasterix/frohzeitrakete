@@ -45,19 +45,20 @@ HEADER_Y = 732
 # Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
 # Häkchen in die Zellen.
-LEFT_HOURS_X = 98
-LEFT_KM_X = 135
-LEFT_CHECK_ALLTAG_X = 175
-LEFT_CHECK_GESPR_X = 197
-LEFT_CHECK_BEGL_X = 219
-LEFT_CHECK_KH_X = 243
+#
+# Wir kreuzen NUR Alltagshilfe / Gespräch-Aktivierung / Begleitung an.
+# "Besuch im KH oder Kurzeitpflegeeinr." ist für die Rakete out-of-scope.
+LEFT_HOURS_X = 92
+LEFT_KM_X = 128
+LEFT_CHECK_ALLTAG_X = 153
+LEFT_CHECK_GESPR_X = 175
+LEFT_CHECK_BEGL_X = 197
 
-RIGHT_HOURS_X = 348
-RIGHT_KM_X = 385
-RIGHT_CHECK_ALLTAG_X = 425
-RIGHT_CHECK_GESPR_X = 447
-RIGHT_CHECK_BEGL_X = 469
-RIGHT_CHECK_KH_X = 493
+RIGHT_HOURS_X = 342
+RIGHT_KM_X = 378
+RIGHT_CHECK_ALLTAG_X = 403
+RIGHT_CHECK_GESPR_X = 425
+RIGHT_CHECK_BEGL_X = 447
 
 # Y-Baseline der Zeile für Tag 1 bzw. Tag 17. Der Wert ist die
 # vertikale Mitte des Kästchens: Stunden, Km und Checkbox-Kreuze
@@ -79,8 +80,10 @@ SIG_IMG_H = 35
 SIG_META_X = 60
 SIG_META_Y = 55
 
-# Font-Größen
+# Font-Größen — km etwas kleiner weil die Km-Spalte schmaler ist und
+# größere Zahlen (z.B. 589,6) sonst aus der Zelle rutschen.
 HOURS_FONT_SIZE = 13
+KM_FONT_SIZE = 9
 CHECK_FONT_SIZE = 14
 
 
@@ -159,7 +162,9 @@ def _format_km(k: float) -> str:
 def _checks_for_activities(activities: set[str]) -> set[str]:
     """Mapping Mobile-Aktivitäts-String → Patti-Checkbox-Spalte.
 
-    Returns a subset of {'alltag', 'gespr', 'begl', 'kh'}.
+    Returns a subset of {'alltag', 'gespr', 'begl'}. Die "Besuch im
+    KH"-Spalte wird bewusst nicht befüllt, die gehört nicht in den
+    Rakete-Workflow.
     """
     result: set[str] = set()
     normalized = {a.lower() for a in activities}
@@ -170,8 +175,6 @@ def _checks_for_activities(activities: set[str]) -> set[str]:
             result.add("gespr")
         if "begleit" in a:
             result.add("begl")
-        if "kh" in a or "kurzzeit" in a or "kurzeit" in a or "klinik" in a:
-            result.add("kh")
     return result
 
 
@@ -213,7 +216,6 @@ def build_overlay(
                 "alltag": LEFT_CHECK_ALLTAG_X,
                 "gespr": LEFT_CHECK_GESPR_X,
                 "begl": LEFT_CHECK_BEGL_X,
-                "kh": LEFT_CHECK_KH_X,
             }
         elif 17 <= day <= 31:
             row_index = day - 17
@@ -223,24 +225,23 @@ def build_overlay(
                 "alltag": RIGHT_CHECK_ALLTAG_X,
                 "gespr": RIGHT_CHECK_GESPR_X,
                 "begl": RIGHT_CHECK_BEGL_X,
-                "kh": RIGHT_CHECK_KH_X,
             }
         else:
             continue
         y = ROW_FIRST_BASELINE - row_index * ROW_HEIGHT
-        c.setFont("Helvetica-Bold", HOURS_FONT_SIZE)
         if hours > 0:
+            c.setFont("Helvetica-Bold", HOURS_FONT_SIZE)
             c.drawString(x_hours, y, _format_hours(hours))
         if km:
+            c.setFont("Helvetica", KM_FONT_SIZE)
             c.drawString(x_km, y, _format_km(km))
 
-        # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox,
-        # leicht nach unten versetzt damit sie mittig im Kästchen sitzen.
+        # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox.
         checks = _checks_for_activities(activities)
         c.setFont("Helvetica-Bold", CHECK_FONT_SIZE)
         check_y = y + CHECK_Y_OFFSET
-        for key in ("alltag", "gespr", "begl", "kh"):
-            if key in checks:
+        for key in ("alltag", "gespr", "begl"):
+            if key in checks and key in check_x:
                 c.drawString(check_x[key], check_y, "X")
 
     # Unterschriften-Metadaten + Bild

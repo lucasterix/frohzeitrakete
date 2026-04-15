@@ -321,18 +321,34 @@ class PattiClient:
         type_: str = "careService",
         kind: str = "serviced",
     ) -> dict[str, Any]:
-        """POST /api/v1/service-entries – legt geleistete Stunden in Patti an."""
-        return self._post(
-            "/api/v1/service-entries",
-            json={
-                "patient_id": patient_id,
-                "type": type_,
-                "kind": kind,
-                "year": year,
-                "month": month,
-                "hours": hours,
-            },
-        ).json()
+        """POST /api/v1/service-entries – legt geleistete Stunden in Patti an.
+
+        Debugging-Hinweis: Patti akzeptiert manchmal scheinbar einen POST
+        mit hours=0, aggregiert aber nichts zu einem bereits auf 0
+        stehenden Monat. Deshalb loggen wir den kompletten Request und
+        die Response — wenn die Reststunden später nicht stimmen, liegt
+        der Mismatch hier sichtbar vor.
+        """
+        payload = {
+            "patient_id": patient_id,
+            "type": type_,
+            "kind": kind,
+            "year": year,
+            "month": month,
+            "hours": hours,
+        }
+        response = self._post("/api/v1/service-entries", json=payload)
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"raw": response.text[:500]}
+        logger.info(
+            "patti_create_service_entry",
+            payload=payload,
+            status=response.status_code,
+            body=body,
+        )
+        return body if isinstance(body, dict) else {"result": body}
 
     def delete_service_entry(self, entry_id: int) -> None:
         """DELETE /api/v1/service-entries/{id}."""

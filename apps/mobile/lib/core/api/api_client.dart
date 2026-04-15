@@ -46,6 +46,33 @@ class ApiClient {
       _cookieJar = CookieJar();
       _dio.interceptors.add(CookieManager(_cookieJar!));
     }
+    // Auto-Refresh Interceptor: wenn der Access-Token abgelaufen ist
+    // und der Backend-Call 401 zurückgibt, rufen wir /auth/refresh auf
+    // und wiederholen den ursprünglichen Request einmal. Refresh selbst
+    // läuft mit dem Refresh-Cookie, kein User-Input nötig.
+    _dio.interceptors.add(
+      QueuedInterceptorsWrapper(
+        onResponse: (response, handler) async {
+          final status = response.statusCode ?? 0;
+          final path = response.requestOptions.path;
+          final isAuthRoute = path.startsWith('/auth/refresh') ||
+              path.startsWith('/auth/login') ||
+              path.startsWith('/auth/logout');
+          if (status == 401 && !isAuthRoute) {
+            try {
+              final refreshed = await _dio.post('/auth/refresh');
+              if ((refreshed.statusCode ?? 0) == 200) {
+                final retry = await _dio.fetch(response.requestOptions);
+                return handler.resolve(retry);
+              }
+            } on DioException catch (_) {
+              // refresh failed → leave original 401 in place
+            } catch (_) {}
+          }
+          handler.next(response);
+        },
+      ),
+    );
   }
 
   /// Stellt sicher dass der CookieJar bereit ist bevor der erste Request geht.
