@@ -37,12 +37,10 @@ logger = logging.getLogger(__name__)
 # Kalibriert gegen den Patti-Leistungsnachweis.
 
 # Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ __ / 20 __ __"
-# Monat UND Jahr haben jeweils zwei getrennte Unterstriche für die
-# einzelnen Ziffern. Zwischen Tens-X und Ones-X ist derselbe Abstand
-# wie zwischen den beiden Year-Slots.
-MONTH_TENS_X, MONTH_ONES_X = 488, 507
-YEAR_TENS_X, YEAR_ONES_X = 558, 577
-HEADER_Y = 706
+# Jede Ziffer sitzt direkt auf ihrem eigenen Unterstrich.
+MONTH_TENS_X, MONTH_ONES_X = 473, 492
+YEAR_TENS_X, YEAR_ONES_X = 548, 567
+HEADER_Y = 732
 
 # Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
