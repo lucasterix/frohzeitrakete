@@ -39,10 +39,8 @@ class EntryCreate(BaseModel):
     @field_validator("entry_date")
     @classmethod
     def entry_date_must_be_today(cls, v: date) -> date:
-        # TEST-MODUS: Einsätze dürfen für beliebige Daten erfasst werden
-        # damit wir PDF-Rendering + Abrechnung für Vergangenheit und
-        # Zukunft durchtesten können. Vor dem Live-Rollout wieder auf
-        # die strenge "nur heute"-Regel umschalten.
+        if v != date.today():
+            raise ValueError("entry_date muss heute sein")
         return v
 
     @model_validator(mode="after")

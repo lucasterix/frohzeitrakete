@@ -37,13 +37,19 @@ def _month_is_locked(
     db: Session, user_id: int, patient_id: int, year: int, month: int
 ) -> bool:
     """Prüft ob der Leistungsnachweis für diesen Monat bereits unterschrieben
-    wurde (by any source) → dann sind Einträge für diesen Monat locked.
-
-    TEST-MODUS: Aktuell IMMER entsperrt, damit auch nach einem
-    unterschriebenen Leistungsnachweis noch Stunden nachgetragen werden
-    können. Vor Live-Rollout auf die echte Lock-Logik zurückstellen.
-    """
-    return False
+    wurde → dann sind Einträge für diesen Monat locked."""
+    exists = (
+        db.query(SignatureEvent.id)
+        .filter(
+            SignatureEvent.patient_id == patient_id,
+            SignatureEvent.document_type == "leistungsnachweis",
+            SignatureEvent.status == "captured",
+            extract("year", SignatureEvent.signed_at) == year,
+            extract("month", SignatureEvent.signed_at) == month,
+        )
+        .first()
+    )
+    return exists is not None
 
 
 # Patti type-Strings für die zwei Töpfe.

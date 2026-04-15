@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_office_user
+from app.core.auth import require_admin_user, require_office_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.patient import (
@@ -430,7 +430,7 @@ def admin_list_trainings(
 )
 def admin_create_training(
     payload: TrainingCreate,
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     return create_training(
@@ -447,7 +447,7 @@ def admin_create_training(
 @router.delete("/trainings/{training_id}", status_code=204)
 def admin_delete_training(
     training_id: int,
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     ok = delete_training(db, training_id=training_id)

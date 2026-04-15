@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon },
   { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon },
   { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon },
-  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true },
+  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon },
   { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon, adminOnly: true },
   { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon },

@@ -137,14 +137,12 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   }
 
   Future<void> _pickDate() async {
-    // TEST-MODUS: Vergangenheit und Zukunft erlaubt damit alles
-    // durchgespielt werden kann. Vor Live-Betrieb wieder auf "nur
-    // heute" zurücksetzen.
+    final today = DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(DateTime.now().year - 2),
-      lastDate: DateTime(DateTime.now().year + 2),
+      firstDate: DateTime(today.year, today.month, today.day),
+      lastDate: DateTime(today.year, today.month, today.day),
     );
     if (picked != null) setState(() => _selectedDate = picked);
   }

@@ -76,11 +76,6 @@ def test_update_entry_rejects_invalid_hours(db, monkeypatch):
 
 
 def test_update_entry_blocked_by_signed_month(db, monkeypatch):
-    # TEST-MODUS: _month_is_locked gibt aktuell immer False zurück damit
-    # Daniel auch nach einem unterschriebenen Leistungsnachweis Stunden
-    # nachtragen kann. Wenn die Lock-Logik wieder aktiv ist, diesen Test
-    # wieder scharf schalten.
-    pytest.skip("Month-Lock ist im TEST-MODUS deaktiviert.")
     user = _user(db)
     # Patient-Einsatz, da der Lock pro Patient+Monat läuft
     entry = Entry(
