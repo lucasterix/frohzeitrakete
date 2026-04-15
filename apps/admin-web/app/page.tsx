@@ -7,7 +7,9 @@ import { User, getMe } from "@/lib/api";
 import { RocketIcon, ShieldIcon, SignatureIcon, UsersIcon } from "@/components/icons";
 
 function getTargetRoute(user: User): string {
-  return user.role === "admin" ? "/admin" : "/user";
+  if (user.role === "admin") return "/admin";
+  if (user.role === "buero") return "/admin/tasks";
+  return "/user";
 }
 
 export default function HomePage() {

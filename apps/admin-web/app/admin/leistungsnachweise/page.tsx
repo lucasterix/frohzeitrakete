@@ -47,7 +47,7 @@ export default function LeistungsnachweisePage() {
   const bootstrap = useCallback(async () => {
     try {
       const me = await getMe();
-      if (me.role !== "admin") {
+      if (me.role !== "admin" && me.role !== "buero") {
         router.replace("/user");
         return;
       }

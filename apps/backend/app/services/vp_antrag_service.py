@@ -33,14 +33,14 @@ logger = logging.getLogger(__name__)
 # Patient-Unterschrift auf der "Datum/Unterschrift der/des
 # Versicherten"-Strichlinie unten auf Seite 1.
 SIG_IMG_X = 75
-SIG_IMG_Y = 120
+SIG_IMG_Y = 165
 SIG_IMG_W = 200
 SIG_IMG_H = 32
 
 # Meta-Zeile direkt unter dem Signatur-Bild, knapp über dem
 # abschließenden Fließtext.
 SIG_META_X = 75
-SIG_META_Y = 108
+SIG_META_Y = 153
 
 # Pflegeperson auf der oberen "_______"-Linie. Wird normalerweise
 # direkt von Patti via Query-Param ausgefüllt; Backup-Overlay falls

@@ -71,3 +71,18 @@ def require_admin_user(
         )
 
     return current_user
+
+
+def require_office_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin oder Büromitarbeiter dürfen durch. Büromitarbeiter (role
+    'buero') sehen die operativen Admin-Web-Seiten (Aufgaben, Office
+    Inbox, Vertretungen, Neuaufnahmen, Leistungsnachweise, VP-Anträge,
+    Verträge), dürfen aber keine User anlegen/löschen."""
+    if current_user.role not in ("admin", "buero"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Keine Büro-Berechtigung",
+        )
+    return current_user

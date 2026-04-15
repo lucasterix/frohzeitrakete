@@ -14,7 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user, require_admin_user
+from app.core.auth import get_current_user, require_office_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.office_workflow import (
@@ -184,7 +184,7 @@ def mobile_today_status(
 )
 def admin_list_vacation(
     status_filter: str | None = Query(None, alias="status"),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_vacation_requests(db, status=status_filter)
@@ -197,7 +197,7 @@ def admin_list_vacation(
 def admin_resolve_vacation(
     request_id: int,
     payload: VacationRequestResolve,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -218,7 +218,7 @@ def admin_resolve_vacation(
 @admin_router.get("/sick-leaves", response_model=list[SickLeaveResponse])
 def admin_list_sick_leaves(
     only_open: bool = False,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_sick_leaves(db, only_open=only_open)
@@ -231,7 +231,7 @@ def admin_list_sick_leaves(
 def admin_ack_sick_leave(
     sick_leave_id: int,
     payload: SickLeaveResolve,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -249,7 +249,7 @@ def admin_ack_sick_leave(
 @admin_router.get("/hr-requests", response_model=list[HrRequestResponse])
 def admin_list_hr_requests(
     only_open: bool = False,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_hr_requests(db, only_open=only_open)
@@ -262,7 +262,7 @@ def admin_list_hr_requests(
 def admin_resolve_hr_request(
     hr_request_id: int,
     payload: HrRequestResolve,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -283,7 +283,7 @@ def admin_resolve_hr_request(
 )
 def admin_list_announcements(
     active_only: bool = False,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_announcements(db, active_only=active_only)
@@ -296,7 +296,7 @@ def admin_list_announcements(
 )
 def admin_create_announcement(
     payload: AnnouncementCreate,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return create_announcement(
@@ -312,7 +312,7 @@ def admin_create_announcement(
 @admin_router.delete("/announcements/{announcement_id}", status_code=204)
 def admin_delete_announcement(
     announcement_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     if not delete_announcement(db, announcement_id=announcement_id):

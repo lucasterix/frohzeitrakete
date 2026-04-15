@@ -149,6 +149,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
                 >
                   <option value="caretaker">caretaker</option>
+                  <option value="buero">buero</option>
                   <option value="admin">admin</option>
                 </select>
               </label>

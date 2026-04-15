@@ -37,7 +37,7 @@ export default function ContractPrintPage() {
     async function load() {
       try {
         const me: User = await getMe();
-        if (me.role !== "admin") {
+        if (me.role !== "admin" && me.role !== "buero") {
           router.replace("/user");
           return;
         }

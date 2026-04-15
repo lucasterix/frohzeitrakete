@@ -9,7 +9,7 @@ from datetime import date
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_admin_user
+from app.core.auth import require_office_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.patient import (
@@ -50,7 +50,7 @@ router = APIRouter()
 
 @router.get("/call-tasks")
 def admin_list_call_tasks(
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Aggregierte Liste aller offenen Büro-Aufgaben.
@@ -68,7 +68,7 @@ def admin_list_call_tasks(
 
 @router.get("/call-requests", response_model=list[CallRequestResponse])
 def admin_list_call_requests(
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Nur die offenen Call-Requests (vom Mobile-Betreuer)."""
@@ -78,7 +78,7 @@ def admin_list_call_requests(
 @router.post("/call-requests/{request_id}/done", response_model=CallRequestResponse)
 def admin_mark_call_request_done(
     request_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -92,7 +92,7 @@ def admin_mark_call_request_done(
 @router.post("/patients/{patient_id}/office-call-done")
 def admin_mark_office_call(
     patient_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Markiert einen Büro-Anruf als erledigt (setzt last_office_call_at)."""
@@ -105,7 +105,7 @@ def admin_user_work_report(
     user_id: int,
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Vollständiger Mitarbeiter-Bericht für einen Monat.
@@ -133,7 +133,7 @@ def admin_user_trips(
     user_id: int,
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Km-/Trip-Übersicht für einen Mitarbeiter + Monat.
@@ -161,7 +161,7 @@ def admin_user_trips(
 @router.get("/patient-intakes", response_model=list[PatientIntakeResponse])
 def admin_list_patient_intakes(
     status_filter: str | None = Query(None, alias="status"),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_intakes(db, status=status_filter)
@@ -174,7 +174,7 @@ def admin_list_patient_intakes(
 def admin_resolve_patient_intake(
     intake_id: int,
     payload: PatientIntakeResolve,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -202,7 +202,7 @@ def admin_user_patient_leistungsnachweis(
         "rakete",
         pattern="^(rakete|patti)$",
     ),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Erstellt ein PDF-Leistungsnachweis für (user, patient, monat).
@@ -254,7 +254,7 @@ def admin_list_patient_ids_for_month(
     user_id: int,
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Gibt alle Patienten (id + name) zurück, für die der User in dem
@@ -315,7 +315,7 @@ def admin_user_leistungsnachweise_zip(
     user_id: int,
     year: int = Query(..., ge=2020, le=2100),
     month: int = Query(..., ge=1, le=12),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Bulk-Download: alle Leistungsnachweise (aus Patti) eines
@@ -417,7 +417,7 @@ def admin_user_leistungsnachweise_zip(
 @router.get("/trainings", response_model=list[TrainingResponse])
 def admin_list_trainings(
     upcoming_only: bool = False,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return list_trainings(db, upcoming_only=upcoming_only, limit=200)
@@ -430,7 +430,7 @@ def admin_list_trainings(
 )
 def admin_create_training(
     payload: TrainingCreate,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     return create_training(
@@ -447,7 +447,7 @@ def admin_create_training(
 @router.delete("/trainings/{training_id}", status_code=204)
 def admin_delete_training(
     training_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     ok = delete_training(db, training_id=training_id)
@@ -459,7 +459,7 @@ def admin_delete_training(
 @router.get("/users/{user_id}/travel-cost-payments")
 def admin_list_travel_cost_payments(
     user_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     rows = list_payments(db, user_id=user_id)
@@ -483,7 +483,7 @@ def admin_create_travel_cost_payment(
     from_date: date = Body(...),
     to_date: date = Body(...),
     note: str | None = Body(default=None),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     try:
@@ -509,7 +509,7 @@ def admin_create_travel_cost_payment(
 @router.delete("/travel-cost-payments/{payment_id}", status_code=204)
 def admin_delete_travel_cost_payment(
     payment_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     if not delete_payment(db, payment_id=payment_id):
@@ -520,7 +520,7 @@ def admin_delete_travel_cost_payment(
 @router.post("/patients/{patient_id}/caretaker-changed")
 def admin_mark_caretaker_changed(
     patient_id: int,
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
     """Wird vom Büro getriggert wenn ein Patient einen neuen Hauptbetreuer

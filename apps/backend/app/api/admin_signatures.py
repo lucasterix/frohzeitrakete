@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.clients.patti_client import PattiClient
-from app.core.auth import require_admin_user
+from app.core.auth import require_office_user
 from app.db.session import get_db
 from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
@@ -22,7 +22,7 @@ router = APIRouter()
 def create_test_signature(
     payload: TestSignatureCreate,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     svg = payload.svg_content.strip()
     if not svg.startswith("<svg"):
@@ -65,7 +65,7 @@ def create_test_signature(
 @router.get("/signatures", response_model=list[SignatureEventResponse])
 def list_signatures(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     return (
         db.query(SignatureEvent)
@@ -80,7 +80,7 @@ def list_signatures(
 def get_signature(
     signature_id: int,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     event = (
         db.query(SignatureEvent)
@@ -102,7 +102,7 @@ def get_signature(
 def admin_list_vp_antraege(
     only_open: bool = False,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     """Liste aller VP-Antrag-Signaturen mit Patient-Name, Datum,
     Bearbeitungs-Status. only_open=true filtert auf noch unbearbeitete.
@@ -157,7 +157,7 @@ def admin_list_vp_antraege(
 def admin_vp_antrag_pdf(
     signature_id: int,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     """Liefert das aus Patti gezogene und mit der Patient-Unterschrift
     überlagerte VP-Antrag-PDF zurück."""
@@ -186,7 +186,7 @@ def admin_set_office_processed(
     signature_id: int,
     processed: bool = True,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     """Markiert eine Signatur (typischerweise VP-Antrag) als vom Büro
     bearbeitet — oder nimmt die Markierung wieder zurück."""
@@ -222,7 +222,7 @@ def admin_set_vp_approval(
     approved: bool = True,
     note: str | None = None,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     """Markiert einen VP-Antrag als von der Krankenkasse genehmigt (oder
     zurück auf offen). Nur für document_type='vp_antrag'."""
@@ -254,7 +254,7 @@ def admin_set_vp_approval(
 def list_contracts(
     q: str | None = Query(None, max_length=200),
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     """Alle Betreuungsverträge (Signatur-Events mit document_type='betreuungsvertrag').
 
@@ -318,7 +318,7 @@ def list_contracts(
 def get_contract(
     contract_id: int,
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     event = (
         db.query(SignatureEvent)
@@ -340,7 +340,7 @@ def get_contract(
 @router.get("/activity-feed", response_model=list[ActivityFeedItem])
 def get_activity_feed(
     db: Session = Depends(get_db),
-    admin_user: User = Depends(require_admin_user),
+    admin_user: User = Depends(require_office_user),
 ):
     events = (
         db.query(SignatureEvent)

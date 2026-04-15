@@ -97,7 +97,7 @@ export default function OfficeInboxPage() {
   const bootstrap = useCallback(async () => {
     try {
       const user = await getMe();
-      if (user.role !== "admin") {
+      if (user.role !== "admin" && user.role !== "buero") {
         router.replace("/user");
         return;
       }

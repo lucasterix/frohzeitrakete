@@ -16,15 +16,22 @@ import {
   UsersIcon,
 } from "@/components/icons";
 
-const NAV_ITEMS = [
-  { href: "/admin", label: "Dashboard", Icon: DashboardIcon },
+type NavItem = {
+  href: string;
+  label: string;
+  Icon: typeof DashboardIcon;
+  adminOnly?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/admin", label: "Dashboard", Icon: DashboardIcon, adminOnly: true },
   { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon },
   { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon },
   { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon },
   { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon },
-  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon },
-  { href: "/admin/users", label: "User", Icon: UsersIcon },
-  { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon },
+  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true },
+  { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true },
+  { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon, adminOnly: true },
   { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon },
   { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon },
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
@@ -62,7 +69,9 @@ export default function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV_ITEMS.map(({ href, label, Icon }) => {
+        {NAV_ITEMS.filter(
+          (item) => !item.adminOnly || me?.role === "admin"
+        ).map(({ href, label, Icon }) => {
           const isActive =
             pathname === href ||
             (href !== "/admin" && pathname?.startsWith(href));

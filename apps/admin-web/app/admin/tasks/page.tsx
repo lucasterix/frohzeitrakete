@@ -85,7 +85,7 @@ export default function AdminTasksPage() {
   const bootstrap = useCallback(async () => {
     try {
       const me: User = await getMe();
-      if (me.role !== "admin") {
+      if (me.role !== "admin" && me.role !== "buero") {
         router.replace("/user");
         return;
       }
