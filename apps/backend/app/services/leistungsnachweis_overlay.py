@@ -36,9 +36,12 @@ logger = logging.getLogger(__name__)
 # A4 = 595 × 842 Punkte (Breite × Höhe), Ursprung unten links.
 # Kalibriert gegen den Patti-Leistungsnachweis.
 
-# Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ / 20 __"
-MONTH_X, MONTH_Y = 510, 725
-YEAR_X, YEAR_Y = 577, 725
+# Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ / 20 __ __"
+# Die Jahres-Endziffern landen als einzelne Zeichen auf zwei getrennten
+# Unterstrichen ("2" auf dem ersten, "6" auf dem zweiten).
+MONTH_X, MONTH_Y = 498, 678
+YEAR_TENS_X, YEAR_ONES_X = 563, 582
+YEAR_Y = 678
 
 # Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
@@ -57,13 +60,16 @@ RIGHT_CHECK_GESPR_X = 444
 RIGHT_CHECK_BEGL_X = 466
 RIGHT_CHECK_KH_X = 490
 
-# Y-Baseline der Zeile für Tag 1 bzw. Tag 17.
-ROW_FIRST_BASELINE = 568
+# Y-Baseline der Zeile für Tag 1 bzw. Tag 17. Der Wert ist die
+# vertikale Mitte des Kästchens: Stunden, Km und Checkbox-Kreuze
+# landen alle auf genau dieser Baseline, damit sie auf gleicher Höhe
+# stehen.
+ROW_FIRST_BASELINE = 560
 ROW_HEIGHT = 24.5
 
-# Zusätzlicher Offset nach unten für die Checkbox-Zeichen — sie liegen
-# im Patti-Template etwas tiefer als die Stunden/Km-Baseline.
-CHECK_Y_OFFSET = -8
+# Kein eigener Offset mehr für Checkboxen — sie teilen sich die
+# Baseline mit den Zahlen.
+CHECK_Y_OFFSET = 0
 
 # Unterschriften-Zone am unteren Rand
 SIG_IMG_X = 90
@@ -185,10 +191,14 @@ def build_overlay(
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
 
-    # Monat / Jahr in der Kopfzeile
-    c.setFont("Helvetica-Bold", 11)
+    # Monat / Jahr in der Kopfzeile.
+    # Monat als "04" an MONTH_X, Jahr-Endziffern als "2" und "6" auf
+    # die zwei getrennten Unterstriche.
+    c.setFont("Helvetica-Bold", 12)
     c.drawString(MONTH_X, MONTH_Y, f"{month:02d}")
-    c.drawString(YEAR_X, YEAR_Y, f"{year % 100:02d}")
+    year_short = f"{year % 100:02d}"
+    c.drawString(YEAR_TENS_X, YEAR_Y, year_short[0])
+    c.drawString(YEAR_ONES_X, YEAR_Y, year_short[1])
 
     # Daten-Zeilen: pro Tag landet der Wert in der passenden Tabelle
     # (Tage 1-16 links, Tage 17-31 rechts). Tag-Zahl ist schon
