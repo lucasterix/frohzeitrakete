@@ -354,6 +354,34 @@ class PattiClient:
         """DELETE /api/v1/service-entries/{id}."""
         self._delete(f"/api/v1/service-entries/{entry_id}")
 
+    def get_verhinderungspflegeantrag_pdf(
+        self,
+        patient_id: int,
+        *,
+        start: str,
+        end: str,
+        pflegeperson: str = "",
+    ) -> bytes:
+        """Lädt das Verhinderungspflege-Antrag-PDF direkt aus Patti.
+
+        URL-Muster: ``/patients/{id}/verhinderungspflegeantrag.pdf``
+        mit Query-Params ``start=YYYY-MM-DD``, ``end=YYYY-MM-DD`` und
+        ``pflegeperson=Name``. Patti rendert das PDF inkl. der
+        Pflegeperson auf der vorgesehenen Linie wenn der Param gesetzt
+        ist.
+        """
+        params: dict[str, Any] = {
+            "start": start,
+            "end": end,
+            "pflegeperson": pflegeperson,
+        }
+        url = f"/patients/{patient_id}/verhinderungspflegeantrag.pdf"
+        response = self._get(url, params=params)
+        response.raise_for_status()
+        if not response.content.startswith(b"%PDF"):
+            raise ValueError("patti_response_is_not_pdf")
+        return response.content
+
     def get_leistungsnachweis_pdf(
         self,
         patient_id: int,

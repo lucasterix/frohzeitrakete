@@ -35,6 +35,17 @@ class SignatureEvent(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     approved_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # "Vom Büro bearbeitet" — wird gesetzt sobald jemand im Büro den
+    # VP-Antrag aus der Admin-Console gezogen und bei der Krankenkasse
+    # eingereicht hat. Damit sich das Büro nicht mehrfach auf denselben
+    # Antrag stürzt.
+    office_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    office_processed_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

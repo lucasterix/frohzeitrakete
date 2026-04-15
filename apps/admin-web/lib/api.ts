@@ -382,6 +382,62 @@ export function leistungsnachweisPdfUrl(
   return url.toString();
 }
 
+export type AdminVpAntrag = {
+  id: number;
+  patient_id: number;
+  patient_name: string | null;
+  pflegeperson: string | null;
+  note: string | null;
+  signed_at: string;
+  office_processed_at: string | null;
+  office_processed_by_user_id: number | null;
+  approved_by_kk: boolean;
+  approved_at: string | null;
+};
+
+export async function getVpAntraege(
+  onlyOpen = false
+): Promise<AdminVpAntrag[]> {
+  const url = new URL(`${API_BASE_URL}/admin/vp-antraege`);
+  if (onlyOpen) url.searchParams.set("only_open", "true");
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der VP-Anträge")
+    );
+  }
+  return response.json();
+}
+
+export function vpAntragPdfUrl(signatureId: number): string {
+  return `${API_BASE_URL}/admin/vp-antraege/${signatureId}.pdf`;
+}
+
+export async function setOfficeProcessed(
+  signatureId: number,
+  processed: boolean
+): Promise<void> {
+  const url = new URL(
+    `${API_BASE_URL}/admin/signatures/${signatureId}/office-processed`
+  );
+  url.searchParams.set("processed", String(processed));
+  const response = await fetchWithRefresh(url.toString(), {
+    method: "POST",
+    headers: buildHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(
+        response,
+        "Bearbeitungsstatus konnte nicht gesetzt werden"
+      )
+    );
+  }
+}
+
 export async function setVpApproval(
   signatureId: number,
   approved: boolean,

@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/admin/users", label: "User", Icon: UsersIcon },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon },
   { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon },
+  { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon },
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
 ];

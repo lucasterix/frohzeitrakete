@@ -98,6 +98,124 @@ def get_signature(
     return event
 
 
+@router.get("/vp-antraege")
+def admin_list_vp_antraege(
+    only_open: bool = False,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    """Liste aller VP-Antrag-Signaturen mit Patient-Name, Datum,
+    Bearbeitungs-Status. only_open=true filtert auf noch unbearbeitete.
+    """
+    from app.clients.patti_client import PattiClient
+
+    q = (
+        db.query(SignatureEvent)
+        .filter(SignatureEvent.document_type == "vp_antrag")
+        .order_by(SignatureEvent.signed_at.desc())
+    )
+    if only_open:
+        q = q.filter(SignatureEvent.office_processed_at.is_(None))
+    rows = q.limit(500).all()
+
+    patient_ids = {r.patient_id for r in rows}
+    names: dict[int, str] = {}
+    if patient_ids:
+        try:
+            client = PattiClient()
+            client.login()
+            for pid in patient_ids:
+                try:
+                    p = client.get_patient(pid)
+                    names[pid] = p.get("list_name") or f"Patient {pid}"
+                except Exception:  # noqa: BLE001
+                    names[pid] = f"Patient {pid}"
+        except Exception:  # noqa: BLE001
+            names = {pid: f"Patient {pid}" for pid in patient_ids}
+
+    return [
+        {
+            "id": r.id,
+            "patient_id": r.patient_id,
+            "patient_name": names.get(r.patient_id),
+            "pflegeperson": r.signer_name,
+            "note": r.note,
+            "signed_at": r.signed_at,
+            "office_processed_at": r.office_processed_at,
+            "office_processed_by_user_id": r.office_processed_by_user_id,
+            "approved_by_kk": r.approved_by_kk,
+            "approved_at": r.approved_at,
+        }
+        for r in rows
+    ]
+
+
+@router.get(
+    "/vp-antraege/{signature_id}.pdf",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def admin_vp_antrag_pdf(
+    signature_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    """Liefert das aus Patti gezogene und mit der Patient-Unterschrift
+    überlagerte VP-Antrag-PDF zurück."""
+    from fastapi.responses import Response as PDFResponse
+
+    from app.services.vp_antrag_service import fetch_filled_vp_antrag_pdf
+
+    pdf_bytes = fetch_filled_vp_antrag_pdf(
+        db, signature_event_id=signature_id
+    )
+    if pdf_bytes is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VP-Antrag konnte nicht erzeugt werden (Patti oder DB-Fehler)",
+        )
+    filename = f"vp_antrag_{signature_id}.pdf"
+    return PDFResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.post("/signatures/{signature_id}/office-processed")
+def admin_set_office_processed(
+    signature_id: int,
+    processed: bool = True,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin_user),
+):
+    """Markiert eine Signatur (typischerweise VP-Antrag) als vom Büro
+    bearbeitet — oder nimmt die Markierung wieder zurück."""
+    from datetime import datetime as _dt
+
+    event = (
+        db.query(SignatureEvent)
+        .filter(SignatureEvent.id == signature_id)
+        .first()
+    )
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Signatur nicht gefunden",
+        )
+    if processed:
+        event.office_processed_at = _dt.utcnow()
+        event.office_processed_by_user_id = admin_user.id
+    else:
+        event.office_processed_at = None
+        event.office_processed_by_user_id = None
+    db.commit()
+    return {
+        "id": event.id,
+        "office_processed_at": event.office_processed_at,
+        "office_processed_by_user_id": event.office_processed_by_user_id,
+    }
+
+
 @router.post("/signatures/{signature_id}/vp-approve")
 def admin_set_vp_approval(
     signature_id: int,
