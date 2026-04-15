@@ -39,12 +39,10 @@ class EntryCreate(BaseModel):
     @field_validator("entry_date")
     @classmethod
     def entry_date_must_be_today(cls, v: date) -> date:
-        if v != date.today():
-            raise ValueError(
-                "Einsätze können nur am Einsatztag selbst erfasst werden. "
-                "Nachträgliche Einträge oder Einträge für die Zukunft sind "
-                "nicht möglich."
-            )
+        # TEST-MODUS: Einsätze dürfen für beliebige Daten erfasst werden
+        # damit wir PDF-Rendering + Abrechnung für Vergangenheit und
+        # Zukunft durchtesten können. Vor dem Live-Rollout wieder auf
+        # die strenge "nur heute"-Regel umschalten.
         return v
 
 
