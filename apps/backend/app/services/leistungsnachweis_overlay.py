@@ -36,29 +36,30 @@ logger = logging.getLogger(__name__)
 # A4 = 595 × 842 Punkte (Breite × Höhe), Ursprung unten links.
 # Kalibriert gegen den Patti-Leistungsnachweis.
 
-# Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ / 20 __ __"
-# Die Jahres-Endziffern landen als einzelne Zeichen auf zwei getrennten
-# Unterstrichen ("2" auf dem ersten, "6" auf dem zweiten).
-MONTH_X, MONTH_Y = 498, 678
-YEAR_TENS_X, YEAR_ONES_X = 563, 582
-YEAR_Y = 678
+# Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ __ / 20 __ __"
+# Monat UND Jahr haben jeweils zwei getrennte Unterstriche für die
+# einzelnen Ziffern. Zwischen Tens-X und Ones-X ist derselbe Abstand
+# wie zwischen den beiden Year-Slots.
+MONTH_TENS_X, MONTH_ONES_X = 488, 507
+YEAR_TENS_X, YEAR_ONES_X = 558, 577
+HEADER_Y = 706
 
 # Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
 # Häkchen in die Zellen.
 LEFT_HOURS_X = 98
 LEFT_KM_X = 135
-LEFT_CHECK_ALLTAG_X = 172
-LEFT_CHECK_GESPR_X = 194
-LEFT_CHECK_BEGL_X = 216
-LEFT_CHECK_KH_X = 240
+LEFT_CHECK_ALLTAG_X = 175
+LEFT_CHECK_GESPR_X = 197
+LEFT_CHECK_BEGL_X = 219
+LEFT_CHECK_KH_X = 243
 
 RIGHT_HOURS_X = 348
 RIGHT_KM_X = 385
-RIGHT_CHECK_ALLTAG_X = 422
-RIGHT_CHECK_GESPR_X = 444
-RIGHT_CHECK_BEGL_X = 466
-RIGHT_CHECK_KH_X = 490
+RIGHT_CHECK_ALLTAG_X = 425
+RIGHT_CHECK_GESPR_X = 447
+RIGHT_CHECK_BEGL_X = 469
+RIGHT_CHECK_KH_X = 493
 
 # Y-Baseline der Zeile für Tag 1 bzw. Tag 17. Der Wert ist die
 # vertikale Mitte des Kästchens: Stunden, Km und Checkbox-Kreuze
@@ -192,13 +193,15 @@ def build_overlay(
     c = canvas.Canvas(buf, pagesize=A4)
 
     # Monat / Jahr in der Kopfzeile.
-    # Monat als "04" an MONTH_X, Jahr-Endziffern als "2" und "6" auf
-    # die zwei getrennten Unterstriche.
+    # Jede Ziffer auf einen eigenen Unterstrich, so wie das Patti-
+    # Template es vorgibt.
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(MONTH_X, MONTH_Y, f"{month:02d}")
+    month_str = f"{month:02d}"
+    c.drawString(MONTH_TENS_X, HEADER_Y, month_str[0])
+    c.drawString(MONTH_ONES_X, HEADER_Y, month_str[1])
     year_short = f"{year % 100:02d}"
-    c.drawString(YEAR_TENS_X, YEAR_Y, year_short[0])
-    c.drawString(YEAR_ONES_X, YEAR_Y, year_short[1])
+    c.drawString(YEAR_TENS_X, HEADER_Y, year_short[0])
+    c.drawString(YEAR_ONES_X, HEADER_Y, year_short[1])
 
     # Daten-Zeilen: pro Tag landet der Wert in der passenden Tabelle
     # (Tage 1-16 links, Tage 17-31 rechts). Tag-Zahl ist schon
