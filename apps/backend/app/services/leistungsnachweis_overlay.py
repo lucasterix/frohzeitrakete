@@ -37,32 +37,33 @@ logger = logging.getLogger(__name__)
 # Kalibriert gegen den Patti-Leistungsnachweis.
 
 # Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ / 20 __"
-MONTH_X, MONTH_Y = 510, 690
-YEAR_X, YEAR_Y = 577, 690
+MONTH_X, MONTH_Y = 510, 725
+YEAR_X, YEAR_Y = 577, 725
 
 # Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
 # gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
 # Häkchen in die Zellen.
-#
-# Spalten-Reihenfolge pro Tabelle:
-#   Tag | Stunden | Gef.Km | Alltagshilfe | Gespräch/Akt | Begleitung | Besuch KH | ...
-LEFT_HOURS_X = 108
-LEFT_KM_X = 145
-LEFT_CHECK_ALLTAG_X = 177
-LEFT_CHECK_GESPR_X = 199
-LEFT_CHECK_BEGL_X = 221
-LEFT_CHECK_KH_X = 245
+LEFT_HOURS_X = 98
+LEFT_KM_X = 135
+LEFT_CHECK_ALLTAG_X = 172
+LEFT_CHECK_GESPR_X = 194
+LEFT_CHECK_BEGL_X = 216
+LEFT_CHECK_KH_X = 240
 
-RIGHT_HOURS_X = 358
-RIGHT_KM_X = 395
-RIGHT_CHECK_ALLTAG_X = 427
-RIGHT_CHECK_GESPR_X = 449
-RIGHT_CHECK_BEGL_X = 471
-RIGHT_CHECK_KH_X = 495
+RIGHT_HOURS_X = 348
+RIGHT_KM_X = 385
+RIGHT_CHECK_ALLTAG_X = 422
+RIGHT_CHECK_GESPR_X = 444
+RIGHT_CHECK_BEGL_X = 466
+RIGHT_CHECK_KH_X = 490
 
 # Y-Baseline der Zeile für Tag 1 bzw. Tag 17.
-ROW_FIRST_BASELINE = 573
+ROW_FIRST_BASELINE = 568
 ROW_HEIGHT = 24.5
+
+# Zusätzlicher Offset nach unten für die Checkbox-Zeichen — sie liegen
+# im Patti-Template etwas tiefer als die Stunden/Km-Baseline.
+CHECK_Y_OFFSET = -8
 
 # Unterschriften-Zone am unteren Rand
 SIG_IMG_X = 90
@@ -74,8 +75,8 @@ SIG_META_X = 60
 SIG_META_Y = 55
 
 # Font-Größen
-HOURS_FONT_SIZE = 11
-CHECK_FONT_SIZE = 13
+HOURS_FONT_SIZE = 13
+CHECK_FONT_SIZE = 14
 
 
 def _draw_signature_svg(
@@ -222,12 +223,14 @@ def build_overlay(
         if km:
             c.drawString(x_km, y, _format_km(km))
 
-        # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox
+        # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox,
+        # leicht nach unten versetzt damit sie mittig im Kästchen sitzen.
         checks = _checks_for_activities(activities)
         c.setFont("Helvetica-Bold", CHECK_FONT_SIZE)
+        check_y = y + CHECK_Y_OFFSET
         for key in ("alltag", "gespr", "begl", "kh"):
             if key in checks:
-                c.drawString(check_x[key], y, "X")
+                c.drawString(check_x[key], check_y, "X")
 
     # Unterschriften-Metadaten + Bild
     if signer_name and signed_at:
