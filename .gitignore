@@ -1,5 +1,7 @@
 # Secrets — NEVER commit
 apps/backend/secrets/
+infra/prod/secrets/
+infra/staging/secrets/
 service-account*.json
 *-credentials.json
 
