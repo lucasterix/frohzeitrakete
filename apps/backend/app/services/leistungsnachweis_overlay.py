@@ -34,27 +34,35 @@ logger = logging.getLogger(__name__)
 
 # ---------- Koordinaten-Konstanten (Punkte, 1pt = 1/72 inch) ----------
 # A4 = 595 × 842 Punkte (Breite × Höhe), Ursprung unten links.
-# Diese Werte sind erste Schätzungen für den Patti-Leistungsnachweis.
-# Anpassbar ohne den Rest des Codes zu berühren.
+# Kalibriert gegen Patti-Leistungsnachweis-Muster (April 2026).
 
-# Monat + Jahr oben rechts ("Monat 04   Jahr 20 __ __")
-MONTH_X, MONTH_Y = 500, 770
-YEAR_X, YEAR_Y = 550, 770
+# Monat + Jahr in der Kopfzeile:
+# "Nummer: 5501   Monat: __ / 20 __"
+MONTH_X, MONTH_Y = 475, 778
+YEAR_X, YEAR_Y = 538, 778
 
-# Tages-Tabelle: obere linke Ecke der ersten Daten-Zeile
-TABLE_FIRST_ROW_Y = 620
-TABLE_ROW_HEIGHT = 14
-TABLE_DAY_X = 60
-TABLE_HOURS_X = 200
-TABLE_KM_X = 340
+# Zwei Tabellen nebeneinander: links Tage 1-16, rechts Tage 17-31.
+# Die Tag-Zahlen sind schon im PDF gedruckt — wir schreiben NUR
+# Stunden und Km in die entsprechenden Zellen.
+LEFT_HOURS_X = 105
+LEFT_KM_X = 142
+RIGHT_HOURS_X = 355
+RIGHT_KM_X = 392
 
-# Untere Unterschriften-Zone
+# Y-Baseline der Zeile für Tag 1 bzw. Tag 17 (beide Tabellen starten
+# auf gleicher Höhe). Delta zwischen zwei Zeilen: ROW_HEIGHT.
+ROW_FIRST_BASELINE = 473
+ROW_HEIGHT = 24.5
+
+# Unterschriften-Zone am unteren Rand
+SIG_IMG_X = 90
+SIG_IMG_Y = 75
+SIG_IMG_W = 170
+SIG_IMG_H = 35
+# "Unterschrieben vom Patienten: ..." UNTER dem Signatur-Bild, damit
+# sie nicht in den Paragraph darüber reinrutscht.
 SIG_META_X = 60
-SIG_META_Y = 120
-SIG_IMG_X = 60
-SIG_IMG_Y = 70
-SIG_IMG_W = 200
-SIG_IMG_H = 40
+SIG_META_Y = 55
 
 
 def _draw_signature_svg(
@@ -144,19 +152,31 @@ def build_overlay(
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
 
-    # Monat / Jahr oben rechts
-    c.setFont("Helvetica-Bold", 11)
+    # Monat / Jahr in der Kopfzeile
+    c.setFont("Helvetica", 11)
     c.drawString(MONTH_X, MONTH_Y, f"{month:02d}")
     c.drawString(YEAR_X, YEAR_Y, f"{year % 100:02d}")
 
-    # Daten-Zeilen
+    # Daten-Zeilen: pro Tag landet der Wert in der passenden Tabelle
+    # (Tage 1-16 links, Tage 17-31 rechts). Die Tag-Zahl ist bereits
+    # im PDF gedruckt, wir schreiben NUR Stunden und Km.
     c.setFont("Helvetica", 10)
-    for i, (day, hours, km) in enumerate(day_rows):
-        y = TABLE_FIRST_ROW_Y - i * TABLE_ROW_HEIGHT
-        c.drawString(TABLE_DAY_X, y, f"{day:02d}")
-        c.drawString(TABLE_HOURS_X, y, _format_hours(hours))
+    for day, hours, km in day_rows:
+        if 1 <= day <= 16:
+            row_index = day - 1
+            x_hours = LEFT_HOURS_X
+            x_km = LEFT_KM_X
+        elif 17 <= day <= 31:
+            row_index = day - 17
+            x_hours = RIGHT_HOURS_X
+            x_km = RIGHT_KM_X
+        else:
+            continue
+        y = ROW_FIRST_BASELINE - row_index * ROW_HEIGHT
+        if hours > 0:
+            c.drawString(x_hours, y, _format_hours(hours))
         if km:
-            c.drawString(TABLE_KM_X, y, _format_km(km))
+            c.drawString(x_km, y, _format_km(km))
 
     # Unterschriften-Metadaten + Bild
     if signer_name and signed_at:
