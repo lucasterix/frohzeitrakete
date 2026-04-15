@@ -497,6 +497,121 @@ def admin_user_leistungsnachweise_zip(
     )
 
 
+@router.get(
+    "/leistungsnachweise-all.zip",
+    responses={200: {"content": {"application/zip": {}}}},
+)
+def admin_all_leistungsnachweise_zip(
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Monats-Batch: alle Betreuer, ein ZIP. Subordner pro Betreuer
+    mit allen Leistungsnachweis-PDFs drin. Patti-first, Rakete-Fallback
+    pro Patient damit das ZIP auch bei einzelnen Fehlern vollständig
+    bleibt."""
+    import io
+    import zipfile
+    from calendar import monthrange
+    from datetime import date as _date
+
+    from app.clients.patti_client import PattiClient
+    from app.models.entry import Entry
+    from app.services.leistungsnachweis_service import (
+        build_leistungsnachweis_pdf,
+        fetch_patti_leistungsnachweis_pdf_filled,
+    )
+
+    start = _date(year, month, 1)
+    end = _date(year, month, monthrange(year, month)[1])
+
+    caretakers = (
+        db.query(User)
+        .filter(User.role == "caretaker", User.is_active.is_(True))
+        .order_by(User.full_name)
+        .all()
+    )
+
+    try:
+        client = PattiClient()
+        client.login()
+        patti_ok = True
+    except Exception:  # noqa: BLE001
+        client = None
+        patti_ok = False
+
+    def _safe(s: str) -> str:
+        return "".join(c if c.isalnum() or c in "-_" else "_" for c in s)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        any_pdf = False
+        for caretaker in caretakers:
+            pids = [
+                p[0]
+                for p in db.query(Entry.patient_id)
+                .filter(
+                    Entry.user_id == caretaker.id,
+                    Entry.patient_id.is_not(None),
+                    Entry.entry_date >= start,
+                    Entry.entry_date <= end,
+                    Entry.entry_type == "patient",
+                )
+                .distinct()
+                .all()
+            ]
+            if not pids:
+                continue
+            user_folder = _safe(caretaker.full_name or f"user-{caretaker.id}")
+            for pid in pids:
+                pdf_bytes = fetch_patti_leistungsnachweis_pdf_filled(
+                    db,
+                    user_id=caretaker.id,
+                    patient_id=pid,
+                    year=year,
+                    month=month,
+                )
+                if pdf_bytes is None:
+                    try:
+                        pdf_bytes = build_leistungsnachweis_pdf(
+                            db,
+                            user_id=caretaker.id,
+                            patient_id=pid,
+                            year=year,
+                            month=month,
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+                name = f"patient-{pid}"
+                if patti_ok and client is not None:
+                    try:
+                        p = client.get_patient(pid)
+                        name = p.get("list_name") or name
+                    except Exception:  # noqa: BLE001
+                        pass
+                zf.writestr(
+                    f"{user_folder}/leistungsnachweis_{_safe(name)}_{year}-{month:02d}.pdf",
+                    pdf_bytes,
+                )
+                any_pdf = True
+
+    if not any_pdf:
+        raise HTTPException(
+            status_code=404,
+            detail="Für diesen Monat gibt es keine Einsätze.",
+        )
+
+    filename = f"leistungsnachweise_ALL_{year}-{month:02d}.zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
 @router.get("/trainings", response_model=list[TrainingResponse])
 def admin_list_trainings(
     upcoming_only: bool = False,
@@ -609,4 +724,53 @@ def admin_mark_caretaker_changed(
     """Wird vom Büro getriggert wenn ein Patient einen neuen Hauptbetreuer
     bekommt. Startet den "1 Woche später nachfragen"-Task."""
     mark_primary_caretaker_changed(db, patient_id)
+    return {"ok": True}
+
+
+@router.get("/sync-errors")
+def admin_list_sync_errors(
+    only_open: bool = True,
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Liste der Backend-Sync-Fehler (unzustellbare Patti-Writes). Büro
+    kann pro Zeile ✓-abhaken sobald sie's manuell in Patti nachgezogen
+    haben."""
+    from app.models.sync_error import SyncError
+
+    q = db.query(SyncError)
+    if only_open:
+        q = q.filter(SyncError.resolved_at.is_(None))
+    rows = q.order_by(SyncError.created_at.desc()).limit(500).all()
+    return [
+        {
+            "id": r.id,
+            "kind": r.kind,
+            "user_id": r.user_id,
+            "patient_id": r.patient_id,
+            "year": r.year,
+            "month": r.month,
+            "message": r.message,
+            "created_at": r.created_at.isoformat(),
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/sync-errors/{error_id}/resolve")
+def admin_resolve_sync_error(
+    error_id: int,
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime as _dt
+    from app.models.sync_error import SyncError
+
+    row = db.query(SyncError).filter(SyncError.id == error_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="sync_error_not_found")
+    row.resolved_at = _dt.utcnow()
+    row.resolved_by_user_id = admin_user.id
+    db.commit()
     return {"ok": True}

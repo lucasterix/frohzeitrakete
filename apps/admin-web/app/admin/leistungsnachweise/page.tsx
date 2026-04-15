@@ -9,6 +9,7 @@ import {
   getMe,
   getUsers,
   leistungsnachweisPdfUrl,
+  leistungsnachweiseAllZipUrl,
   leistungsnachweiseZipUrl,
   setLeistungsnachweisOfficeProcessed,
 } from "@/lib/api";
@@ -214,6 +215,15 @@ export default function LeistungsnachweisePage() {
               <SparkleIcon className="h-4 w-4" />
               Alle laden
             </button>
+            <a
+              href={leistungsnachweiseAllZipUrl(year, month)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+              title="Alle Leistungsnachweise aller Betreuer als ein ZIP"
+            >
+              📦 Alle Betreuer ZIP
+            </a>
           </div>
         </div>
       </div>

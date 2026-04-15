@@ -138,6 +138,25 @@ def auth_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/register-push-token", status_code=204)
+def auth_register_push_token(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mobile-Client meldet seinen FCM/APNs-Token an. Payload:
+    {token: str, platform: "ios"|"android"}. Wird idempotent
+    überschrieben, pro User nur ein Gerät."""
+    token = (payload.get("token") or "").strip()
+    platform = (payload.get("platform") or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token_required")
+    current_user.push_token = token[:512]
+    current_user.push_platform = platform[:20] or None
+    db.commit()
+    return None
+
+
 @router.post("/change-password", status_code=204)
 def change_password(
     payload: ChangePasswordRequest,

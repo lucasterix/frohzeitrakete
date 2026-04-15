@@ -22,6 +22,7 @@ from app.models.entry import Entry
 from app.models.signature_event import SignatureEvent
 from app.models.user import User
 from app.schemas.entry import EntryCreate, PatientHoursSummary
+from app.services.sync_error_service import record_sync_error
 from app.services.trip_service import (
     create_home_commute_segment,
     create_trip_segments,
@@ -231,10 +232,28 @@ def _sync_patti_total_for_month(
                     "patti_post_failed type=%s total=%s err=%s",
                     type_, total, exc,
                 )
+                record_sync_error(
+                    db,
+                    kind="patti_post",
+                    message=f"{type_} total={total}: {exc}",
+                    user_id=user_id,
+                    patient_id=patient_id,
+                    year=year,
+                    month=month,
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "patti_sync_month_failed user=%s patient=%s %s-%s err=%s",
             user_id, patient_id, year, month, exc,
+        )
+        record_sync_error(
+            db,
+            kind="patti_sync_month",
+            message=str(exc),
+            user_id=user_id,
+            patient_id=patient_id,
+            year=year,
+            month=month,
         )
 
 

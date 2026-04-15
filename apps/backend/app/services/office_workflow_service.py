@@ -189,7 +189,7 @@ def create_sick_leave(
     db.refresh(row)
 
     # Admins benachrichtigen damit die Krankmeldung im Büro-Feed auftaucht
-    admins = db.query(User).filter(User.role == "admin").all()
+    admins = db.query(User).filter(User.role.in_(["admin", "buero"])).all()
     for a in admins:
         _notify(
             db,
@@ -287,7 +287,7 @@ def create_hr_request(
     db.commit()
     db.refresh(row)
 
-    admins = db.query(User).filter(User.role == "admin").all()
+    admins = db.query(User).filter(User.role.in_(["admin", "buero"])).all()
     for a in admins:
         _notify(
             db,

@@ -27,6 +27,10 @@ class User(Base):
     # Signatur im Admin-Web eingetragen, damit jeder im Büro sieht wer
     # was bearbeitet hat.
     initials: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Push-Token des mobilen Endgeräts für echtes FCM/APNs-Push. Wird
+    # vom Mobile-Client beim Login gesetzt. platform = "ios"/"android".
+    push_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    push_platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

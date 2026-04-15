@@ -8,6 +8,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.patient_extras import PatientExtras
 from app.models.patient_intake import PatientIntakeRequest
 from app.models.sick_leave import SickLeave
+from app.models.sync_error import SyncError
 from app.models.signature_asset import SignatureAsset
 from app.models.signature_event import SignatureEvent
 from app.models.training import Training
@@ -28,6 +29,7 @@ __all__ = [
     "PatientExtras",
     "PatientIntakeRequest",
     "SickLeave",
+    "SyncError",
     "SignatureAsset",
     "SignatureEvent",
     "Training",

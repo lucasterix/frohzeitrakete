@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.notification import Notification
 from app.models.user import User
+from app.services.push_service import send_push
 
 
 def create_notification(
@@ -33,6 +34,17 @@ def create_notification(
     )
     db.add(n)
     db.flush()
+    send_push(
+        db,
+        user_id=user_id,
+        title=title,
+        body=body or "",
+        data={
+            "kind": kind,
+            "notification_id": n.id,
+            "patient_id": related_patient_id,
+        },
+    )
     return n
 
 
@@ -45,8 +57,14 @@ def notify_all_admins(
     related_patient_id: int | None = None,
     related_entity_id: int | None = None,
 ) -> int:
-    """Legt für jeden Admin-User eine Notification an. Rückgabe: Anzahl."""
-    admins = db.query(User).filter(User.role == "admin").all()
+    """Legt für jeden Admin + Büromitarbeiter eine Notification an.
+    Büromitarbeiter wollen dieselben operativen Ereignisse (Urlaub,
+    Krankmeldung, HR-Request) sehen wie die Admins."""
+    admins = (
+        db.query(User)
+        .filter(User.role.in_(["admin", "buero"]))
+        .all()
+    )
     for admin in admins:
         create_notification(
             db,

@@ -393,6 +393,53 @@ export function leistungsnachweiseZipUrl(
   return url.toString();
 }
 
+export function leistungsnachweiseAllZipUrl(
+  year: number,
+  month: number
+): string {
+  const url = new URL(`${API_BASE_URL}/admin/leistungsnachweise-all.zip`);
+  url.searchParams.set("year", String(year));
+  url.searchParams.set("month", String(month));
+  return url.toString();
+}
+
+export type SyncError = {
+  id: number;
+  kind: string;
+  user_id: number | null;
+  patient_id: number | null;
+  year: number | null;
+  month: number | null;
+  message: string;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export async function getSyncErrors(
+  onlyOpen: boolean = true
+): Promise<SyncError[]> {
+  const url = new URL(`${API_BASE_URL}/admin/sync-errors`);
+  url.searchParams.set("only_open", onlyOpen ? "true" : "false");
+  const res = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Fehler beim Laden"));
+  }
+  return res.json();
+}
+
+export async function resolveSyncError(id: number): Promise<void> {
+  const res = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/sync-errors/${id}/resolve`,
+    { method: "POST", headers: buildHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(await parseError(res, "Fehler beim Speichern"));
+  }
+}
+
 export function leistungsnachweisPdfUrl(
   userId: number,
   patientId: number,
