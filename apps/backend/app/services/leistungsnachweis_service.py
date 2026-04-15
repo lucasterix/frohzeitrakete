@@ -262,11 +262,14 @@ def _day_rows_for_month(
     patient_id: int,
     year: int,
     month: int,
-) -> list[tuple[int, float, float]]:
-    """Aggregiert pro Tag: (tag_im_monat, stunden, km_mit_patient).
+) -> list[tuple[int, float, float, set[str]]]:
+    """Aggregiert pro Tag: (tag, stunden, km, activities).
 
-    Km zählt nur Segmente die zum jeweiligen Patient-Einsatz gehören —
-    home_commute / Heimfahrten sind bewusst nicht dabei.
+    - Stunden werden pro Tag summiert falls es mehrere Einträge gibt.
+    - Km zählt nur Segmente die zum jeweiligen Patient-Einsatz gehören.
+    - Activities ist ein Set aller an dem Tag erfassten Tätigkeiten
+      (Mobile speichert sie komma-getrennt), wird für das Ankreuzen
+      der Checkboxen im Leistungsnachweis genutzt.
     """
     from collections import defaultdict
 
@@ -274,8 +277,13 @@ def _day_rows_for_month(
         db, user_id=user_id, patient_id=patient_id, year=year, month=month
     )
     hours_per_day: dict[int, float] = defaultdict(float)
+    activities_per_day: dict[int, set[str]] = defaultdict(set)
     for e in entries:
         hours_per_day[e.entry_date.day] += e.hours
+        for token in (e.activities or "").split(","):
+            token = token.strip()
+            if token:
+                activities_per_day[e.entry_date.day].add(token)
 
     entry_ids = [e.id for e in entries]
     km_per_day: dict[int, float] = defaultdict(float)
@@ -295,6 +303,7 @@ def _day_rows_for_month(
             d,
             round(hours_per_day.get(d, 0.0), 2),
             round(km_per_day.get(d, 0.0), 2),
+            activities_per_day.get(d, set()),
         )
         for d in days
     ]

@@ -34,24 +34,34 @@ logger = logging.getLogger(__name__)
 
 # ---------- Koordinaten-Konstanten (Punkte, 1pt = 1/72 inch) ----------
 # A4 = 595 × 842 Punkte (Breite × Höhe), Ursprung unten links.
-# Kalibriert gegen Patti-Leistungsnachweis-Muster (April 2026).
+# Kalibriert gegen den Patti-Leistungsnachweis.
 
-# Monat + Jahr in der Kopfzeile:
-# "Nummer: 5501   Monat: __ / 20 __"
-MONTH_X, MONTH_Y = 475, 778
-YEAR_X, YEAR_Y = 538, 778
+# Monat + Jahr in der Kopfzeile: "Nummer: 5501   Monat: __ / 20 __"
+MONTH_X, MONTH_Y = 510, 690
+YEAR_X, YEAR_Y = 577, 690
 
-# Zwei Tabellen nebeneinander: links Tage 1-16, rechts Tage 17-31.
-# Die Tag-Zahlen sind schon im PDF gedruckt — wir schreiben NUR
-# Stunden und Km in die entsprechenden Zellen.
-LEFT_HOURS_X = 105
-LEFT_KM_X = 142
-RIGHT_HOURS_X = 355
-RIGHT_KM_X = 392
+# Zwei Tabellen nebeneinander. Tag-Zahlen sind im Patti-PDF schon
+# gedruckt — wir schreiben nur Stunden, Km und die Aktivitäten-
+# Häkchen in die Zellen.
+#
+# Spalten-Reihenfolge pro Tabelle:
+#   Tag | Stunden | Gef.Km | Alltagshilfe | Gespräch/Akt | Begleitung | Besuch KH | ...
+LEFT_HOURS_X = 108
+LEFT_KM_X = 145
+LEFT_CHECK_ALLTAG_X = 177
+LEFT_CHECK_GESPR_X = 199
+LEFT_CHECK_BEGL_X = 221
+LEFT_CHECK_KH_X = 245
 
-# Y-Baseline der Zeile für Tag 1 bzw. Tag 17 (beide Tabellen starten
-# auf gleicher Höhe). Delta zwischen zwei Zeilen: ROW_HEIGHT.
-ROW_FIRST_BASELINE = 473
+RIGHT_HOURS_X = 358
+RIGHT_KM_X = 395
+RIGHT_CHECK_ALLTAG_X = 427
+RIGHT_CHECK_GESPR_X = 449
+RIGHT_CHECK_BEGL_X = 471
+RIGHT_CHECK_KH_X = 495
+
+# Y-Baseline der Zeile für Tag 1 bzw. Tag 17.
+ROW_FIRST_BASELINE = 573
 ROW_HEIGHT = 24.5
 
 # Unterschriften-Zone am unteren Rand
@@ -59,10 +69,13 @@ SIG_IMG_X = 90
 SIG_IMG_Y = 75
 SIG_IMG_W = 170
 SIG_IMG_H = 35
-# "Unterschrieben vom Patienten: ..." UNTER dem Signatur-Bild, damit
-# sie nicht in den Paragraph darüber reinrutscht.
+# Meta-Zeile unter dem Unterschrift-Block
 SIG_META_X = 60
 SIG_META_Y = 55
+
+# Font-Größen
+HOURS_FONT_SIZE = 11
+CHECK_FONT_SIZE = 13
 
 
 def _draw_signature_svg(
@@ -137,9 +150,28 @@ def _format_km(k: float) -> str:
     return f"{k:.1f}".replace(".", ",")
 
 
+def _checks_for_activities(activities: set[str]) -> set[str]:
+    """Mapping Mobile-Aktivitäts-String → Patti-Checkbox-Spalte.
+
+    Returns a subset of {'alltag', 'gespr', 'begl', 'kh'}.
+    """
+    result: set[str] = set()
+    normalized = {a.lower() for a in activities}
+    for a in normalized:
+        if "alltag" in a or "haushalt" in a:
+            result.add("alltag")
+        if "gespr" in a or "aktivier" in a:
+            result.add("gespr")
+        if "begleit" in a:
+            result.add("begl")
+        if "kh" in a or "kurzzeit" in a or "kurzeit" in a or "klinik" in a:
+            result.add("kh")
+    return result
+
+
 def build_overlay(
     *,
-    day_rows: list[tuple[int, float, float]],
+    day_rows: list[tuple[int, float, float, set[str]]],
     month: int,
     year: int,
     signature_svg: str | None,
@@ -153,30 +185,49 @@ def build_overlay(
     c = canvas.Canvas(buf, pagesize=A4)
 
     # Monat / Jahr in der Kopfzeile
-    c.setFont("Helvetica", 11)
+    c.setFont("Helvetica-Bold", 11)
     c.drawString(MONTH_X, MONTH_Y, f"{month:02d}")
     c.drawString(YEAR_X, YEAR_Y, f"{year % 100:02d}")
 
     # Daten-Zeilen: pro Tag landet der Wert in der passenden Tabelle
-    # (Tage 1-16 links, Tage 17-31 rechts). Die Tag-Zahl ist bereits
-    # im PDF gedruckt, wir schreiben NUR Stunden und Km.
-    c.setFont("Helvetica", 10)
-    for day, hours, km in day_rows:
+    # (Tage 1-16 links, Tage 17-31 rechts). Tag-Zahl ist schon
+    # gedruckt, wir schreiben Stunden, Km und kreuzen Aktivitäten an.
+    for day, hours, km, activities in day_rows:
         if 1 <= day <= 16:
             row_index = day - 1
             x_hours = LEFT_HOURS_X
             x_km = LEFT_KM_X
+            check_x = {
+                "alltag": LEFT_CHECK_ALLTAG_X,
+                "gespr": LEFT_CHECK_GESPR_X,
+                "begl": LEFT_CHECK_BEGL_X,
+                "kh": LEFT_CHECK_KH_X,
+            }
         elif 17 <= day <= 31:
             row_index = day - 17
             x_hours = RIGHT_HOURS_X
             x_km = RIGHT_KM_X
+            check_x = {
+                "alltag": RIGHT_CHECK_ALLTAG_X,
+                "gespr": RIGHT_CHECK_GESPR_X,
+                "begl": RIGHT_CHECK_BEGL_X,
+                "kh": RIGHT_CHECK_KH_X,
+            }
         else:
             continue
         y = ROW_FIRST_BASELINE - row_index * ROW_HEIGHT
+        c.setFont("Helvetica-Bold", HOURS_FONT_SIZE)
         if hours > 0:
             c.drawString(x_hours, y, _format_hours(hours))
         if km:
             c.drawString(x_km, y, _format_km(km))
+
+        # Aktivitäts-Häkchen: dickes "X" in die jeweilige Checkbox
+        checks = _checks_for_activities(activities)
+        c.setFont("Helvetica-Bold", CHECK_FONT_SIZE)
+        for key in ("alltag", "gespr", "begl", "kh"):
+            if key in checks:
+                c.drawString(check_x[key], y, "X")
 
     # Unterschriften-Metadaten + Bild
     if signer_name and signed_at:
@@ -199,7 +250,7 @@ def build_overlay(
 def overlay_on_patti_pdf(
     patti_pdf: bytes,
     *,
-    day_rows: list[tuple[int, float, float]],
+    day_rows: list[tuple[int, float, float, set[str]]],
     month: int,
     year: int,
     signature_svg: str | None,
