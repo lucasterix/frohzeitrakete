@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class TripInputSchema(BaseModel):
@@ -44,6 +44,16 @@ class EntryCreate(BaseModel):
         # Zukunft durchtesten können. Vor dem Live-Rollout wieder auf
         # die strenge "nur heute"-Regel umschalten.
         return v
+
+    @model_validator(mode="after")
+    def patient_entries_need_activity(self) -> "EntryCreate":
+        if self.entry_type == "patient":
+            non_empty = [a for a in (self.activities or []) if a.strip()]
+            if not non_empty:
+                raise ValueError(
+                    "Patient-Einsätze brauchen mindestens eine Tätigkeit."
+                )
+        return self
 
 
 class EntryUpdate(BaseModel):
