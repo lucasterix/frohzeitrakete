@@ -79,12 +79,39 @@ def _name_tokens(name: str) -> set[str]:
     return {t for t in re.split(r"\s+", _normalize_name(name)) if t}
 
 
-def _match_score(sheet_name: str, user_name: str) -> float:
-    """Simpler Fuzzy-Score zwischen 0 und 1.
+def _levenshtein(a: str, b: str) -> int:
+    if len(a) < len(b):
+        return _levenshtein(b, a)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr = [i + 1]
+        for j, cb in enumerate(b):
+            curr.append(
+                min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (ca != cb))
+            )
+        prev = curr
+    return prev[-1]
 
-    - Exact nach Normalisierung → 1.0
-    - Alle Tokens des einen in dem anderen → 0.9
-    - Jaccard über Tokens → beliebig
+
+def _token_similar(a: str, b: str) -> bool:
+    """Sind zwei Token (Nachname-Teile) ähnlich genug? Erlaubt bis zu
+    2 Zeichen Abweichung bei Tokens >= 4 Buchstaben."""
+    if a == b:
+        return True
+    if min(len(a), len(b)) < 3:
+        return False
+    max_dist = 1 if max(len(a), len(b)) < 6 else 2
+    return _levenshtein(a, b) <= max_dist
+
+
+def _match_score(sheet_name: str, user_name: str) -> float:
+    """Fuzzy-Score zwischen 0 und 1 mit Levenshtein auf Token-Ebene.
+
+    - Exakt nach Normalisierung → 1.0
+    - Alle Tokens fuzzy-gematched → 0.9
+    - Anteil fuzzy-gematchter Tokens → proportional
     """
     a = _normalize_name(sheet_name)
     b = _normalize_name(user_name)
@@ -92,15 +119,28 @@ def _match_score(sheet_name: str, user_name: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    ta = _name_tokens(sheet_name)
-    tb = _name_tokens(user_name)
+    ta = list(_name_tokens(sheet_name))
+    tb = list(_name_tokens(user_name))
     if not ta or not tb:
         return 0.0
-    if ta.issubset(tb) or tb.issubset(ta):
+    # Greedy: für jedes Token in ta den besten Match in tb finden
+    used: set[int] = set()
+    matched = 0
+    for tok_a in ta:
+        best_j = -1
+        for j, tok_b in enumerate(tb):
+            if j in used:
+                continue
+            if _token_similar(tok_a, tok_b):
+                best_j = j
+                break
+        if best_j >= 0:
+            used.add(best_j)
+            matched += 1
+    total = max(len(ta), len(tb))
+    if matched == total:
         return 0.9
-    inter = ta & tb
-    union = ta | tb
-    return len(inter) / len(union)
+    return matched / total
 
 
 @dataclass
