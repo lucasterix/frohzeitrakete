@@ -20,6 +20,7 @@ class EntryRepository {
     EntryType entryType = EntryType.patient,
     String? categoryLabel,
     String? homeCommuteStartAddress,
+    String? lateEntryReason,
   }) async {
     try {
       final response = await _client.dio.post(
@@ -34,6 +35,8 @@ class EntryRepository {
           'hours': hours,
           'activities': activities,
           'note': note,
+          if (lateEntryReason != null && lateEntryReason.isNotEmpty)
+            'late_entry_reason': lateEntryReason,
           if (trip != null) 'trip': trip.toJson(),
           if (homeCommuteStartAddress != null &&
               homeCommuteStartAddress.isNotEmpty)

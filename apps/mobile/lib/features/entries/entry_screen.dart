@@ -44,6 +44,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   double? _hours;
   final Set<String> _selectedActivities = {};
   bool _isSaving = false;
+  String? _lateEntryReason;
 
   // Trip tracking state
   bool _isFirstEntryToday = false;
@@ -136,15 +137,53 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     return date;
   }
 
+  bool get _isLateEntry {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sel = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    return sel.isBefore(today);
+  }
+
   Future<void> _pickDate() async {
     final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime(today.year, today.month, today.day),
-      lastDate: DateTime(today.year, today.month, today.day),
+      firstDate: todayDate.subtract(const Duration(days: 14)),
+      lastDate: todayDate,
     );
-    if (picked != null) setState(() => _selectedDate = picked);
+    if (picked == null) return;
+    final isPast = picked.isBefore(todayDate);
+    if (isPast && mounted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Nachträgliche Erfassung'),
+          content: const Text(
+            'Du erfasst einen Einsatz für einen vergangenen Tag. '
+            'Das ist nur in Ausnahmefällen zulässig, z.B. wenn der '
+            'Patient an dem Tag nicht unterschreiben konnte.\n\n'
+            'Im nächsten Schritt musst du eine Begründung angeben.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Trotzdem fortfahren'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    setState(() {
+      _selectedDate = picked;
+      if (!isPast) _lateEntryReason = null;
+    });
   }
 
   Future<void> _save() async {
@@ -247,6 +286,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
             homeCommuteStartAddress: _entryType == EntryType.homeCommute
                 ? _homeCommuteStartAddress
                 : null,
+            lateEntryReason: _isLateEntry ? _lateEntryReason?.trim() : null,
           );
 
       // Alle Provider die jetzt stale sind invalidieren, damit PatientDetail
@@ -757,11 +797,69 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                         ),
                       ),
                     ),
+                  // Nachträgliche Erfassung: Warnung + Pflichtbegründung
+                  if (_isLateEntry) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded,
+                                  color: Color(0xFFDC2626), size: 18),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Nachträgliche Erfassung – Begründung erforderlich',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'z.B. "Patient war nicht anwesend und hat am '
+                            'Folgetag unterschrieben"',
+                            style: TextStyle(
+                                fontSize: 11, color: Color(0xFF991B1B)),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            onChanged: (v) =>
+                                setState(() => _lateEntryReason = v),
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              hintText: 'Begründung eingeben (Pflicht, mind. 10 Zeichen) …',
+                              border: OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(10)),
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 12),
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: (_isSaving || !_canSave) ? null : _save,
+                      onPressed: (_isSaving || !_canSave || (_isLateEntry && (_lateEntryReason == null || _lateEntryReason!.trim().length < 10))) ? null : _save,
                       icon: _isSaving
                           ? const SizedBox(
                               width: 18,

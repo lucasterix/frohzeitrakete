@@ -11,37 +11,49 @@ class TripInputSchema(BaseModel):
 
 
 class EntryCreate(BaseModel):
-    # Optional für non-patient Einsätze (office/training/home_commute)
     patient_id: int | None = None
     entry_date: date
     hours: float = Field(ge=0, le=8.0)
     activities: list[str] = Field(default_factory=list)
     note: str | None = None
     trip: TripInputSchema | None = None
-    # patient (default) | office | training | other | home_commute
     entry_type: str = Field(
         default="patient",
         pattern="^(patient|office|training|other|home_commute)$",
     )
     category_label: str | None = None
-    # Nur für home_commute: Start-Adresse (Patienten-Adresse oder frei).
-    # Das Ziel ist immer die Home-Adresse des Users.
     home_commute_start_address: str | None = None
+    # Nachträgliche Erfassung: wenn entry_date in der Vergangenheit
+    # liegt MUSS eine Begründung angegeben werden warum die Erfassung
+    # nicht am selben Tag stattfand. Max 14 Tage zurück.
+    late_entry_reason: str | None = None
 
     @field_validator("hours")
     @classmethod
     def hours_must_be_half_step(cls, v: float) -> float:
-        # 0.5er Schritte: v muss vielfaches von 0.5 sein (mit kleinem Float-Puffer)
         if abs((v * 2) - round(v * 2)) > 1e-9:
             raise ValueError("hours muss in 0.5-Schritten angegeben werden")
         return v
 
-    @field_validator("entry_date")
-    @classmethod
-    def entry_date_must_be_today(cls, v: date) -> date:
-        if v != date.today():
-            raise ValueError("entry_date muss heute sein")
-        return v
+    @model_validator(mode="after")
+    def entry_date_rules(self) -> "EntryCreate":
+        today = date.today()
+        if self.entry_date == today:
+            return self
+        if self.entry_date > today:
+            raise ValueError("entry_date darf nicht in der Zukunft liegen")
+        days_ago = (today - self.entry_date).days
+        if days_ago > 14:
+            raise ValueError(
+                "Nachträgliche Erfassung nur bis zu 14 Tage in die "
+                "Vergangenheit möglich"
+            )
+        if not self.late_entry_reason or len(self.late_entry_reason.strip()) < 10:
+            raise ValueError(
+                "Bei nachträglicher Erfassung ist eine Begründung "
+                "(mind. 10 Zeichen) erforderlich"
+            )
+        return self
 
     @model_validator(mode="after")
     def patient_entries_need_activity(self) -> "EntryCreate":
