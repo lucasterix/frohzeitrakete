@@ -21,16 +21,14 @@ jobs:
             git pull
             cd infra/staging
 
-            # 1. Backend-Image bauen (für den Migrations-Step).
-            docker compose build backend
+            # Orphaned Container aufräumen
+            docker compose down --remove-orphans || true
 
-            # 2. Migrations als one-shot ausführen (keine Crash-Loop bei Failure –
-            #    der Container existiert nach diesem Schritt nicht mehr).
-            #    Wenn alembic upgrade fehlschlägt, schlägt der Workflow fehl
-            #    und der laufende Backend-Container wird nicht angerührt.
+            # Images bauen
+            docker compose build
+
+            # Migrations
             docker compose run --rm backend alembic upgrade head
 
-            # 3. Stack hochziehen. --build sorgt dafür dass admin-web auch
-            #    rebuilt wird wenn sich der Frontend-Code geändert hat.
-            #    --wait blockiert bis alle Container healthcheck-grün sind.
-            docker compose up -d --build --wait
+            # Stack starten
+            docker compose up -d --wait
