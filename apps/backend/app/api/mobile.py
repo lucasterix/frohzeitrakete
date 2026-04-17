@@ -79,13 +79,21 @@ def mobile_search_patients(
     q: str = Query(..., min_length=2, max_length=100),
     current_user: User = Depends(get_current_user),
 ):
-    """Globale Patti-Patientensuche für den Vertretungsfall.
-
-    Liefert alle Patienten der Organisation, nicht nur die eigenen.
-    Wird von der App genutzt wenn der User einen Patienten betreuen muss,
-    für den er nicht als primärer Caretaker in Patti eingetragen ist.
-    """
+    """Globale Patti-Patientensuche für den Vertretungsfall."""
     return search_patients(q)
+
+
+@router.get("/patients/{patient_id}", response_model=MobilePatient)
+def mobile_get_patient_detail(
+    patient_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """Einzelnen Patienten aus Patti laden."""
+    from app.services.patient_service import get_patient_detail
+    patient = get_patient_detail(patient_id=patient_id, user=current_user)
+    if patient is None:
+        raise HTTPException(status_code=404, detail="patient_not_found")
+    return patient
 
 
 @router.post("/signatures", response_model=SignatureEventResponse, status_code=status.HTTP_201_CREATED)

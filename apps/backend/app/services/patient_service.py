@@ -215,6 +215,43 @@ def _get_assigned_patient_ids_for_person(person_id: int) -> set[int]:
     }
 
 
+def get_patient_detail(patient_id: int, user: User) -> dict | None:
+    """Einzelnen Patienten aus Patti laden."""
+    client = PattiClient()
+    client.login()
+    try:
+        p = client.get_patient(patient_id)
+    except Exception:  # noqa: BLE001
+        return None
+    person = p.get("person") or p.get("patient_person") or {}
+    address = person.get("address") or {}
+    care_raw = p.get("care_degree")
+    insurance_cache: dict[int, str | None] = {}
+    mapped = {
+        "service_history_id": 0,
+        "patient_id": patient_id,
+        "display_name": person.get("list_name") or p.get("person_full_name") or f"Patient {patient_id}",
+        "first_name": person.get("first_name"),
+        "last_name": person.get("last_name"),
+        "address_line": address.get("address_line"),
+        "city": address.get("city"),
+        "postal_code": _extract_zip_code(address),
+        "phone": _extract_phone(person),
+        "phone_landline": _extract_phone_landline(person),
+        "birthday": _extract_birthday(person),
+        "care_degree": care_raw,
+        "care_degree_int": _parse_care_degree(care_raw),
+        "insurance_number": p.get("insurance_number"),
+        "insurance_company_name": None,
+        "_insurance_company_id": p.get("insurance_company_id"),
+        "active": bool(p.get("active")),
+        "is_primary": True,
+        "started_at": None,
+        "_patti_person_id": person.get("id"),
+    }
+    return _enrich_patient(client, mapped, insurance_cache)
+
+
 def get_patients_for_user(db, user: User) -> list[dict]:
     if not user.patti_person_id:
         return []
