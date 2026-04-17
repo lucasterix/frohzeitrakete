@@ -104,24 +104,28 @@ class _BootstrapState extends ConsumerState<_Bootstrap> {
             ),
           );
           if (!ok) {
-            // User hat abgebrochen → zeige Login
             if (mounted) setState(() => _done = true);
             return;
           }
         }
-      } catch (_) {
-        // Fallback: einfach weiter mit /auth/me
-      }
+      } catch (_) {}
     }
 
-    // /auth/me um User wiederherzustellen
-    await ref.read(authControllerProvider.notifier).restoreSession();
-    final user = ref.read(authControllerProvider).valueOrNull;
-
+    // Optimistisch: Cookie vorhanden + Biometrie bestanden → sofort
+    // zur App navigieren. /auth/me läuft im Hintergrund — falls die
+    // Session doch abgelaufen ist, fängt der 401-Interceptor das auf.
     if (mounted) {
       setState(() {
-        _authed = user != null;
+        _authed = true;
         _done = true;
+      });
+    }
+    // Session im Hintergrund verifizieren
+    await ref.read(authControllerProvider.notifier).restoreSession();
+    final user = ref.read(authControllerProvider).valueOrNull;
+    if (user == null && mounted) {
+      setState(() {
+        _authed = false;
       });
     }
   }
