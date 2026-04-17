@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -25,7 +26,12 @@ logger = logging.getLogger(__name__)
 
 VACATION_SHEET = "Urlaubsplaner 2026"
 ROW_DATES = 2
-ROW_FIRST_EMPLOYEE = 4   # actual employee names start around row 6, but some rows are empty
+ROW_FIRST_EMPLOYEE = 4
+
+# In-Memory-Cache: wird alle 3 Minuten aufgefrischt
+_cache: list[EmployeeVacation] | None = None
+_cache_ts: float = 0.0
+_CACHE_TTL = 180  # Sekunden
 
 
 @dataclass
@@ -101,11 +107,19 @@ def fetch_all_vacations() -> list[EmployeeVacation]:
     return results
 
 
+def _get_cached() -> list[EmployeeVacation]:
+    global _cache, _cache_ts
+    now = time.monotonic()
+    if _cache is not None and (now - _cache_ts) < _CACHE_TTL:
+        return _cache
+    _cache = fetch_all_vacations()
+    _cache_ts = now
+    return _cache
+
+
 def get_vacation_dates_for_user(sheet_name: str) -> list[date]:
-    """Gibt die Urlaubstage für einen bestimmten Mitarbeiter zurück."""
-    all_vac = fetch_all_vacations()
     norm = _normalize_name(sheet_name)
-    for emp in all_vac:
+    for emp in _get_cached():
         if _normalize_name(emp.sheet_name) == norm:
             return emp.vacation_dates
     return []
@@ -114,7 +128,6 @@ def get_vacation_dates_for_user(sheet_name: str) -> list[date]:
 def get_vacation_dates_for_month(
     sheet_name: str, year: int, month: int
 ) -> list[date]:
-    """Nur die Urlaubstage eines bestimmten Monats."""
     return [
         d for d in get_vacation_dates_for_user(sheet_name)
         if d.year == year and d.month == month
