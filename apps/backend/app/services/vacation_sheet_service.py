@@ -71,12 +71,16 @@ def fetch_all_vacations() -> list[EmployeeVacation]:
     if len(rows) < 3:
         return []
 
-    # Zeile 2 (idx 1) = Datumsspalten
+    # Zeile 2 (idx 1) = Datumsspalten. Das Sheet heißt "Urlaubsplaner 2026"
+    # aber manche Monate haben 2025 als Jahr in den Headers (Fehler im
+    # Sheet). Wir erzwingen das Jahr aus dem Sheet-Namen.
+    target_year = 2026
     header = rows[1] if len(rows) > 1 else []
     date_cols: dict[int, date] = {}
     for col_idx, cell in enumerate(header):
         d = _parse_date(str(cell))
         if d is not None:
+            d = d.replace(year=target_year)
             date_cols[col_idx] = d
 
     if not date_cols:
