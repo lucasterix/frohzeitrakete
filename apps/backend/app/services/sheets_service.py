@@ -34,9 +34,43 @@ SPREADSHEET_ID = "14-cmpJJNCq9olqty0laIm7-5sw5rY9xtLS-2wZnR2EU"
 SHEET_NAME = "2026 Stundenübersicht"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
-# Zeilenbereich mit Mitarbeitern (über Zeit stabil)
 ROW_FIRST = 6
 ROW_LAST = 92
+
+# Pro Monat 6 Spalten, Start bei C (Index 2). Offset pro Monat = 6.
+# Jan: C-H (Idx 2-7), Feb: I-N (8-13), Mär: O-T (14-19), Apr: U-Z (20-25), ...
+# Innerhalb eines Monatsblocks: +0=IST, +1=h/Mo, +2=h/Wo, +3=Dif., +4=Urlaub, +5=Krank
+_MONTH_BLOCK_START = 2   # Spalte C
+_MONTH_BLOCK_SIZE = 6
+_OFFSET_HWO = 2          # h/Wo innerhalb des Blocks
+_OFFSET_DIF = 3          # Dif. innerhalb des Blocks
+
+
+def _col_letter(idx: int) -> str:
+    """0-basierter Spaltenindex → Excel-Buchstabe (A, B, ..., Z, AA, AB, ...)."""
+    if idx < 26:
+        return chr(65 + idx)
+    return chr(64 + idx // 26) + chr(65 + idx % 26)
+
+
+def _month_columns(month: int) -> tuple[str, str, str]:
+    """Gibt (name_col, hwo_col, saldo_col) für den angegebenen Monat zurück.
+
+    - name_col: immer A
+    - hwo_col: h/Wo des aktuellen Monats
+    - saldo_col: Dif. des Vormonats (= abgeschlossener Stand), für
+      Januar der Übertrag in Spalte B
+    """
+    block = _MONTH_BLOCK_START + (month - 1) * _MONTH_BLOCK_SIZE
+    hwo_idx = block + _OFFSET_HWO
+
+    if month == 1:
+        saldo_col = "B"
+    else:
+        prev_block = _MONTH_BLOCK_START + (month - 2) * _MONTH_BLOCK_SIZE
+        saldo_col = _col_letter(prev_block + _OFFSET_DIF)
+
+    return "A", _col_letter(hwo_idx), saldo_col
 
 
 def _credentials_path() -> str:
@@ -150,19 +184,30 @@ class SheetRow:
     overtime_balance_hours: float | None
 
 
-def fetch_sheet_rows() -> list[SheetRow]:
-    """Ruft die drei Spalten in einem Batch-Request ab."""
+def fetch_sheet_rows(*, month: int | None = None) -> list[SheetRow]:
+    """Ruft Name, h/Wo und Saldo für den angegebenen Monat ab.
+
+    month: 1-12. Default: aktueller Monat."""
     from google.oauth2.service_account import Credentials
     from googleapiclient.discovery import build
+
+    if month is None:
+        month = date.today().month
+
+    name_col, hwo_col, saldo_col = _month_columns(month)
+    logger.info(
+        "sheets_fetch month=%s name=%s hwo=%s saldo=%s",
+        month, name_col, hwo_col, saldo_col,
+    )
 
     creds = Credentials.from_service_account_file(
         _credentials_path(), scopes=SCOPES
     )
     svc = build("sheets", "v4", credentials=creds, cache_discovery=False)
     ranges = [
-        f"'{SHEET_NAME}'!A{ROW_FIRST}:A{ROW_LAST}",
-        f"'{SHEET_NAME}'!E{ROW_FIRST}:E{ROW_LAST}",
-        f"'{SHEET_NAME}'!R{ROW_FIRST}:R{ROW_LAST}",
+        f"'{SHEET_NAME}'!{name_col}{ROW_FIRST}:{name_col}{ROW_LAST}",
+        f"'{SHEET_NAME}'!{hwo_col}{ROW_FIRST}:{hwo_col}{ROW_LAST}",
+        f"'{SHEET_NAME}'!{saldo_col}{ROW_FIRST}:{saldo_col}{ROW_LAST}",
     ]
     res = (
         svc.spreadsheets()
