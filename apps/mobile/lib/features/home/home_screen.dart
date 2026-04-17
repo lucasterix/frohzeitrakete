@@ -10,6 +10,7 @@ import '../office_requests/office_requests_screen.dart';
 import '../patients/patient_intake_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
+import '../vacation/vacation_screen.dart';
 
 /// Motivierende Sprüche, die zufällig auf der Startseite rotieren.
 const List<String> _motivationalQuotes = [
@@ -515,6 +516,38 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const Divider(height: 18),
                       ],
+                      // Urlaubshinweis
+                      Builder(builder: (_) {
+                        final isVacation = s['today_is_vacation'] == true;
+                        if (!isVacation) return const SizedBox.shrink();
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Text('🏖️', style: TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Heute ist dein Urlaubstag — genieß die freie Zeit! '
+                                  'Dein Tagessoll (${tgt?.toStringAsFixed(1) ?? "–"} h) '
+                                  'wird automatisch angerechnet.',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF92400E),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                       // Feiertags-Hinweis
                       Builder(builder: (_) {
                         final isHoliday = s['today_is_holiday'] == true;
@@ -575,6 +608,13 @@ class HomeScreen extends ConsumerWidget {
                             statRow('Feiertage',
                                 '${holidayH.toStringAsFixed(1)} h',
                                 color: const Color(0xFF7C3AED)),
+                          Builder(builder: (_) {
+                            final vacH = (s['vacation_hours'] as num?)?.toDouble() ?? 0;
+                            if (vacH <= 0) return const SizedBox.shrink();
+                            return statRow('Urlaub',
+                                '${vacH.toStringAsFixed(1)} h',
+                                color: const Color(0xFFD97706));
+                          }),
                           statRow('Gesamt bisher',
                               '${totalH.toStringAsFixed(1)} h',
                               color: const Color(0xFF0F172A)),
@@ -666,6 +706,53 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // Urlaub-Schnellzugriff
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VacationScreen()),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.beach_access,
+                        color: Color(0xFFD97706), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Mein Urlaub',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        Text('Übersicht & Antrag stellen',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFF94A3B8)),
+                ],
+              ),
+            ),
           ),
 
           const SizedBox(height: 20),

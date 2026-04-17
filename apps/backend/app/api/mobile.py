@@ -752,3 +752,20 @@ def mobile_month_stats(
 
     stats = compute_month_stats(db, user=current_user, year=year, month=month)
     return asdict(stats)
+
+
+@router.get("/me/vacation-overview")
+def mobile_vacation_overview(
+    current_user: User = Depends(get_current_user),
+):
+    """Jahresübersicht: alle genehmigten Urlaubstage aus dem Google-Sheet."""
+    from app.services.vacation_sheet_service import get_vacation_dates_for_user
+
+    if not current_user.sheets_name_match:
+        return {"vacation_dates": [], "total_days": 0}
+
+    dates = get_vacation_dates_for_user(current_user.sheets_name_match)
+    return {
+        "vacation_dates": [d.isoformat() for d in dates],
+        "total_days": len(dates),
+    }

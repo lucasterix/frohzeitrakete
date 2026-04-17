@@ -99,6 +99,11 @@ class MonthStats:
     target_hours_per_day: float | None
     target_hours_per_week: float | None
 
+    # Urlaub
+    vacation_hours: float
+    vacation_days_this_month: int
+    today_is_vacation: bool
+
     # Feiertag heute?
     today_is_holiday: bool
     today_holiday_name: str | None
@@ -153,8 +158,20 @@ def compute_month_stats(
         if first <= h <= until and h.weekday() < 5:
             holiday_hours += target_per_day
 
-    # 10% Betreuungsbonus, einmal
-    total = (patient_hours * 1.10) + other_hours + holiday_hours
+    # Urlaubstage aus dem Sheet
+    from app.services.vacation_sheet_service import get_vacation_dates_for_month
+
+    vac_dates_month: list[date] = []
+    if user.sheets_name_match:
+        vac_dates_month = get_vacation_dates_for_month(
+            user.sheets_name_match, year, month
+        )
+    vac_past = [d for d in vac_dates_month if d <= until]
+    vacation_hours = len(vac_past) * target_per_day
+    today_is_vacation = today in vac_dates_month
+
+    # 10% Betreuungsbonus, einmal. Urlaub + Feiertage ohne 10%.
+    total = (patient_hours * 1.10) + other_hours + holiday_hours + vacation_hours
 
     # Durchschnitt + Prognose
     avg = total / workdays_elapsed if workdays_elapsed > 0 else 0.0
@@ -187,6 +204,9 @@ def compute_month_stats(
         overtime_label=overtime_label,
         target_hours_per_day=user.target_hours_per_day,
         target_hours_per_week=user.target_hours_per_week,
+        vacation_hours=round(vacation_hours, 2),
+        vacation_days_this_month=len(vac_dates_month),
+        today_is_vacation=today_is_vacation,
         today_is_holiday=today in holidays,
         today_holiday_name=holidays.get(today),
     )
