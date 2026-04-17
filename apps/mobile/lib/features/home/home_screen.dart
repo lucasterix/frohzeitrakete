@@ -423,10 +423,17 @@ class HomeScreen extends ConsumerWidget {
                         height: 40,
                         color: Colors.white.withValues(alpha: 0.3),
                       ),
-                      _heroStat(
-                        value: '$monthEntriesCount',
-                        label: 'Diesen Monat',
-                      ),
+                      Builder(builder: (_) {
+                        final st = ref.watch(monthStatsProvider);
+                        final h = st.maybeWhen(
+                          data: (s) => (s['total_hours_credited'] as num?)?.toDouble(),
+                          orElse: () => null,
+                        );
+                        return _heroStat(
+                          value: h != null ? '${h.toStringAsFixed(1)}' : '$monthEntriesCount',
+                          label: h != null ? 'Monat h' : 'Diesen Monat',
+                        );
+                      }),
                     ],
                   ),
               ],
@@ -508,6 +515,42 @@ class HomeScreen extends ConsumerWidget {
                         ),
                         const Divider(height: 18),
                       ],
+                      // Feiertags-Hinweis
+                      Builder(builder: (_) {
+                        final isHoliday = s['today_is_holiday'] == true;
+                        final holidayName = s['today_holiday_name'] as String?;
+                        if (!isHoliday || holidayName == null) {
+                          return const SizedBox.shrink();
+                        }
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F3FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: const Color(0xFFDDD6FE)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Text('🎉', style: TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Heute ist $holidayName — genieß den freien Tag! '
+                                  'Dein Tagessoll (${tgt?.toStringAsFixed(1) ?? "–"} h) '
+                                  'wird automatisch angerechnet.',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF5B21B6),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                       Text(
                         '$monthName · Tag $wdElapsed/$wdTotal',
                         style: const TextStyle(
@@ -518,8 +561,26 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      statRow('Geleistet bisher',
-                          '${totalH.toStringAsFixed(1)} h'),
+                      Builder(builder: (_) {
+                        final patRaw = (s['patient_hours_raw'] as num?)?.toDouble() ?? 0;
+                        final otherRaw = (s['other_hours_raw'] as num?)?.toDouble() ?? 0;
+                        final holidayH = (s['holiday_hours'] as num?)?.toDouble() ?? 0;
+                        return Column(children: [
+                          statRow('Betreuung',
+                              '${patRaw.toStringAsFixed(1)} h + 10% = ${(patRaw * 1.1).toStringAsFixed(1)} h'),
+                          if (otherRaw > 0)
+                            statRow('Sonstige',
+                                '${otherRaw.toStringAsFixed(1)} h'),
+                          if (holidayH > 0)
+                            statRow('Feiertage',
+                                '${holidayH.toStringAsFixed(1)} h',
+                                color: const Color(0xFF7C3AED)),
+                          statRow('Gesamt bisher',
+                              '${totalH.toStringAsFixed(1)} h',
+                              color: const Color(0xFF0F172A)),
+                        ]);
+                      }),
+                      const Divider(height: 14),
                       if (tgt != null)
                         statRow('Soll / Tag',
                             '${tgt.toStringAsFixed(1)} h'),

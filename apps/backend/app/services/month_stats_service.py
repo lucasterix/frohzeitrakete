@@ -35,27 +35,27 @@ def _easter(year: int) -> date:
     return date(year, month, day)
 
 
-def _holidays_niedersachsen(year: int) -> set[date]:
+def _holidays_niedersachsen(year: int) -> dict[date, str]:
     easter = _easter(year)
     return {
-        date(year, 1, 1),       # Neujahr
-        easter - timedelta(2),   # Karfreitag
-        easter + timedelta(1),   # Ostermontag
-        date(year, 5, 1),       # Tag der Arbeit
-        easter + timedelta(39),  # Christi Himmelfahrt
-        easter + timedelta(50),  # Pfingstmontag
-        date(year, 10, 3),      # Tag der Deutschen Einheit
-        date(year, 10, 31),     # Reformationstag
-        date(year, 12, 25),     # 1. Weihnachtstag
-        date(year, 12, 26),     # 2. Weihnachtstag
+        date(year, 1, 1): "Neujahr",
+        easter - timedelta(2): "Karfreitag",
+        easter + timedelta(1): "Ostermontag",
+        date(year, 5, 1): "Tag der Arbeit",
+        easter + timedelta(39): "Christi Himmelfahrt",
+        easter + timedelta(50): "Pfingstmontag",
+        date(year, 10, 3): "Tag der Deutschen Einheit",
+        date(year, 10, 31): "Reformationstag",
+        date(year, 12, 25): "1. Weihnachtstag",
+        date(year, 12, 26): "2. Weihnachtstag",
     }
 
 
-def _is_workday(d: date, holidays: set[date]) -> bool:
+def _is_workday(d: date, holidays: dict[date, str]) -> bool:
     return d.weekday() < 5 and d not in holidays
 
 
-def _count_workdays(start: date, end: date, holidays: set[date]) -> int:
+def _count_workdays(start: date, end: date, holidays: dict[date, str]) -> int:
     count = 0
     d = start
     while d <= end:
@@ -98,6 +98,10 @@ class MonthStats:
     # Soll
     target_hours_per_day: float | None
     target_hours_per_week: float | None
+
+    # Feiertag heute?
+    today_is_holiday: bool
+    today_holiday_name: str | None
 
 
 def compute_month_stats(
@@ -183,4 +187,6 @@ def compute_month_stats(
         overtime_label=overtime_label,
         target_hours_per_day=user.target_hours_per_day,
         target_hours_per_week=user.target_hours_per_week,
+        today_is_holiday=today in holidays,
+        today_holiday_name=holidays.get(today),
     )
