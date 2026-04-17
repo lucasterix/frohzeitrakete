@@ -55,14 +55,14 @@ export default function HomePage() {
         <div className="absolute -bottom-40 -left-40 h-[500px] w-[500px] rounded-full bg-emerald-200/30 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
-        <section>
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-1.5 text-xs font-semibold text-slate-700 backdrop-blur">
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center gap-8 px-4 py-10 sm:px-6 sm:py-16 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-12">
+        <section className="text-center lg:text-left">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/70 px-4 py-1.5 text-xs font-semibold text-brand-800 backdrop-blur sm:mb-6">
             <RocketIcon className="h-3.5 w-3.5 text-brand-600" />
-            FrohZeitRakete · Admin Console
+            FrohZeitRakete
           </div>
 
-          <h1 className="text-5xl font-bold tracking-tight text-slate-900 sm:text-6xl">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
             Pflege.{" "}
             <span className="bg-gradient-to-r from-brand-600 to-brand-400 bg-clip-text text-transparent">
               Digital.
@@ -71,19 +71,21 @@ export default function HomePage() {
             Auf Knopfdruck.
           </h1>
 
-          <p className="mt-5 max-w-lg text-lg text-slate-600">
-            Die Verwaltungsoberfläche der Fröhlich Dienste — User, Sessions,
-            Signaturen und Activity-Feed in einer einzigen modernen Konsole.
+          <p className="mx-auto mt-4 max-w-lg text-sm text-slate-600 sm:mt-5 sm:text-lg lg:mx-0">
+            Die FrohZeit Rakete für Fröhlich Dienste — Einsätze erfassen,
+            Stunden im Blick, Urlaub beantragen.
           </p>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            <Feature Icon={UsersIcon} title="User & Sessions" body="Geräteverwaltung mit Remote-Logout" />
-            <Feature Icon={SignatureIcon} title="Signaturen" body="Live-Übersicht aller Unterschriften" />
-            <Feature Icon={ShieldIcon} title="Sicher" body="HttpOnly-Cookies, Rate-Limit, Audit" />
+          <div className="mt-6 hidden gap-4 sm:grid sm:grid-cols-3 lg:mt-10">
+            <Feature Icon={UsersIcon} title="Patienten" body="Übersicht mit Reststunden" />
+            <Feature Icon={SignatureIcon} title="Zeiterfassung" body="Einsätze + Unterschrift digital" />
+            <Feature Icon={ShieldIcon} title="Sicher" body="Verschlüsselt und DSGVO-konform" />
           </div>
         </section>
 
-        <LoginForm onLoginSuccess={handleLoginSuccess} />
+        <div className="w-full max-w-md lg:max-w-none">
+          <LoginForm onLoginSuccess={handleLoginSuccess} />
+        </div>
       </div>
     </main>
   );

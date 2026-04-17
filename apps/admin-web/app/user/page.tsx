@@ -79,11 +79,11 @@ export default function UserDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur sm:rounded-3xl sm:p-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           Hallo {me?.full_name?.split(" ")[0] ?? ""} 👋
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-xs text-slate-600 sm:text-sm">
           {me?.email}
         </p>
       </div>
@@ -103,15 +103,15 @@ export default function UserDashboard() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         {/* Saldo */}
         {bal != null && (
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
               {balLabel}
             </p>
             <p
-              className="mt-2 text-4xl font-bold"
+              className="mt-1 text-3xl font-bold sm:mt-2 sm:text-4xl"
               style={{ color: balPositive ? "#059669" : "#DC2626" }}
             >
               {balPositive ? "+" : ""}
@@ -121,8 +121,8 @@ export default function UserDashboard() {
         )}
 
         {/* Monatsstatistik */}
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
             {monthName} · Tag {wdElapsed}/{wdTotal}
           </p>
           <div className="mt-4 divide-y divide-slate-100">

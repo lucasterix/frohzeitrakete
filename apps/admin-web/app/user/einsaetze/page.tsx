@@ -100,11 +100,11 @@ export default function UserEinsaetzePage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+      <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur sm:rounded-3xl sm:p-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           Einsatz erfassen
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-xs text-slate-600 sm:text-sm">
           Wähle Patient, Datum, Stunden und Tätigkeit. Im Regelfall wird nur das
           heutige Datum verwendet.
         </p>
@@ -123,7 +123,7 @@ export default function UserEinsaetzePage() {
         </div>
       )}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Patient */}
           <label className="block">
