@@ -236,11 +236,16 @@ export default function BueroAnfragenPage() {
           <h2 className="mb-3 text-sm font-semibold text-slate-900">Bisherige Anfragen</h2>
           <ul className="space-y-2">
             {requests.map((r: any) => {
-              const st = r.status || r.acknowledged_at ? "done" : "open";
+              const st: string = r.status || (r.acknowledged_at ? "done" : "open");
+              const colorCls = st === "done" || st === "approved"
+                ? "text-emerald-700"
+                : st === "rejected"
+                  ? "text-red-700"
+                  : "text-slate-500";
               return (
                 <li key={r.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-xs">
                   <span>{r.from_date || r.category || "Anfrage"} {r.to_date ? `– ${r.to_date}` : ""}</span>
-                  <span className={`font-semibold uppercase ${st === "done" || st === "approved" ? "text-emerald-700" : st === "rejected" ? "text-red-700" : "text-slate-500"}`}>
+                  <span className={`font-semibold uppercase ${colorCls}`}>
                     {r.status || (r.acknowledged_at ? "Bestätigt" : "Offen")}
                   </span>
                 </li>
