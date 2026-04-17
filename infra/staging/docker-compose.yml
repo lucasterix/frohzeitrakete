@@ -63,6 +63,21 @@ services:
     networks:
       - fzr_net
 
+  mobile-web:
+    build:
+      context: ../../apps/mobile
+      dockerfile: Dockerfile.web
+      args:
+        API_BASE_URL: https://api.froehlichdienste.de
+    container_name: fzr_mobile_web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - fzr_net
+
   caddy:
     image: caddy:2
     container_name: fzr_caddy
@@ -71,6 +86,8 @@ services:
       backend:
         condition: service_healthy
       admin-web:
+        condition: service_started
+      mobile-web:
         condition: service_started
     ports:
       - "80:80"
