@@ -735,3 +735,20 @@ def mobile_patient_patti_budget(
     zugeordnet sein.
     """
     return get_patient_budget(patient_id=patient_id, year=year, user=current_user)
+
+
+@router.get("/me/month-stats")
+def mobile_month_stats(
+    year: int | None = None,
+    month: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Monatsstatistik des eingeloggten Users: geleistete Stunden
+    (mit 10% auf Betreuung), Feiertags-Gutschriften, Durchschnitt
+    pro Tag, Monatsprognose, Überstunden-Saldo aus Vormonat."""
+    from app.services.month_stats_service import compute_month_stats
+    from dataclasses import asdict
+
+    stats = compute_month_stats(db, user=current_user, year=year, month=month)
+    return asdict(stats)

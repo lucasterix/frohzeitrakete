@@ -129,6 +129,18 @@ final userMonthlySummaryProvider =
   return (response.data as Map).cast<String, dynamic>();
 });
 
+final monthStatsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final auth = ref.watch(authControllerProvider);
+  if (auth.valueOrNull == null) return {};
+  final client = ref.watch(apiClientProvider);
+  final response = await client.dio.get('/mobile/me/month-stats');
+  if (response.statusCode == 200) {
+    return (response.data as Map).cast<String, dynamic>();
+  }
+  return {};
+});
+
 // ---------------- Auth State ----------------
 
 /// Aktuell eingeloggter User (null = nicht eingeloggt).

@@ -435,94 +435,114 @@ class HomeScreen extends ConsumerWidget {
 
           const SizedBox(height: 12),
 
-          // Stunden-Saldo + Soll-Stunden aus der Google-Stundenübersicht
+          // Monatsstatistik + Saldo aus Backend
           Builder(builder: (ctx) {
-            final me = ref.watch(currentUserProvider);
-            if (me == null ||
-                (me.overtimeBalanceHours == null &&
-                    me.targetHoursPerDay == null)) {
-              return const SizedBox.shrink();
-            }
-            final bal = me.overtimeBalanceHours;
-            final tgt = me.targetHoursPerDay;
-            final balPositive = bal != null && bal >= 0;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            final asyncStats = ref.watch(monthStatsProvider);
+            return asyncStats.when(
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (s) {
+                if (s.isEmpty) return const SizedBox.shrink();
+                final bal = (s['overtime_balance'] as num?)?.toDouble();
+                final balLabel = (s['overtime_label'] as String?) ?? '';
+                final balPositive = bal != null && bal >= 0;
+                final totalH = (s['total_hours_credited'] as num?)?.toDouble() ?? 0;
+                final avg = (s['avg_per_workday'] as num?)?.toDouble() ?? 0;
+                final proj = (s['month_projection'] as num?)?.toDouble() ?? 0;
+                final tgt = (s['target_hours_per_day'] as num?)?.toDouble();
+                final monthName = (s['month_name'] as String?) ?? '';
+                final wdElapsed = s['workdays_elapsed'] as int? ?? 0;
+                final wdTotal = s['workdays_total'] as int? ?? 0;
+
+                Widget statRow(String label, String value, {Color? color}) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Stundensaldo',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        if (bal != null)
-                          Text(
-                            '${balPositive ? "+" : ""}${bal.toStringAsFixed(1)} h',
+                        Text(label,
+                            style: const TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
+                        Text(value,
                             style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: balPositive
-                                  ? const Color(0xFF059669)
-                                  : const Color(0xFFDC2626),
-                            ),
-                          )
-                        else
-                          const Text(
-                            '—',
-                            style: TextStyle(
-                              fontSize: 22,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: color ?? const Color(0xFF0F172A),
+                            )),
                       ],
                     ),
+                  );
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  Container(
-                    width: 1,
-                    height: 40,
-                    color: const Color(0xFFE2E8F0),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Soll / Tag',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF64748B),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (bal != null) ...[
+                        Text(
+                          balLabel,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF94A3B8),
                             fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          tgt != null ? '${tgt.toStringAsFixed(1)} h' : '—',
-                          style: const TextStyle(
-                            fontSize: 22,
+                          '${balPositive ? "+" : ""}${bal.toStringAsFixed(1)} h',
+                          style: TextStyle(
+                            fontSize: 26,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
+                            color: balPositive
+                                ? const Color(0xFF059669)
+                                : const Color(0xFFDC2626),
                           ),
                         ),
+                        const Divider(height: 18),
                       ],
-                    ),
+                      Text(
+                        '$monthName · Tag $wdElapsed/$wdTotal',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      statRow('Geleistet bisher',
+                          '${totalH.toStringAsFixed(1)} h'),
+                      if (tgt != null)
+                        statRow('Soll / Tag',
+                            '${tgt.toStringAsFixed(1)} h'),
+                      statRow('Ø pro Arbeitstag',
+                          '${avg.toStringAsFixed(1)} h'),
+                      const Divider(height: 14),
+                      statRow(
+                        'Monatsprognose',
+                        '${proj.toStringAsFixed(0)} h',
+                        color: const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '(Ø ${avg.toStringAsFixed(1)} h/Tag × 5 × 4,33)',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           }),
 
