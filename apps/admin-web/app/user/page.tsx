@@ -237,22 +237,22 @@ export default function UserDashboard() {
       </div>
 
       {/* Schnellzugriffe */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <ActionTile
           href="/user/patienten"
           icon="👥"
           iconBg="#f0fdf4"
           iconColor="#4F8A5B"
           title="Meine Patienten"
-          subtitle="Übersicht mit Reststunden"
+          subtitle="Reststunden & Details"
         />
         <ActionTile
-          href="/user/einsaetze"
+          href="/user/urlaub"
           icon="📋"
           iconBg="#eff6ff"
           iconColor="#2563EB"
           title="Anfrage ans Büro"
-          subtitle="Vertretung, Urlaub, HR-Anfrage"
+          subtitle="Urlaub, Vertretung, HR"
         />
       </div>
 

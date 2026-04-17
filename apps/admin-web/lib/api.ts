@@ -595,7 +595,12 @@ export type Patient = {
   last_name?: string | null;
   address_line?: string | null;
   city?: string | null;
+  postal_code?: string | null;
+  phone?: string | null;
   care_degree?: string | null;
+  care_degree_int?: number;
+  insurance_number?: string | null;
+  insurance_company_name?: string | null;
   active: boolean;
   is_primary: boolean;
   started_at?: string | null;

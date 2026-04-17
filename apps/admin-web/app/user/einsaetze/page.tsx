@@ -10,7 +10,7 @@ import {
 const ACTIVITIES = ["Alltagshilfe", "Gespräche/Aktivierung", "Begleitung"];
 const HOUR_PRESETS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8];
 
-type Patient = { patientId: number; firstName: string; lastName: string };
+type Patient = { patient_id: number; display_name: string };
 
 export default function UserEinsaetzePage() {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -137,8 +137,8 @@ export default function UserEinsaetzePage() {
             >
               <option value="">Patient wählen …</option>
               {patients.map((p) => (
-                <option key={p.patientId} value={p.patientId}>
-                  {p.firstName} {p.lastName}
+                <option key={p.patient_id} value={p.patient_id}>
+                  {p.display_name}
                 </option>
               ))}
             </select>
