@@ -21,6 +21,13 @@ export default function UmwandlungPage() {
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   const gueltigAb = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
+  // Read URL param for pre-selection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlPatient = params.get("patient");
+    if (urlPatient) setPatientId(Number(urlPatient) || null);
+  }, []);
+
   useEffect(() => {
     fetchWithRefresh(`${API_BASE_URL}/mobile/patients`, { headers: buildHeaders() })
       .then((r) => r.json())

@@ -244,7 +244,7 @@ export default function UserDashboard() {
           iconBg="#f0fdf4"
           iconColor="#4F8A5B"
           title="Meine Patienten"
-          subtitle="Reststunden & Details"
+          subtitle="Details & Aktionen"
         />
         <ActionTile
           href="/user/buero-anfragen"
@@ -253,22 +253,6 @@ export default function UserDashboard() {
           iconColor="#2563EB"
           title="Anfrage ans Büro"
           subtitle="Urlaub, Krank, Vertretung"
-        />
-        <ActionTile
-          href="/user/vp-antrag"
-          icon="📝"
-          iconBg="#fef3c7"
-          iconColor="#D97706"
-          title="VP-Antrag"
-          subtitle="Verhinderungspflege"
-        />
-        <ActionTile
-          href="/user/umwandlung"
-          icon="🔄"
-          iconBg="#f0f9ff"
-          iconColor="#0369a1"
-          title="Umwandlung"
-          subtitle="§45b Entlastungsleistung"
         />
       </div>
 

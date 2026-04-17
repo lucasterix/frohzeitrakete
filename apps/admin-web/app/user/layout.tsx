@@ -9,18 +9,13 @@ import {
   LogoutIcon,
   RocketIcon,
   UsersIcon,
-  SparkleIcon,
-  SignatureIcon,
+  InboxIcon,
 } from "@/components/icons";
 
 const NAV_ITEMS = [
   { href: "/user", label: "Start", icon: DashboardIcon },
   { href: "/user/patienten", label: "Patienten", icon: UsersIcon },
-  { href: "/user/einsaetze", label: "Einsatz", icon: SparkleIcon },
-  { href: "/user/buero-anfragen", label: "Büro", icon: SignatureIcon },
-  { href: "/user/vp-antrag", label: "VP-Antrag", icon: SignatureIcon },
-  { href: "/user/umwandlung", label: "Umwandlung", icon: SignatureIcon },
-  { href: "/user/urlaub", label: "Urlaub", icon: SignatureIcon },
+  { href: "/user/nachrichten", label: "Nachrichten", icon: InboxIcon },
 ];
 
 export default function UserLayout({

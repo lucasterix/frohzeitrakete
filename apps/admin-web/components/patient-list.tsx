@@ -3,50 +3,23 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Patient, getMyPatients } from "@/lib/api";
-import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
-
-type Budget = {
-  care_service_remaining_hours: number;
-  respite_care_remaining_hours: number;
-};
 
 export default function PatientList() {
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [budgets, setBudgets] = useState<Record<number, Budget>>({});
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await getMyPatients();
-        setPatients(data);
-        const year = new Date().getFullYear();
-        const budgetMap: Record<number, Budget> = {};
-        await Promise.allSettled(
-          data.map(async (p) => {
-            try {
-              const res = await fetchWithRefresh(
-                `${API_BASE_URL}/mobile/patients/${p.patient_id}/patti-budget?year=${year}`,
-                { headers: buildHeaders() }
-              );
-              if (res.ok) {
-                budgetMap[p.patient_id] = await res.json();
-              }
-            } catch {}
-          })
-        );
-        setBudgets(budgetMap);
-      } catch (error) {
+    getMyPatients()
+      .then((data) => setPatients(data))
+      .catch((error) => {
         setErrorMessage(
           error instanceof Error
             ? error.message
             : "Fehler beim Laden der Patienten"
         );
-      } finally {
-        setLoading(false);
-      }
-    })();
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -81,10 +54,6 @@ export default function PatientList() {
   return (
     <div className="space-y-3">
       {patients.map((p) => {
-        const b = budgets[p.patient_id];
-        const totalRemaining = b
-          ? b.care_service_remaining_hours + b.respite_care_remaining_hours
-          : null;
         const missingData: string[] = [];
         if (!p.phone && !p.address_line) missingData.push("Adresse/Telefon");
         if (!p.insurance_number) missingData.push("Versicherungsnr.");
@@ -116,26 +85,7 @@ export default function PatientList() {
                   </p>
                 )}
               </div>
-              <div className="shrink-0 text-right">
-                {totalRemaining != null ? (
-                  <div>
-                    <p
-                      className={`text-lg font-bold sm:text-xl ${
-                        totalRemaining > 5
-                          ? "text-brand-700"
-                          : totalRemaining > 0
-                            ? "text-amber-600"
-                            : "text-red-600"
-                      }`}
-                    >
-                      {totalRemaining.toFixed(1)} h
-                    </p>
-                    <p className="text-[10px] text-slate-400">Reststunden</p>
-                  </div>
-                ) : (
-                  <div className="h-6 w-12 animate-pulse rounded bg-slate-100" />
-                )}
-              </div>
+              <span className="text-slate-400">›</span>
             </div>
           </Link>
         );

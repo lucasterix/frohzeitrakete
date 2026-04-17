@@ -18,6 +18,13 @@ export default function VpAntragPage() {
   const [pflegeperson, setPflegeperson] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Read URL param for pre-selection
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlPatient = params.get("patient");
+    if (urlPatient) setPatientId(Number(urlPatient) || null);
+  }, []);
+
   useEffect(() => {
     fetchWithRefresh(`${API_BASE_URL}/mobile/patients`, { headers: buildHeaders() })
       .then((r) => r.json())
