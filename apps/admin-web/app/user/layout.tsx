@@ -14,10 +14,13 @@ import {
 } from "@/components/icons";
 
 const NAV_ITEMS = [
-  { href: "/user", label: "Dashboard", icon: DashboardIcon },
-  { href: "/user/patienten", label: "Meine Patienten", icon: UsersIcon },
-  { href: "/user/einsaetze", label: "Einsatz erfassen", icon: SparkleIcon },
-  { href: "/user/urlaub", label: "Mein Urlaub", icon: SignatureIcon },
+  { href: "/user", label: "Start", icon: DashboardIcon },
+  { href: "/user/patienten", label: "Patienten", icon: UsersIcon },
+  { href: "/user/einsaetze", label: "Einsatz", icon: SparkleIcon },
+  { href: "/user/buero-anfragen", label: "Büro", icon: SignatureIcon },
+  { href: "/user/vp-antrag", label: "VP-Antrag", icon: SignatureIcon },
+  { href: "/user/umwandlung", label: "Umwandlung", icon: SignatureIcon },
+  { href: "/user/urlaub", label: "Urlaub", icon: SignatureIcon },
 ];
 
 export default function UserLayout({

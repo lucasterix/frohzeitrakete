@@ -247,12 +247,28 @@ export default function UserDashboard() {
           subtitle="Reststunden & Details"
         />
         <ActionTile
-          href="/user/urlaub"
+          href="/user/buero-anfragen"
           icon="📋"
           iconBg="#eff6ff"
           iconColor="#2563EB"
           title="Anfrage ans Büro"
-          subtitle="Urlaub, Vertretung, HR"
+          subtitle="Urlaub, Krank, Vertretung"
+        />
+        <ActionTile
+          href="/user/vp-antrag"
+          icon="📝"
+          iconBg="#fef3c7"
+          iconColor="#D97706"
+          title="VP-Antrag"
+          subtitle="Verhinderungspflege"
+        />
+        <ActionTile
+          href="/user/umwandlung"
+          icon="🔄"
+          iconBg="#f0f9ff"
+          iconColor="#0369a1"
+          title="Umwandlung"
+          subtitle="§45b Entlastungsleistung"
         />
       </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Patient, getMyPatients } from "@/lib/api";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
@@ -89,9 +90,10 @@ export default function PatientList() {
         if (!p.insurance_number) missingData.push("Versicherungsnr.");
 
         return (
-          <div
+          <Link
             key={p.service_history_id}
-            className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
+            href={`/user/patienten/${p.patient_id}`}
+            className="block rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-brand-300 hover:shadow-md sm:p-4"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -135,7 +137,7 @@ export default function PatientList() {
                 )}
               </div>
             </div>
-          </div>
+          </Link>
         );
       })}
     </div>
