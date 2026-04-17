@@ -99,7 +99,7 @@ export default function PatientList() {
                   {p.display_name}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-2">
-                  {p.care_degree_int > 0 && (
+                  {(p.care_degree_int ?? 0) > 0 && (
                     <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-800">
                       Pflegegrad {p.care_degree_int}
                     </span>
