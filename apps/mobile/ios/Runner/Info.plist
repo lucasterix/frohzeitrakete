@@ -49,6 +49,14 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>FrohZeit nutzt Face ID / Touch ID für die schnelle und sichere Anmeldung.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>FrohZeit nutzt deinen Standort für die Fahrtkostenerfassung zum Patienten.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>FrohZeit benötigt Zugriff auf die Kamera für Dokumentenscans.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

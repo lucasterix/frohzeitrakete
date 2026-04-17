@@ -198,43 +198,47 @@ export default function UserDashboard() {
         </Link>
       </div>
 
-      {/* Monatsdetails */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
-          {monthName} · Arbeitstag {wdElapsed}/{wdTotal}
-          {bal != null && ` · ${balLabel}`}
-        </p>
-        <div className="mt-3 divide-y divide-slate-100">
-          <StatRow
-            label="Betreuung"
-            value={`${patientRaw.toFixed(1)} + 10% = ${(patientRaw * 1.1).toFixed(1)} h`}
-          />
-          {otherRaw > 0 && (
-            <StatRow label="Sonstige" value={`${otherRaw.toFixed(1)} h`} />
-          )}
-          {holidayH > 0 && (
-            <StatRow label="Feiertage" value={`${holidayH.toFixed(1)} h`} color="#7C3AED" />
-          )}
-          {vacH > 0 && (
-            <StatRow label="Urlaub" value={`${vacH.toFixed(1)} h`} color="#D97706" />
-          )}
-          <StatRow label="Gesamt" value={`${totalH.toFixed(1)} h`} />
-          {tgt != null && (
-            <StatRow label="Soll / Tag" value={`${tgt.toFixed(1)} h`} />
-          )}
-          <StatRow label="Ø pro Arbeitstag" value={`${avg.toFixed(1)} h`} />
-          <div className="pt-1">
+      {/* Monatsdetails — klappbar */}
+      <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm sm:rounded-3xl">
+        <summary className="flex cursor-pointer items-center justify-between p-4 sm:p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
+            {monthName} · Tag {wdElapsed}/{wdTotal} · Prognose {proj.toFixed(0)} h
+          </p>
+          <span className="text-xs text-slate-400 transition group-open:rotate-180">▼</span>
+        </summary>
+        <div className="border-t border-slate-100 px-4 pb-4 sm:px-6 sm:pb-6">
+          <div className="divide-y divide-slate-100">
             <StatRow
-              label="Monatsprognose"
-              value={`${proj.toFixed(0)} h`}
-              color="#2563EB"
+              label="Betreuung"
+              value={`${patientRaw.toFixed(1)} + 10% = ${(patientRaw * 1.1).toFixed(1)} h`}
             />
-            <p className="text-right text-[9px] text-slate-400">
-              Ø {avg.toFixed(1)} × 5 × 4,33
-            </p>
+            {otherRaw > 0 && (
+              <StatRow label="Sonstige" value={`${otherRaw.toFixed(1)} h`} />
+            )}
+            {holidayH > 0 && (
+              <StatRow label="Feiertage" value={`${holidayH.toFixed(1)} h`} color="#7C3AED" />
+            )}
+            {vacH > 0 && (
+              <StatRow label="Urlaub" value={`${vacH.toFixed(1)} h`} color="#D97706" />
+            )}
+            <StatRow label="Gesamt" value={`${totalH.toFixed(1)} h`} />
+            {tgt != null && (
+              <StatRow label="Soll / Tag" value={`${tgt.toFixed(1)} h`} />
+            )}
+            <StatRow label="Ø pro Arbeitstag" value={`${avg.toFixed(1)} h`} />
+            <div className="pt-1">
+              <StatRow
+                label="Monatsprognose"
+                value={`${proj.toFixed(0)} h`}
+                color="#2563EB"
+              />
+              <p className="text-right text-[9px] text-slate-400">
+                Ø {avg.toFixed(1)} × 5 × 4,33
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </details>
 
       {/* Schnellzugriffe */}
       <div className="grid grid-cols-2 gap-3">

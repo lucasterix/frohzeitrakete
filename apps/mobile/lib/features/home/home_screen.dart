@@ -482,166 +482,18 @@ class HomeScreen extends ConsumerWidget {
                   );
                 }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (bal != null) ...[
-                        Text(
-                          balLabel,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${balPositive ? "+" : ""}${bal.toStringAsFixed(1)} h',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: balPositive
-                                ? const Color(0xFF059669)
-                                : const Color(0xFFDC2626),
-                          ),
-                        ),
-                        const Divider(height: 18),
-                      ],
-                      // Urlaubshinweis
-                      Builder(builder: (_) {
-                        final isVacation = s['today_is_vacation'] == true;
-                        if (!isVacation) return const SizedBox.shrink();
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEF3C7),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFFDE68A)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Text('🏖️', style: TextStyle(fontSize: 18)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Heute ist dein Urlaubstag — genieß die freie Zeit! '
-                                  'Dein Tagessoll (${tgt?.toStringAsFixed(1) ?? "–"} h) '
-                                  'wird automatisch angerechnet.',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF92400E),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      // Feiertags-Hinweis
-                      Builder(builder: (_) {
-                        final isHoliday = s['today_is_holiday'] == true;
-                        final holidayName = s['today_holiday_name'] as String?;
-                        if (!isHoliday || holidayName == null) {
-                          return const SizedBox.shrink();
-                        }
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF5F3FF),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: const Color(0xFFDDD6FE)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Text('🎉', style: TextStyle(fontSize: 18)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Heute ist $holidayName — genieß den freien Tag! '
-                                  'Dein Tagessoll (${tgt?.toStringAsFixed(1) ?? "–"} h) '
-                                  'wird automatisch angerechnet.',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF5B21B6),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      Text(
-                        '$monthName · Tag $wdElapsed/$wdTotal',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF64748B),
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Builder(builder: (_) {
-                        final patRaw = (s['patient_hours_raw'] as num?)?.toDouble() ?? 0;
-                        final otherRaw = (s['other_hours_raw'] as num?)?.toDouble() ?? 0;
-                        final holidayH = (s['holiday_hours'] as num?)?.toDouble() ?? 0;
-                        return Column(children: [
-                          statRow('Betreuung',
-                              '${patRaw.toStringAsFixed(1)} h + 10% = ${(patRaw * 1.1).toStringAsFixed(1)} h'),
-                          if (otherRaw > 0)
-                            statRow('Sonstige',
-                                '${otherRaw.toStringAsFixed(1)} h'),
-                          if (holidayH > 0)
-                            statRow('Feiertage',
-                                '${holidayH.toStringAsFixed(1)} h',
-                                color: const Color(0xFF7C3AED)),
-                          Builder(builder: (_) {
-                            final vacH = (s['vacation_hours'] as num?)?.toDouble() ?? 0;
-                            if (vacH <= 0) return const SizedBox.shrink();
-                            return statRow('Urlaub',
-                                '${vacH.toStringAsFixed(1)} h',
-                                color: const Color(0xFFD97706));
-                          }),
-                          statRow('Gesamt bisher',
-                              '${totalH.toStringAsFixed(1)} h',
-                              color: const Color(0xFF0F172A)),
-                        ]);
-                      }),
-                      const Divider(height: 14),
-                      if (tgt != null)
-                        statRow('Soll / Tag',
-                            '${tgt.toStringAsFixed(1)} h'),
-                      statRow('Ø pro Arbeitstag',
-                          '${avg.toStringAsFixed(1)} h'),
-                      const Divider(height: 14),
-                      statRow(
-                        'Monatsprognose',
-                        '${proj.toStringAsFixed(0)} h',
-                        color: const Color(0xFF2563EB),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '(Ø ${avg.toStringAsFixed(1)} h/Tag × 5 × 4,33)',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
-                  ),
+                return _ExpandableMonthStats(
+                  s: s,
+                  bal: bal,
+                  balLabel: balLabel,
+                  balPositive: balPositive,
+                  totalH: totalH,
+                  avg: avg,
+                  proj: proj,
+                  tgt: tgt,
+                  monthName: monthName,
+                  wdElapsed: wdElapsed,
+                  wdTotal: wdTotal,
                 );
               },
             );
@@ -1373,4 +1225,193 @@ String _fmtIso(String iso) {
   final parts = iso.split('-');
   if (parts.length != 3) return iso;
   return '${parts[2]}.${parts[1]}.${parts[0]}';
+}
+
+class _ExpandableMonthStats extends StatefulWidget {
+  final Map<String, dynamic> s;
+  final double? bal;
+  final String balLabel;
+  final bool balPositive;
+  final double totalH;
+  final double avg;
+  final double proj;
+  final double? tgt;
+  final String monthName;
+  final int wdElapsed;
+  final int wdTotal;
+
+  const _ExpandableMonthStats({
+    required this.s,
+    required this.bal,
+    required this.balLabel,
+    required this.balPositive,
+    required this.totalH,
+    required this.avg,
+    required this.proj,
+    required this.tgt,
+    required this.monthName,
+    required this.wdElapsed,
+    required this.wdTotal,
+  });
+
+  @override
+  State<_ExpandableMonthStats> createState() => _ExpandableMonthStatsState();
+}
+
+class _ExpandableMonthStatsState extends State<_ExpandableMonthStats> {
+  bool _expanded = false;
+
+  Widget _statRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          Text(value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: color ?? const Color(0xFF0F172A),
+              )),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    final isVacation = s['today_is_vacation'] == true;
+    final isHoliday = s['today_is_holiday'] == true;
+    final holidayName = s['today_holiday_name'] as String?;
+
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Urlaubs-/Feiertags-Hinweis (immer sichtbar)
+            if (isVacation)
+              _infoBox('🏖️', 'Urlaubstag — Tagessoll wird angerechnet.',
+                  const Color(0xFFFEF3C7), const Color(0xFF92400E)),
+            if (isHoliday && holidayName != null)
+              _infoBox('🎉', '$holidayName — Tagessoll wird angerechnet.',
+                  const Color(0xFFF5F3FF), const Color(0xFF5B21B6)),
+
+            // Kompakte Zusammenfassung (immer sichtbar)
+            Row(
+              children: [
+                if (widget.bal != null) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.balLabel,
+                          style: const TextStyle(
+                              fontSize: 9,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w600)),
+                      Text(
+                        '${widget.balPositive ? "+" : ""}${widget.bal!.toStringAsFixed(1)} h',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: widget.balPositive
+                              ? const Color(0xFF059669)
+                              : const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${widget.monthName} · Tag ${widget.wdElapsed}/${widget.wdTotal}',
+                        style: const TextStyle(
+                            fontSize: 9, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        Text('${widget.totalH.toStringAsFixed(1)} h',
+                            style: const TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        const SizedBox(width: 8),
+                        Text('→ ${widget.proj.toStringAsFixed(0)} h',
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+                      ],
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  color: const Color(0xFF94A3B8),
+                ),
+              ],
+            ),
+
+            // Detail (nur wenn expandiert)
+            if (_expanded) ...[
+              const Divider(height: 18),
+              Builder(builder: (_) {
+                final patRaw = (s['patient_hours_raw'] as num?)?.toDouble() ?? 0;
+                final otherRaw = (s['other_hours_raw'] as num?)?.toDouble() ?? 0;
+                final holidayH = (s['holiday_hours'] as num?)?.toDouble() ?? 0;
+                final vacH = (s['vacation_hours'] as num?)?.toDouble() ?? 0;
+                return Column(children: [
+                  _statRow('Betreuung',
+                      '${patRaw.toStringAsFixed(1)} + 10% = ${(patRaw * 1.1).toStringAsFixed(1)} h'),
+                  if (otherRaw > 0)
+                    _statRow('Sonstige', '${otherRaw.toStringAsFixed(1)} h'),
+                  if (holidayH > 0)
+                    _statRow('Feiertage', '${holidayH.toStringAsFixed(1)} h',
+                        color: const Color(0xFF7C3AED)),
+                  if (vacH > 0)
+                    _statRow('Urlaub', '${vacH.toStringAsFixed(1)} h',
+                        color: const Color(0xFFD97706)),
+                  _statRow('Gesamt', '${widget.totalH.toStringAsFixed(1)} h'),
+                ]);
+              }),
+              const Divider(height: 14),
+              if (widget.tgt != null)
+                _statRow('Soll / Tag', '${widget.tgt!.toStringAsFixed(1)} h'),
+              _statRow('Ø pro Tag', '${widget.avg.toStringAsFixed(1)} h'),
+              _statRow('Prognose', '${widget.proj.toStringAsFixed(0)} h',
+                  color: const Color(0xFF2563EB)),
+              Text('(Ø ${widget.avg.toStringAsFixed(1)} × 5 × 4,33)',
+                  style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoBox(String emoji, String text, Color bg, Color fg) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Text(emoji, style: const TextStyle(fontSize: 16)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: fg))),
+      ]),
+    );
+  }
 }
