@@ -1,111 +1,173 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import PatientList from "@/components/patient-list";
-import MySessionList from "@/components/my-session-list";
-import ChangePasswordForm from "@/components/change-password-form";
-import { User, getMe, logout } from "@/lib/api";
-import { LogoutIcon, RocketIcon, UserCircleIcon } from "@/components/icons";
+import { useEffect, useState } from "react";
+import { getMe, User } from "@/lib/api";
+import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 
-export default function UserPage() {
-  const router = useRouter();
+async function getMonthStats(): Promise<Record<string, any>> {
+  const res = await fetchWithRefresh(`${API_BASE_URL}/mobile/me/month-stats`, {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) return {};
+  return res.json();
+}
 
-  const [booting, setBooting] = useState(true);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+function StatRow({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span
+        className="text-sm font-semibold"
+        style={{ color: color || "#0F172A" }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me = await getMe();
-      setCurrentUser(me);
-
-      if (me.role === "admin") {
-        router.replace("/admin");
-        return;
-      }
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [router]);
+export default function UserDashboard() {
+  const [me, setMe] = useState<User | null>(null);
+  const [stats, setStats] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    Promise.all([getMe(), getMonthStats()])
+      .then(([u, s]) => {
+        setMe(u);
+        setStats(s);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  async function handleLogout() {
-    await logout();
-    router.replace("/");
-  }
-
-  if (booting) {
+  if (loading) {
     return (
-      <main className="grid min-h-screen place-items-center bg-gradient-to-br from-slate-50 via-white to-brand-50/40 text-sm text-slate-500">
-        Lade Bereich …
-      </main>
+      <div className="space-y-6">
+        <div className="h-32 animate-pulse rounded-3xl bg-white/60" />
+        <div className="h-64 animate-pulse rounded-3xl bg-white/60" />
+      </div>
     );
   }
 
+  const bal = stats?.overtime_balance as number | null;
+  const balLabel = (stats?.overtime_label as string) || "";
+  const balPositive = bal != null && bal >= 0;
+  const totalH = (stats?.total_hours_credited as number) ?? 0;
+  const patientRaw = (stats?.patient_hours_raw as number) ?? 0;
+  const otherRaw = (stats?.other_hours_raw as number) ?? 0;
+  const holidayH = (stats?.holiday_hours as number) ?? 0;
+  const vacH = (stats?.vacation_hours as number) ?? 0;
+  const avg = (stats?.avg_per_workday as number) ?? 0;
+  const proj = (stats?.month_projection as number) ?? 0;
+  const tgt = stats?.target_hours_per_day as number | null;
+  const monthName = (stats?.month_name as string) || "";
+  const wdElapsed = (stats?.workdays_elapsed as number) ?? 0;
+  const wdTotal = (stats?.workdays_total as number) ?? 0;
+  const isHoliday = stats?.today_is_holiday === true;
+  const holidayName = stats?.today_holiday_name as string | null;
+  const isVacation = stats?.today_is_vacation === true;
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-brand-50/40 px-4 py-8 lg:px-8">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-xl font-bold text-white shadow-lg shadow-brand-900/30">
-                {currentUser?.full_name?.charAt(0).toUpperCase() ?? "?"}
-              </div>
-              <div>
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">
-                  <RocketIcon className="h-3 w-3" />
-                  FrohZeitRakete
-                </div>
-                <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                  Hallo {currentUser?.full_name?.split(" ")[0] ?? ""}
-                </h1>
-                <p className="mt-1 text-sm text-slate-600">
-                  Übersicht über Patienten, Sessions und Profil-Einstellungen.
-                </p>
-                {currentUser && (
-                  <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-500">
-                    <UserCircleIcon className="h-3.5 w-3.5" />
-                    {currentUser.email}
-                  </p>
-                )}
-              </div>
-            </div>
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Hallo {me?.full_name?.split(" ")[0] ?? ""} 👋
+        </h1>
+        <p className="mt-1 text-sm text-slate-600">
+          {me?.email}
+        </p>
+      </div>
 
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              <LogoutIcon className="h-4 w-4" />
-              Logout
-            </button>
-          </div>
+      {isVacation && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          🏖️ Heute ist dein Urlaubstag — genieß die freie Zeit! Dein
+          Tagessoll ({tgt?.toFixed(1) ?? "–"} h) wird automatisch
+          angerechnet.
         </div>
+      )}
+      {isHoliday && holidayName && (
+        <div className="flex items-center gap-3 rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-800">
+          🎉 Heute ist {holidayName} — genieß den freien Tag! Dein
+          Tagessoll ({tgt?.toFixed(1) ?? "–"} h) wird automatisch
+          angerechnet.
+        </div>
+      )}
 
-        {currentUser?.patti_person_id ? (
-          <PatientList />
-        ) : (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Meine Patienten
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Für diesen Account ist keine Patti-Person-ID hinterlegt. Bitte den
-              Admin um Zuweisung.
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Saldo */}
+        {bal != null && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {balLabel}
             </p>
-          </section>
+            <p
+              className="mt-2 text-4xl font-bold"
+              style={{ color: balPositive ? "#059669" : "#DC2626" }}
+            >
+              {balPositive ? "+" : ""}
+              {bal.toFixed(1)} h
+            </p>
+          </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-          <ChangePasswordForm />
-          <MySessionList />
+        {/* Monatsstatistik */}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            {monthName} · Tag {wdElapsed}/{wdTotal}
+          </p>
+          <div className="mt-4 divide-y divide-slate-100">
+            <StatRow
+              label="Betreuung"
+              value={`${patientRaw.toFixed(1)} h + 10% = ${(patientRaw * 1.1).toFixed(1)} h`}
+            />
+            {otherRaw > 0 && (
+              <StatRow label="Sonstige" value={`${otherRaw.toFixed(1)} h`} />
+            )}
+            {holidayH > 0 && (
+              <StatRow
+                label="Feiertage"
+                value={`${holidayH.toFixed(1)} h`}
+                color="#7C3AED"
+              />
+            )}
+            {vacH > 0 && (
+              <StatRow
+                label="Urlaub"
+                value={`${vacH.toFixed(1)} h`}
+                color="#D97706"
+              />
+            )}
+            <StatRow
+              label="Gesamt bisher"
+              value={`${totalH.toFixed(1)} h`}
+            />
+            {tgt != null && (
+              <StatRow label="Soll / Tag" value={`${tgt.toFixed(1)} h`} />
+            )}
+            <StatRow label="Ø pro Arbeitstag" value={`${avg.toFixed(1)} h`} />
+            <div className="pt-2">
+              <StatRow
+                label="Monatsprognose"
+                value={`${proj.toFixed(0)} h`}
+                color="#2563EB"
+              />
+              <p className="text-right text-[10px] text-slate-400">
+                (Ø {avg.toFixed(1)} h/Tag × 5 × 4,33)
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
