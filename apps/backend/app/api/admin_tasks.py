@@ -797,3 +797,69 @@ def admin_sheets_sync(
         "unmatched_sheet_names": result.unmatched_sheet_names,
         "unmatched_user_ids": result.unmatched_user_ids,
     }
+
+
+@router.get("/sheets-preview")
+def admin_sheets_preview(
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Zeigt alle Sheet-Zeilen mit bestem User-Match-Vorschlag. Für
+    die manuelle Verknüpfungs-UI im Admin-Web."""
+    from app.services.sheets_service import (
+        _match_score,
+        fetch_sheet_rows,
+    )
+
+    rows = fetch_sheet_rows()
+    users = db.query(User).filter(User.is_active.is_(True)).all()
+
+    result = []
+    for row in rows:
+        best_user = None
+        best_score = 0.0
+        for u in users:
+            score = _match_score(row.name, u.full_name or "")
+            if score > best_score:
+                best_user = u
+                best_score = score
+
+        # Auch manuell bereits verlinkte User prüfen
+        linked_user = None
+        for u in users:
+            if u.sheets_name_match and u.sheets_name_match.strip().lower() == row.name.strip().lower():
+                linked_user = u
+                break
+
+        result.append({
+            "sheet_name": row.name,
+            "target_hours_per_week": row.target_hours_per_week,
+            "overtime_balance_hours": row.overtime_balance_hours,
+            "best_match_user_id": best_user.id if best_user and best_score >= 0.3 else None,
+            "best_match_user_name": best_user.full_name if best_user and best_score >= 0.3 else None,
+            "best_match_score": round(best_score, 2),
+            "linked_user_id": linked_user.id if linked_user else None,
+            "linked_user_name": linked_user.full_name if linked_user else None,
+        })
+    return result
+
+
+@router.post("/users/{user_id}/sheets-link")
+def admin_link_user_to_sheet(
+    user_id: int,
+    payload: dict,
+    admin_user: User = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Verknüpft einen User manuell mit einem Sheet-Namen. Payload:
+    {sheet_name: str}. Setzt sheets_name_match auf dem User — der
+    nächste Sync nutzt dann diese feste Zuordnung."""
+    sheet_name = (payload.get("sheet_name") or "").strip()
+    if not sheet_name:
+        raise HTTPException(status_code=400, detail="sheet_name_required")
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    user.sheets_name_match = sheet_name
+    db.commit()
+    return {"ok": True, "user_id": user.id, "sheets_name_match": sheet_name}

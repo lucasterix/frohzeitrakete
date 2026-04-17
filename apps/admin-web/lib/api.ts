@@ -26,6 +26,38 @@ export type SheetsSyncResult = {
   unmatched_user_ids: number[];
 };
 
+export type SheetsPreviewRow = {
+  sheet_name: string;
+  target_hours_per_week: number | null;
+  overtime_balance_hours: number | null;
+  best_match_user_id: number | null;
+  best_match_user_name: string | null;
+  best_match_score: number;
+  linked_user_id: number | null;
+  linked_user_name: string | null;
+};
+
+export async function getSheetsPreview(): Promise<SheetsPreviewRow[]> {
+  const res = await fetchWithRefresh(`${API_BASE_URL}/admin/sheets-preview`, {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await parseError(res, "Sheets-Preview fehlgeschlagen"));
+  return res.json();
+}
+
+export async function linkUserToSheet(userId: number, sheetName: string): Promise<void> {
+  const res = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/users/${userId}/sheets-link`,
+    {
+      method: "POST",
+      headers: { ...buildHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ sheet_name: sheetName }),
+    }
+  );
+  if (!res.ok) throw new Error(await parseError(res, "Verknüpfung fehlgeschlagen"));
+}
+
 export async function runSheetsSync(): Promise<SheetsSyncResult> {
   const res = await fetchWithRefresh(`${API_BASE_URL}/admin/sheets-sync`, {
     method: "POST",

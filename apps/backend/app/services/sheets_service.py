@@ -212,11 +212,28 @@ def sync_users_from_sheet(db: Session) -> SyncResult:
     users = db.query(User).filter(User.is_active.is_(True)).all()
     now = datetime.utcnow()
 
+    # Index für manuelle Verknüpfungen: sheets_name_match → User
+    manual_map: dict[str, User] = {}
+    for u in users:
+        if u.sheets_name_match:
+            manual_map[_normalize_name(u.sheets_name_match)] = u
+
     matched_user_ids: set[int] = set()
     unmatched_sheet: list[str] = []
 
     for row in rows:
-        # Besten User finden
+        norm = _normalize_name(row.name)
+
+        # 1. Manuelle Verknüpfung hat Vorrang
+        if norm in manual_map and manual_map[norm].id not in matched_user_ids:
+            u = manual_map[norm]
+            u.overtime_balance_hours = row.overtime_balance_hours
+            u.target_hours_per_week = row.target_hours_per_week
+            u.sheets_last_synced_at = now
+            matched_user_ids.add(u.id)
+            continue
+
+        # 2. Fuzzy-Match
         best: User | None = None
         best_score = 0.0
         for u in users:
