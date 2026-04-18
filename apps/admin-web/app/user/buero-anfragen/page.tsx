@@ -13,7 +13,13 @@ const HR_CATEGORIES = [
   "Sonstiges",
 ];
 
-type Tab = "urlaub" | "krank" | "hr" | "vertretung";
+const DOC_CATEGORIES = [
+  "Betreuungsvertrag-Kopie",
+  "Bescheinigung",
+  "Sonstige Unterlagen",
+];
+
+type Tab = "urlaub" | "krank" | "hr" | "vertretung" | "dokumente";
 
 export default function BueroAnfragenPage() {
   const [tab, setTab] = useState<Tab>("urlaub");
@@ -40,6 +46,10 @@ export default function BueroAnfragenPage() {
   const [vertretungDate, setVertretungDate] = useState("");
   const [vertretungNote, setVertretungNote] = useState("");
 
+  // Dokumente
+  const [docCategory, setDocCategory] = useState(DOC_CATEGORIES[0]);
+  const [docNote, setDocNote] = useState("");
+
   const loadRequests = useCallback(async () => {
     try {
       const endpoints: Record<Tab, string> = {
@@ -47,6 +57,7 @@ export default function BueroAnfragenPage() {
         krank: "/mobile/sick-leaves",
         hr: "/mobile/hr-requests",
         vertretung: "/mobile/vacation-requests",
+        dokumente: "/mobile/hr-requests",
       };
       const res = await fetchWithRefresh(
         `${API_BASE_URL}${endpoints[tab]}`,
@@ -88,6 +99,7 @@ export default function BueroAnfragenPage() {
     { key: "krank", label: "Krank", icon: "🤒" },
     { key: "hr", label: "HR-Anfrage", icon: "📄" },
     { key: "vertretung", label: "Vertretung", icon: "🔄" },
+    { key: "dokumente", label: "Dokumente", icon: "📑" },
   ];
 
   return (
@@ -97,7 +109,7 @@ export default function BueroAnfragenPage() {
           Anfrage ans Büro
         </h1>
         <p className="mt-1 text-xs text-slate-600">
-          Urlaub beantragen, Krankmeldung einreichen, HR-Anfrage oder Vertretung melden.
+          Urlaub beantragen, Krankmeldung einreichen, HR-Anfrage, Vertretung oder Dokumente anfordern.
         </p>
       </div>
 
@@ -225,6 +237,31 @@ export default function BueroAnfragenPage() {
             })} disabled={submitting || !vertretungDate}
               className="w-full rounded-2xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60">
               {submitting ? "Wird gemeldet …" : "Vertretung anfragen"}
+            </button>
+          </div>
+        )}
+
+        {/* Dokumente */}
+        {tab === "dokumente" && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-600">
+              Fordere ein Dokument vom Büro an (z.B. Vertragskopie, Bescheinigung).
+            </p>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-slate-600">Dokumentenart</span>
+              <select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400">
+                {DOC_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <textarea value={docNote} onChange={(e) => setDocNote(e.target.value)}
+              placeholder="Details zur gewünschten Unterlage …" rows={3}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400" />
+            <button onClick={() => submit("/mobile/hr-requests", {
+              category: docCategory, note: docNote.trim() || null,
+            })} disabled={submitting}
+              className="w-full rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60">
+              {submitting ? "Wird angefordert …" : "Dokument anfordern"}
             </button>
           </div>
         )}

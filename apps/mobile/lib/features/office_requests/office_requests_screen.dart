@@ -25,7 +25,7 @@ class _OfficeRequestsScreenState extends ConsumerState<OfficeRequestsScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -44,10 +44,12 @@ class _OfficeRequestsScreenState extends ConsumerState<OfficeRequestsScreen>
           labelColor: _green,
           unselectedLabelColor: Colors.black54,
           indicatorColor: _green,
+          isScrollable: true,
           tabs: const [
             Tab(icon: Icon(Icons.flight_takeoff), text: 'Urlaub'),
             Tab(icon: Icon(Icons.sick_outlined), text: 'Krank'),
             Tab(icon: Icon(Icons.inbox_outlined), text: 'HR / Sonstige'),
+            Tab(icon: Icon(Icons.description_outlined), text: 'Dokumente'),
           ],
         ),
       ),
@@ -57,6 +59,7 @@ class _OfficeRequestsScreenState extends ConsumerState<OfficeRequestsScreen>
           _VacationTab(),
           _SickTab(),
           _HrTab(),
+          _DocumentTab(),
         ],
       ),
     );
@@ -599,6 +602,9 @@ const _hrCategories = <({String value, String label})>[
   (value: 'salary_advance', label: 'Gehaltsvorschuss'),
   (value: 'address_change', label: 'Neue Adresse'),
   (value: 'side_job_certificate', label: 'Nebenverdienstbescheinigung'),
+  (value: 'care_contract_copy', label: 'Betreuungsvertrag-Kopie'),
+  (value: 'certificate', label: 'Bescheinigung'),
+  (value: 'other_documents', label: 'Sonstige Unterlagen'),
   (value: 'other', label: 'Sonstiges'),
 ];
 
@@ -831,6 +837,282 @@ class _HrRequestDialogState extends ConsumerState<_HrRequestDialog> {
               controller: _subjectCtrl,
               decoration: const InputDecoration(
                 labelText: 'Kurze Zusammenfassung *',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bodyCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Details (optional)',
+                isDense: true,
+              ),
+              minLines: 2,
+              maxLines: 4,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: _green),
+          onPressed: _saving ? null : _submit,
+          child: Text(_saving ? 'Sende …' : 'Senden'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Document request tab
+// ---------------------------------------------------------------------------
+
+const _docCategories = <({String value, String label})>[
+  (value: 'care_contract_copy', label: 'Betreuungsvertrag-Kopie'),
+  (value: 'certificate', label: 'Bescheinigung'),
+  (value: 'other_documents', label: 'Sonstige Unterlagen'),
+];
+
+class _DocumentTab extends ConsumerWidget {
+  const _DocumentTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(myHrRequestsProvider);
+
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: _green,
+        onPressed: () async {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (_) => const _DocumentRequestDialog(),
+          );
+          if (ok == true) ref.invalidate(myHrRequestsProvider);
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Dokument anfordern'),
+      ),
+      body: async.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Fehler: $e')),
+        data: (items) {
+          final docItems = items
+              .where((item) => _docCategories.any((c) => c.value == item['category']))
+              .toList();
+          if (docItems.isEmpty) {
+            return const _EmptyState(
+              icon: Icons.description_outlined,
+              text: 'Noch keine Dokumenten-Anfragen',
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(myHrRequestsProvider);
+              await ref.read(myHrRequestsProvider.future);
+            },
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+              itemCount: docItems.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final item = docItems[i];
+                final status = (item['status'] as String?) ?? 'open';
+                final kuerzel = item['handler_kuerzel'] as String?;
+                final response = item['response_text'] as String?;
+                final (statusLabel, statusColor) = switch (status) {
+                  'done' => ('Erledigt', Colors.green),
+                  'rejected' => ('Abgelehnt', Colors.red),
+                  _ => ('Offen', Colors.orange),
+                };
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _hrCategoryLabel(item['category'] as String),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item['subject'] as String,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (item['body'] != null &&
+                          (item['body'] as String).isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item['body'] as String,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ],
+                      if (response != null && response.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: _green.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Antwort Büro: $response',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                      if (kuerzel != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Bearbeitet von: $kuerzel',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black45,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DocumentRequestDialog extends ConsumerStatefulWidget {
+  const _DocumentRequestDialog();
+
+  @override
+  ConsumerState<_DocumentRequestDialog> createState() =>
+      _DocumentRequestDialogState();
+}
+
+class _DocumentRequestDialogState
+    extends ConsumerState<_DocumentRequestDialog> {
+  String _category = 'care_contract_copy';
+  final _subjectCtrl = TextEditingController();
+  final _bodyCtrl = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _subjectCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_subjectCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Bitte kurze Beschreibung eintragen');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(officeWorkflowRepositoryProvider).createHrRequest(
+            category: _category,
+            subject: _subjectCtrl.text.trim(),
+            body: _bodyCtrl.text.trim().isEmpty ? null : _bodyCtrl.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Fehler: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Dokument anfordern'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              decoration: const InputDecoration(
+                labelText: 'Dokumentenart',
+                isDense: true,
+              ),
+              items: _docCategories
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c.value,
+                      child: Text(c.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) =>
+                  setState(() => _category = v ?? 'care_contract_copy'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _subjectCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Kurze Beschreibung *',
                 isDense: true,
               ),
             ),

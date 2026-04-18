@@ -90,8 +90,10 @@ export default function UserEinsaetzePage() {
       if (needsCategory) body.category_label = categoryLabel.trim();
       if (isLate) body.late_entry_reason = lateReason.trim();
       if (isPatient && tripDriven) {
-        body.trip_driven = true;
-        if (tripStartAddress.trim()) body.trip_start_address = tripStartAddress.trim();
+        body.trip = {
+          start_from_home: !tripStartAddress.trim(),
+          start_address: tripStartAddress.trim() || null,
+        };
       }
 
       const res = await fetchWithRefresh(`${API_BASE_URL}/mobile/entries`, {

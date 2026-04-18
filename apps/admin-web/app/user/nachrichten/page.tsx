@@ -29,7 +29,7 @@ export default function NachrichtenPage() {
   async function markAllRead() {
     setMarking(true);
     try {
-      await fetchWithRefresh(`${API_BASE_URL}/mobile/notifications/mark-all-read`, {
+      await fetchWithRefresh(`${API_BASE_URL}/mobile/notifications/read-all`, {
         method: "POST",
         headers: buildHeaders(),
       });
