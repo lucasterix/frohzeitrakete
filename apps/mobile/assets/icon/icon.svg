@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="#4F8A5B"/>
+
+  <!-- Rocket body -->
+  <g transform="translate(512, 512)">
+    <!-- Rocket body (elongated oval) -->
+    <path d="M0,-280 C60,-280 100,-200 100,-40 C100,80 60,180 0,280 C-60,180 -100,80 -100,-40 C-100,-200 -60,-280 0,-280 Z" fill="#FFFFFF"/>
+
+    <!-- Nose cone highlight -->
+    <path d="M0,-280 C30,-280 50,-230 50,-180 C50,-130 30,-80 0,-40 C-30,-80 -50,-130 -50,-180 C-50,-230 -30,-280 0,-280 Z" fill="#E8F0EA" opacity="0.5"/>
+
+    <!-- Window -->
+    <circle cx="0" cy="-60" r="40" fill="#4F8A5B"/>
+    <circle cx="0" cy="-60" r="30" fill="#3A6B44"/>
+
+    <!-- Left fin -->
+    <path d="M-100,100 L-180,240 L-100,200 Z" fill="#FFFFFF"/>
+
+    <!-- Right fin -->
+    <path d="M100,100 L180,240 L100,200 Z" fill="#FFFFFF"/>
+
+    <!-- Center fin -->
+    <path d="M-40,250 L0,300 L40,250 Z" fill="#FFFFFF"/>
+
+    <!-- Flame -->
+    <path d="M-50,280 C-50,280 -30,360 0,400 C30,360 50,280 50,280 C50,280 30,320 0,350 C-30,320 -50,280 -50,280 Z" fill="#FFD54F" opacity="0.9"/>
+    <path d="M-30,280 C-30,280 -15,340 0,370 C15,340 30,280 30,280 C30,280 15,310 0,330 C-15,310 -30,280 -30,280 Z" fill="#FF8A65" opacity="0.9"/>
+  </g>
+</svg>
