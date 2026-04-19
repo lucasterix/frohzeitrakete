@@ -111,21 +111,16 @@ class _BootstrapState extends ConsumerState<_Bootstrap> {
       } catch (_) {}
     }
 
-    // Optimistisch: Cookie vorhanden + Biometrie bestanden → sofort
-    // zur App navigieren. /auth/me läuft im Hintergrund — falls die
-    // Session doch abgelaufen ist, fängt der 401-Interceptor das auf.
+    // /auth/me mit 5s Timeout — nicht ewig warten, aber auch nicht
+    // optimistisch ohne User-Daten in die App springen.
+    await ref.read(authControllerProvider.notifier).restoreSession()
+        .timeout(const Duration(seconds: 5), onTimeout: () {});
+    final user = ref.read(authControllerProvider).valueOrNull;
+
     if (mounted) {
       setState(() {
-        _authed = true;
+        _authed = user != null;
         _done = true;
-      });
-    }
-    // Session im Hintergrund verifizieren
-    await ref.read(authControllerProvider.notifier).restoreSession();
-    final user = ref.read(authControllerProvider).valueOrNull;
-    if (user == null && mounted) {
-      setState(() {
-        _authed = false;
       });
     }
   }
