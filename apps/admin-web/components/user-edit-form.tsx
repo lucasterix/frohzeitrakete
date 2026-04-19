@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { User, updateUser } from "@/lib/api";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { User, getUsers, updateUser } from "@/lib/api";
 
 type Props = {
   user: User;
@@ -19,7 +19,20 @@ export default function UserEditForm({ user, onUpdated }: Props) {
   const [hasCompanyCar, setHasCompanyCar] = useState<boolean>(
     user.has_company_car ?? false
   );
+  const [siteLeaderId, setSiteLeaderId] = useState<number | null>(
+    user.site_leader_id ?? null
+  );
   const [password, setPassword] = useState("");
+
+  const [siteLeaders, setSiteLeaders] = useState<User[]>([]);
+
+  useEffect(() => {
+    getUsers()
+      .then((users) =>
+        setSiteLeaders(users.filter((u) => u.role === "standortleiter"))
+      )
+      .catch(() => {});
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -34,6 +47,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
       isActive !== user.is_active ||
       pattiPersonId !== user.patti_person_id ||
       hasCompanyCar !== (user.has_company_car ?? false) ||
+      siteLeaderId !== (user.site_leader_id ?? null) ||
       password.trim() !== ""
     );
   }, [
@@ -43,6 +57,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
     isActive,
     pattiPersonId,
     hasCompanyCar,
+    siteLeaderId,
     password,
     user,
   ]);
@@ -61,6 +76,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
         is_active: isActive,
         patti_person_id: pattiPersonId,
         has_company_car: hasCompanyCar,
+        site_leader_id: siteLeaderId,
         password: password.trim() === "" ? null : password,
       });
 
@@ -83,6 +99,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
     setIsActive(user.is_active);
     setPattiPersonId(user.patti_person_id);
     setHasCompanyCar(user.has_company_car ?? false);
+    setSiteLeaderId(user.site_leader_id ?? null);
     setPassword("");
     setSuccessMessage("");
     setErrorMessage("");
@@ -150,7 +167,30 @@ export default function UserEditForm({ user, onUpdated }: Props) {
                 >
                   <option value="caretaker">caretaker</option>
                   <option value="buero">buero</option>
+                  <option value="standortleiter">standortleiter</option>
                   <option value="admin">admin</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Standortleiter
+                </span>
+                <select
+                  value={siteLeaderId ?? ""}
+                  onChange={(e) =>
+                    setSiteLeaderId(
+                      e.target.value === "" ? null : Number(e.target.value)
+                    )
+                  }
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                >
+                  <option value="">— kein Standortleiter —</option>
+                  {siteLeaders.map((sl) => (
+                    <option key={sl.id} value={sl.id}>
+                      {sl.full_name}
+                    </option>
+                  ))}
                 </select>
               </label>
 

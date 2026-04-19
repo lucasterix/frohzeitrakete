@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { CreateUserPayload, createUser } from "@/lib/api";
+import { FormEvent, useEffect, useState } from "react";
+import { CreateUserPayload, User, createUser, getUsers } from "@/lib/api";
 
 type UserFormProps = {
   onUserCreated: () => void;
@@ -16,6 +16,16 @@ export default function UserForm({ onUserCreated }: UserFormProps) {
     is_active: true,
     patti_person_id: null,
   });
+
+  const [siteLeaders, setSiteLeaders] = useState<User[]>([]);
+
+  useEffect(() => {
+    getUsers()
+      .then((users) =>
+        setSiteLeaders(users.filter((u) => u.role === "standortleiter"))
+      )
+      .catch(() => {});
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -114,7 +124,31 @@ export default function UserForm({ onUserCreated }: UserFormProps) {
           >
             <option value="caretaker">caretaker</option>
             <option value="buero">buero</option>
+            <option value="standortleiter">standortleiter</option>
             <option value="admin">admin</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-700">
+            Standortleiter
+          </span>
+          <select
+            value={formData.site_leader_id ?? ""}
+            onChange={(e) =>
+              updateField(
+                "site_leader_id",
+                e.target.value === "" ? null : Number(e.target.value)
+              )
+            }
+            className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+          >
+            <option value="">— kein Standortleiter —</option>
+            {siteLeaders.map((sl) => (
+              <option key={sl.id} value={sl.id}>
+                {sl.full_name}
+              </option>
+            ))}
           </select>
         </label>
 

@@ -473,7 +473,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Typ-Selector
+                  // Typ-Selector — hidden when patient is pre-selected
+                  if (widget.preselectedPatient == null) ...[
                   _label('Art des Einsatzes'),
                   const SizedBox(height: 8),
                   Wrap(
@@ -500,6 +501,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                       );
                     }).toList(),
                   ),
+                  ],
 
                   const SizedBox(height: 20),
 

@@ -51,7 +51,7 @@ export default function SyncErrorsPage() {
   const bootstrap = useCallback(async () => {
     try {
       const me: User = await getMe();
-      if (me.role !== "admin" && me.role !== "buero") {
+      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
         router.replace("/user");
         return;
       }

@@ -20,7 +20,7 @@ from app.models.hr_request import HrRequest
 from app.models.sick_leave import SickLeave
 from app.models.user import User
 from app.models.vacation_request import VacationRequest
-from app.services.notification_service import create_notification
+from app.services.notification_service import create_notification, notify_all_admins
 
 
 VACATION_LEAD_TIME_DAYS = 30
@@ -80,6 +80,17 @@ def create_vacation_request(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    # Admins + Standortleiter benachrichtigen
+    notify_all_admins(
+        db,
+        kind="vacation_request_created",
+        title="Urlaubsantrag eingegangen",
+        body=f"{from_date.isoformat()} – {to_date.isoformat()}",
+        related_entity_id=row.id,
+        subject_user_id=user_id,
+    )
+    db.commit()
     return row
 
 
@@ -226,17 +237,15 @@ def create_sick_leave(
                 d += _td(days=1)
             db.commit()
 
-    # Admins benachrichtigen damit die Krankmeldung im Büro-Feed auftaucht
-    admins = db.query(User).filter(User.role.in_(["admin", "buero"])).all()
-    for a in admins:
-        _notify(
-            db,
-            user_id=a.id,
-            kind="sick_leave_created",
-            title="Krankmeldung eingegangen",
-            body=f"{from_date.isoformat()} – {to_date.isoformat()}",
-            related_entity_id=row.id,
-        )
+    # Admins + Standortleiter benachrichtigen
+    notify_all_admins(
+        db,
+        kind="sick_leave_created",
+        title="Krankmeldung eingegangen",
+        body=f"{from_date.isoformat()} – {to_date.isoformat()}",
+        related_entity_id=row.id,
+        subject_user_id=user_id,
+    )
     db.commit()
     return row
 
@@ -325,16 +334,14 @@ def create_hr_request(
     db.commit()
     db.refresh(row)
 
-    admins = db.query(User).filter(User.role.in_(["admin", "buero"])).all()
-    for a in admins:
-        _notify(
-            db,
-            user_id=a.id,
-            kind="hr_request_created",
-            title="Neue HR-Anfrage",
-            body=f"{category} — {subject}",
-            related_entity_id=row.id,
-        )
+    notify_all_admins(
+        db,
+        kind="hr_request_created",
+        title="Neue HR-Anfrage",
+        body=f"{category} — {subject}",
+        related_entity_id=row.id,
+        subject_user_id=user_id,
+    )
     db.commit()
     return row
 

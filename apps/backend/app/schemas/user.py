@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
     patti_person_id: int | None = None
     has_company_car: bool = False
     initials: str | None = None
+    site_leader_id: int | None = None
 
 
 class UserUpdate(BaseModel):
@@ -23,6 +24,7 @@ class UserUpdate(BaseModel):
     has_company_car: bool = False
     initials: str | None = None
     password: str | None = None
+    site_leader_id: int | None = None
 
 
 class UserResponse(BaseModel):
@@ -34,6 +36,7 @@ class UserResponse(BaseModel):
     patti_person_id: int | None = None
     has_company_car: bool = False
     initials: str | None = None
+    site_leader_id: int | None = None
     overtime_balance_hours: float | None = None
     target_hours_per_week: float | None = None
     target_hours_per_day: float | None = None

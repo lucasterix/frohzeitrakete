@@ -13,6 +13,7 @@ export type User = {
   is_active: boolean;
   patti_person_id: number | null;
   has_company_car?: boolean;
+  site_leader_id?: number | null;
   overtime_balance_hours?: number | null;
   target_hours_per_week?: number | null;
   target_hours_per_day?: number | null;
@@ -77,6 +78,7 @@ export type CreateUserPayload = {
   is_active?: boolean;
   patti_person_id?: number | null;
   has_company_car?: boolean;
+  site_leader_id?: number | null;
 };
 
 export type UpdateUserPayload = {
@@ -87,6 +89,7 @@ export type UpdateUserPayload = {
   patti_person_id?: number | null;
   has_company_car?: boolean;
   password?: string | null;
+  site_leader_id?: number | null;
 };
 
 export type TravelCostPayment = {

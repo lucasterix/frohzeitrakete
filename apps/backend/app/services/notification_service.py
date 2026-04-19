@@ -56,15 +56,22 @@ def notify_all_admins(
     body: str | None = None,
     related_patient_id: int | None = None,
     related_entity_id: int | None = None,
+    subject_user_id: int | None = None,
 ) -> int:
     """Legt für jeden Admin + Büromitarbeiter eine Notification an.
     Büromitarbeiter wollen dieselben operativen Ereignisse (Urlaub,
-    Krankmeldung, HR-Request) sehen wie die Admins."""
+    Krankmeldung, HR-Request) sehen wie die Admins.
+
+    Wenn ``subject_user_id`` gesetzt ist (= der User, um den es geht,
+    z.B. derjenige der Urlaub beantragt), wird zusätzlich dessen
+    Standortleiter benachrichtigt (sofern zugeordnet).
+    """
     admins = (
         db.query(User)
         .filter(User.role.in_(["admin", "buero"]))
         .all()
     )
+    notified_ids: set[int] = set()
     for admin in admins:
         create_notification(
             db,
@@ -75,7 +82,28 @@ def notify_all_admins(
             related_patient_id=related_patient_id,
             related_entity_id=related_entity_id,
         )
-    return len(admins)
+        notified_ids.add(admin.id)
+
+    # Standortleiter des betreffenden Users benachrichtigen
+    if subject_user_id is not None:
+        subject_user = db.query(User).filter(User.id == subject_user_id).first()
+        if (
+            subject_user is not None
+            and subject_user.site_leader_id is not None
+            and subject_user.site_leader_id not in notified_ids
+        ):
+            create_notification(
+                db,
+                user_id=subject_user.site_leader_id,
+                kind=kind,
+                title=title,
+                body=body,
+                related_patient_id=related_patient_id,
+                related_entity_id=related_entity_id,
+            )
+            notified_ids.add(subject_user.site_leader_id)
+
+    return len(notified_ids)
 
 
 def list_user_notifications(

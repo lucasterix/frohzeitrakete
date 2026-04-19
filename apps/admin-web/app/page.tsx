@@ -8,7 +8,7 @@ import { RocketIcon, ShieldIcon, SignatureIcon, UsersIcon } from "@/components/i
 
 function getTargetRoute(user: User): string {
   if (user.role === "admin") return "/admin";
-  if (user.role === "buero") return "/admin/tasks";
+  if (user.role === "buero" || user.role === "standortleiter") return "/admin/tasks";
   return "/user";
 }
 

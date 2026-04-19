@@ -47,6 +47,9 @@ export default function UserEinsaetzePage() {
   const isPatient = entryType === "patient";
   const needsCategory = !isPatient && entryType !== "home_commute";
 
+  // Pre-selected patient from URL → lock entry type to "patient"
+  const [hasPreselectedPatient, setHasPreselectedPatient] = useState(false);
+
   // Read URL params for pre-selection
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -54,6 +57,7 @@ export default function UserEinsaetzePage() {
     if (urlPatient) {
       setPatientId(Number(urlPatient) || null);
       setEntryType("patient");
+      setHasPreselectedPatient(true);
     }
     if (params.get("trip") === "1") {
       setTripDriven(true);
@@ -208,25 +212,29 @@ export default function UserEinsaetzePage() {
       )}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        {/* Entry Type */}
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Art des Einsatzes
-        </p>
-        <div className="mb-4 flex flex-wrap gap-2">
-          {ENTRY_TYPES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => setEntryType(t.value)}
-              className={`rounded-xl px-3 py-2 text-xs font-medium transition sm:text-sm ${
-                entryType === t.value
-                  ? "bg-brand-600 text-white"
-                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+        {/* Entry Type — hidden when patient is pre-selected via URL */}
+        {!hasPreselectedPatient && (
+          <>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Art des Einsatzes
+            </p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {ENTRY_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => setEntryType(t.value)}
+                  className={`rounded-xl px-3 py-2 text-xs font-medium transition sm:text-sm ${
+                    entryType === t.value
+                      ? "bg-brand-600 text-white"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Patient select */}
         {isPatient && (

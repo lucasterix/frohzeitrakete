@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -39,6 +39,12 @@ class User(Base):
     target_hours_per_week: Mapped[float | None] = mapped_column(Float, nullable=True)
     sheets_name_match: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sheets_last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Standortleiter: ein Caretaker kann einem Standortleiter zugeordnet
+    # sein. Der Standortleiter wird über Urlaub/Krank/HR-Requests seiner
+    # Mitarbeiter benachrichtigt.
+    site_leader_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
 
     @property
     def target_hours_per_day(self) -> float | None:
