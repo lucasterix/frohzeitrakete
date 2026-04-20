@@ -462,26 +462,6 @@ class HomeScreen extends ConsumerWidget {
                 final wdElapsed = s['workdays_elapsed'] as int? ?? 0;
                 final wdTotal = s['workdays_total'] as int? ?? 0;
 
-                Widget statRow(String label, String value, {Color? color}) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(label,
-                            style: const TextStyle(
-                                fontSize: 12, color: Color(0xFF64748B))),
-                        Text(value,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: color ?? const Color(0xFF0F172A),
-                            )),
-                      ],
-                    ),
-                  );
-                }
-
                 return _ExpandableMonthStats(
                   s: s,
                   bal: bal,
