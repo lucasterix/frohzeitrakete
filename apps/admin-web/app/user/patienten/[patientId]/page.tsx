@@ -106,6 +106,10 @@ export default function PatientDetailPage() {
           className="flex items-center justify-center gap-2 rounded-2xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
           Umwandlungsantrag
         </Link>
+        <Link href={`/user/pflegehilfsmittel?patient=${patientId}`}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+          Pflegehilfsmittel
+        </Link>
         <Link href={`/user/einsaetze?patient=${patientId}&km=1`}
           className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
           km mit Patient erfassen

@@ -14,6 +14,7 @@ import '../signatures/signature_history_screen.dart';
 import '../signatures/signature_screen.dart';
 import '../entries/entry_screen.dart';
 import '../entries/entry_detail_screen.dart';
+import '../pflegehilfsmittel/pflegehm_screen.dart';
 import '../requests/umwandlung_screen.dart';
 import '../settings/settings_screen.dart';
 import '../vp_antrag/vp_antrag_screen.dart';
@@ -357,6 +358,33 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                           }
                         },
                       ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Pflegehilfsmittel-Card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _documentCard(
+                  icon: Icons.medical_services_outlined,
+                  title: 'Pflegehilfsmittel',
+                  subtitle: 'Monatlicher Antrag unterschreiben lassen',
+                  statusColor: const Color(0xFF4F8A5B),
+                  statusLabel: 'VERFUEGBAR',
+                  onTap: () async {
+                    final ok = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => PflegehmScreen(patient: patient),
+                      ),
+                    );
+                    if (ok == true) {
+                      ref.invalidate(mySignaturesProvider);
+                      ref.invalidate(
+                        patientSignaturesProvider(patient.patientId),
+                      );
+                    }
+                  },
+                ),
               ),
 
               const SizedBox(height: 10),
