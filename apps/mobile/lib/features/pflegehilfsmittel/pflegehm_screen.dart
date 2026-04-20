@@ -38,7 +38,12 @@ class _PflegehmScreenState extends ConsumerState<PflegehmScreen> {
     });
 
     try {
-      final svgContent = SvgBuilder.buildFromStrokes(_strokes, _canvasKey);
+      final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+      final canvasSize = renderBox?.size ?? const Size(400, 160);
+      final svgContent = SvgBuilder.buildSignatureSvg(
+        strokes: _strokes,
+        canvasSize: canvasSize,
+      );
 
       await ref.read(signatureRepositoryProvider).createSignature(
             patientId: widget.patient.patientId,

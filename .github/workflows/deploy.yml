@@ -24,11 +24,12 @@ jobs:
             # Orphaned Container aufräumen
             docker compose down --remove-orphans || true
 
-            # Images bauen
-            docker compose build
+            # Nur backend + admin-web bauen (mobile-web wird selten
+            # geändert und das Flutter-Base-Image hat Rate-Limits)
+            docker compose build backend admin-web
 
             # Migrations
             docker compose run --rm backend alembic upgrade head
 
-            # Stack starten
+            # Stack starten (mobile-web nutzt cached image)
             docker compose up -d --wait

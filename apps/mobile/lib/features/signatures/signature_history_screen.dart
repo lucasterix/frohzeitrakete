@@ -32,6 +32,8 @@ class SignatureHistoryScreen extends ConsumerWidget {
         return Icons.sync_alt_outlined;
       case DocumentType.betreuungsvertrag:
         return Icons.assignment_turned_in_outlined;
+      case DocumentType.pflegeantragHilfsmittel:
+        return Icons.medical_services_outlined;
     }
   }
 
