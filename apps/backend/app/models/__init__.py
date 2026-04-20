@@ -2,11 +2,15 @@ from app.models.announcement import Announcement
 from app.models.call_request import CallRequest
 from app.models.entry import Entry
 from app.models.hr_request import HrRequest
+from app.models.kostentraeger import Kostentraeger
 from app.models.leistungsnachweis_office_state import LeistungsnachweisOfficeState
 from app.models.notification import Notification
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient_extras import PatientExtras
 from app.models.patient_intake import PatientIntakeRequest
+from app.models.pflegehilfsmittel import Pflegehilfsmittel
+from app.models.pflegehm_abrechnung import PflegehmAbrechnung
+from app.models.pflegehm_position import PflegehmPosition
 from app.models.sick_leave import SickLeave
 from app.models.sync_error import SyncError
 from app.models.signature_asset import SignatureAsset
@@ -23,11 +27,15 @@ __all__ = [
     "CallRequest",
     "Entry",
     "HrRequest",
+    "Kostentraeger",
     "LeistungsnachweisOfficeState",
     "Notification",
     "PasswordResetToken",
     "PatientExtras",
     "PatientIntakeRequest",
+    "Pflegehilfsmittel",
+    "PflegehmAbrechnung",
+    "PflegehmPosition",
     "SickLeave",
     "SyncError",
     "SignatureAsset",

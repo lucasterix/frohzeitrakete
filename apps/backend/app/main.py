@@ -12,6 +12,8 @@ from app.api.auth import router as auth_router
 from app.api.mobile import router as mobile_router
 from app.api.office_workflow import admin_router as office_admin_router
 from app.api.office_workflow import mobile_router as office_mobile_router
+from app.api.pflegehilfsmittel import admin_router as pflegehm_admin_router
+from app.api.pflegehilfsmittel import mobile_router as pflegehm_mobile_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
 from app.core.rate_limit import limiter
@@ -73,6 +75,8 @@ app.include_router(admin_users_router, prefix="/admin", tags=["admin"])
 app.include_router(admin_signatures_router, prefix="/admin", tags=["admin-signatures"])
 app.include_router(admin_tasks_router, prefix="/admin", tags=["admin-tasks"])
 app.include_router(office_admin_router, prefix="/admin", tags=["admin-office-workflow"])
+app.include_router(pflegehm_admin_router, prefix="/admin", tags=["admin-pflegehilfsmittel"])
+app.include_router(pflegehm_mobile_router, prefix="/mobile", tags=["mobile-pflegehilfsmittel"])
 
 
 @app.get("/health")
