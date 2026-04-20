@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import SignatureCanvas from "@/components/signature-canvas";
@@ -13,7 +13,15 @@ type Patient = {
   last_name: string;
 };
 
-export default function PflegehilfsmittelSignaturPage() {
+export default function PflegehilfsmittelSignaturPageWrapper() {
+  return (
+    <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-white/60" />}>
+      <PflegehilfsmittelSignaturPage />
+    </Suspense>
+  );
+}
+
+function PflegehilfsmittelSignaturPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedPatient = searchParams.get("patient");
