@@ -33,9 +33,10 @@ export default function UserEinsaetzePage() {
   const [lateReason, setLateReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Trip (Fahrt) fields
+  // Trip (Fahrt mit/für Patient) fields
   const [tripDriven, setTripDriven] = useState(false);
-  const [tripStartAddress, setTripStartAddress] = useState("");
+  const [tripKm, setTripKm] = useState<string>("");
+  const [tripDestination, setTripDestination] = useState("");
 
   // Signature step
   const [showSignature, setShowSignature] = useState(false);
@@ -59,7 +60,7 @@ export default function UserEinsaetzePage() {
       setEntryType("patient");
       setHasPreselectedPatient(true);
     }
-    if (params.get("trip") === "1") {
+    if (params.get("km") === "1") {
       setTripDriven(true);
     }
   }, []);
@@ -93,10 +94,10 @@ export default function UserEinsaetzePage() {
       if (isPatient) body.patient_id = patientId;
       if (needsCategory) body.category_label = categoryLabel.trim();
       if (isLate) body.late_entry_reason = lateReason.trim();
-      if (isPatient && tripDriven) {
+      if (isPatient && tripDriven && tripKm) {
         body.trip = {
-          start_from_home: !tripStartAddress.trim(),
-          start_address: tripStartAddress.trim() || null,
+          km: parseFloat(tripKm) || 0,
+          destination: tripDestination.trim() || null,
         };
       }
 
@@ -157,7 +158,8 @@ export default function UserEinsaetzePage() {
     setCategoryLabel("");
     setLateReason("");
     setTripDriven(false);
-    setTripStartAddress("");
+    setTripKm("");
+    setTripDestination("");
   }
 
   if (loading) return <div className="h-64 animate-pulse rounded-2xl bg-white/60" />;
@@ -342,7 +344,7 @@ export default function UserEinsaetzePage() {
           </div>
         )}
 
-        {/* Trip / Fahrt */}
+        {/* Trip / Fahrt mit/für Patient */}
         {isPatient && (
           <div className="mb-4">
             <label className="flex items-center gap-2">
@@ -353,16 +355,28 @@ export default function UserEinsaetzePage() {
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
               <span className="text-xs font-medium text-slate-700 sm:text-sm">
-                Ich bin zum Patienten gefahren
+                Gefahrene km mit/für den Patienten
               </span>
             </label>
             {tripDriven && (
-              <input
-                value={tripStartAddress}
-                onChange={(e) => setTripStartAddress(e.target.value)}
-                placeholder="Startadresse (z.B. Musterstr. 1, 12345 Berlin)"
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400"
-              />
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.1"
+                  value={tripKm}
+                  onChange={(e) => setTripKm(e.target.value)}
+                  placeholder="Gefahrene Kilometer"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400 sm:w-40"
+                />
+                <input
+                  value={tripDestination}
+                  onChange={(e) => setTripDestination(e.target.value)}
+                  placeholder="Wohin? (z.B. Arzt, Einkauf, Apotheke)"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400"
+                />
+              </div>
             )}
           </div>
         )}
