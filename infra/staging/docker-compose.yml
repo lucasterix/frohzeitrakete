@@ -94,11 +94,13 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - /home/deploy/infra/caddy/conf.d:/etc/caddy/conf.d:ro
       - caddy_data:/data
       - caddy_config:/config
     logging: *default-logging
     networks:
       - fzr_net
+      - caddy_proxy
 
 volumes:
   postgres_data:
@@ -107,3 +109,6 @@ volumes:
 
 networks:
   fzr_net:
+  caddy_proxy:
+    external: true
+    name: caddy_proxy

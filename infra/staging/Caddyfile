@@ -35,3 +35,6 @@ rakete.froehlichdienste.de {
     import security-headers
     reverse_proxy mobile-web:80
 }
+
+# apps outside this repo drop site blocks here
+import /etc/caddy/conf.d/*.caddy
