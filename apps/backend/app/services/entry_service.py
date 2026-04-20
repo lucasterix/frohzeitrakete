@@ -71,7 +71,9 @@ def _allocate_to_pots(
     - Jul–Dez: Verhinderungspflege zuerst, BL nur als Overflow
     - Ein Eintrag ist atomar: passt er nicht ganz in einen Topf,
       wandert er als Ganzes in den anderen
-    - Passt er in keinen Topf → wird nicht zu Patti gesendet (dropped)
+    - Passt er in keinen Topf → wird trotzdem in den Primär-Topf
+      geschrieben (Budget-Überschreitung erlaubt, Patti muss immer
+      die tatsächlich geleisteten Stunden abbilden)
 
     Returns (total_bl_hours, total_vp_hours, dropped_entries).
     """
@@ -95,7 +97,13 @@ def _allocate_to_pots(
                 placed = True
                 break
         if not placed:
-            dropped.append(entry)
+            # Budget erschöpft → trotzdem in den Primär-Topf schreiben
+            primary = priority[0]
+            pots[primary] -= h
+            if primary == "bl":
+                placed_bl += h
+            else:
+                placed_vp += h
     return (round(placed_bl, 4), round(placed_vp, 4), dropped)
 
 
