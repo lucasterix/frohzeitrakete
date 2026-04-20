@@ -1,3 +1,12 @@
+# Globale Caddy-Options: On-Demand-TLS nur für Domains, deren Eigentumsnachweis
+# per HTTP-Callback bestätigt wird. Greift nur, wenn ein Site-Block explizit
+# `tls { on_demand }` setzt — fzr-Sites sind davon nicht betroffen.
+{
+    on_demand_tls {
+        ask http://threelayerseo-renderer:8000/_/caddy-ask
+    }
+}
+
 # Globale Defaults für alle Sites
 (security-headers) {
     header {
