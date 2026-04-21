@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { User, getMe, logout } from "@/lib/api";
 import {
+  AlertCircleIcon,
   DashboardIcon,
   InboxIcon,
   LogoutIcon,
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
   { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
+  { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon },
   { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
 ];

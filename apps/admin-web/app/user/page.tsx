@@ -258,6 +258,14 @@ export default function UserDashboard() {
           title="Anfrage ans Büro"
           subtitle="Urlaub, Krank, Vertretung"
         />
+        <ActionTile
+          href="/user/problem-melden"
+          icon="🐛"
+          iconBg="#fef2f2"
+          iconColor="#DC2626"
+          title="Problem melden"
+          subtitle="Bug, Frage, Feature"
+        />
       </div>
 
       {/* Spruch des Tages */}

@@ -774,6 +774,108 @@ def mobile_month_stats(
     return asdict(stats)
 
 
+# ---------------------------------------------------------------------------
+# IT-Tickets (Fehlertickets / Problem melden)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/it-tickets", status_code=status.HTTP_201_CREATED)
+def mobile_create_it_ticket(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Neues IT-Ticket erstellen (Bug, Feature-Wunsch, Frage, Crash)."""
+    from app.models.it_ticket import ItTicket
+
+    title = (payload.get("title") or "").strip()
+    description = (payload.get("description") or "").strip()
+    category = (payload.get("category") or "bug").strip()
+    device_info = (payload.get("device_info") or "").strip() or None
+    priority = (payload.get("priority") or "medium").strip()
+
+    if not title or not description:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="title und description sind Pflichtfelder",
+        )
+
+    allowed_categories = {"bug", "feature", "frage", "sonstiges", "crash"}
+    if category not in allowed_categories:
+        category = "sonstiges"
+
+    allowed_priorities = {"low", "medium", "high"}
+    if priority not in allowed_priorities:
+        priority = "medium"
+
+    ticket = ItTicket(
+        user_id=current_user.id,
+        title=title[:255],
+        description=description,
+        category=category,
+        priority=priority,
+        device_info=device_info,
+    )
+    db.add(ticket)
+    db.flush()
+
+    # Alle Admins benachrichtigen
+    notify_all_admins(
+        db,
+        kind="it_ticket_created",
+        title="Neues IT-Ticket",
+        body=f"{current_user.full_name}: {title[:80]}",
+        related_entity_id=ticket.id,
+    )
+    db.commit()
+    db.refresh(ticket)
+
+    return {
+        "id": ticket.id,
+        "user_id": ticket.user_id,
+        "title": ticket.title,
+        "description": ticket.description,
+        "category": ticket.category,
+        "status": ticket.status,
+        "priority": ticket.priority,
+        "device_info": ticket.device_info,
+        "response_text": ticket.response_text,
+        "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+    }
+
+
+@router.get("/it-tickets")
+def mobile_list_it_tickets(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Eigene IT-Tickets des Users auflisten."""
+    from app.models.it_ticket import ItTicket
+
+    rows = (
+        db.query(ItTicket)
+        .filter(ItTicket.user_id == current_user.id)
+        .order_by(ItTicket.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "title": t.title,
+            "description": t.description,
+            "category": t.category,
+            "status": t.status,
+            "priority": t.priority,
+            "device_info": t.device_info,
+            "response_text": t.response_text,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        }
+        for t in rows
+    ]
+
+
 @router.get("/me/vacation-overview")
 def mobile_vacation_overview(
     current_user: User = Depends(get_current_user),

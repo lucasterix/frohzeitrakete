@@ -10,6 +10,7 @@ import '../office_requests/office_requests_screen.dart';
 import '../patients/patient_intake_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
+import '../it_tickets/it_ticket_screen.dart';
 import '../vacation/vacation_screen.dart';
 
 /// Motivierende Sprüche, die zufällig auf der Startseite rotieren.
@@ -576,6 +577,55 @@ class HomeScreen extends ConsumerWidget {
                             style: TextStyle(
                                 fontSize: 14, fontWeight: FontWeight.w600)),
                         Text('Übersicht & Antrag stellen',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFF94A3B8)),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Problem melden – IT-Ticket
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ItTicketScreen(),
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.bug_report_outlined,
+                        color: Colors.red, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Problem melden',
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        Text('Bug, Frage oder Feature-Wunsch',
                             style: TextStyle(
                                 fontSize: 12, color: Color(0xFF64748B))),
                       ],

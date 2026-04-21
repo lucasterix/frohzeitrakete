@@ -727,6 +727,103 @@ def admin_mark_caretaker_changed(
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# IT-Tickets (Admin)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/it-tickets")
+def admin_list_it_tickets(
+    status_filter: str | None = Query(None, alias="status"),
+    priority: str | None = Query(None),
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Alle IT-Tickets, optional gefiltert nach Status und Priorität."""
+    from app.models.it_ticket import ItTicket
+
+    q = db.query(ItTicket).order_by(ItTicket.created_at.desc())
+    if status_filter:
+        q = q.filter(ItTicket.status == status_filter)
+    if priority:
+        q = q.filter(ItTicket.priority == priority)
+    rows = q.limit(500).all()
+
+    # Eager-load user names
+    user_ids = {t.user_id for t in rows} | {
+        t.handler_user_id for t in rows if t.handler_user_id
+    }
+    users = db.query(User).filter(User.id.in_(user_ids)).all() if user_ids else []
+    name_by_id = {u.id: u.full_name for u in users}
+
+    return [
+        {
+            "id": t.id,
+            "user_id": t.user_id,
+            "user_name": name_by_id.get(t.user_id, "?"),
+            "title": t.title,
+            "description": t.description,
+            "category": t.category,
+            "status": t.status,
+            "priority": t.priority,
+            "device_info": t.device_info,
+            "response_text": t.response_text,
+            "handler_user_id": t.handler_user_id,
+            "handler_name": name_by_id.get(t.handler_user_id) if t.handler_user_id else None,
+            "handled_at": t.handled_at.isoformat() if t.handled_at else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        }
+        for t in rows
+    ]
+
+
+@router.patch("/it-tickets/{ticket_id}")
+def admin_update_it_ticket(
+    ticket_id: int,
+    payload: dict,
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Status ändern, Antwort schreiben, Handler setzen."""
+    from datetime import datetime as _dt
+
+    from app.models.it_ticket import ItTicket
+
+    ticket = db.query(ItTicket).filter(ItTicket.id == ticket_id).first()
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="ticket_not_found")
+
+    if "status" in payload:
+        allowed = {"open", "in_progress", "done", "rejected"}
+        if payload["status"] in allowed:
+            ticket.status = payload["status"]
+    if "priority" in payload:
+        allowed_p = {"low", "medium", "high"}
+        if payload["priority"] in allowed_p:
+            ticket.priority = payload["priority"]
+    if "response_text" in payload:
+        ticket.response_text = payload["response_text"]
+
+    # Auto-set handler
+    if ticket.handler_user_id is None:
+        ticket.handler_user_id = admin_user.id
+    if ticket.status in ("done", "rejected") and ticket.handled_at is None:
+        ticket.handled_at = _dt.utcnow()
+
+    db.commit()
+    db.refresh(ticket)
+
+    return {
+        "id": ticket.id,
+        "status": ticket.status,
+        "priority": ticket.priority,
+        "response_text": ticket.response_text,
+        "handler_user_id": ticket.handler_user_id,
+        "handled_at": ticket.handled_at.isoformat() if ticket.handled_at else None,
+    }
+
+
 @router.get("/sync-errors")
 def admin_list_sync_errors(
     only_open: bool = True,

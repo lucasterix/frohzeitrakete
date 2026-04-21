@@ -1,5 +1,6 @@
 from app.models.announcement import Announcement
 from app.models.call_request import CallRequest
+from app.models.it_ticket import ItTicket
 from app.models.entry import Entry
 from app.models.hr_request import HrRequest
 from app.models.kostentraeger import Kostentraeger
@@ -27,6 +28,7 @@ __all__ = [
     "CallRequest",
     "Entry",
     "HrRequest",
+    "ItTicket",
     "Kostentraeger",
     "LeistungsnachweisOfficeState",
     "Notification",
