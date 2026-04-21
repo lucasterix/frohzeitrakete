@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/offline/connectivity_provider.dart';
 import '../core/providers.dart';
 import '../features/auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
+import 'update_dialog.dart';
 
 class CareApp extends StatelessWidget {
   const CareApp({super.key});
@@ -118,11 +120,60 @@ class _BootstrapState extends ConsumerState<_Bootstrap> {
     final user = ref.read(authControllerProvider).valueOrNull;
 
     if (mounted) {
+      final isAuthed = user != null;
       setState(() {
-        _authed = user != null;
+        _authed = isAuthed;
         _done = true;
       });
+
+      if (isAuthed) {
+        _checkForUpdate(client);
+      }
     }
+  }
+
+  /// Prüft die App-Version gegen das Backend und zeigt ggf. den Update-Dialog.
+  Future<void> _checkForUpdate(dynamic client) async {
+    try {
+      final response = await client.dio.get('/mobile/app-version');
+      if (response.statusCode != 200 || response.data == null) return;
+
+      final data = response.data as Map<String, dynamic>;
+      final minVersion = data['min_version'] as String? ?? '0.0.0';
+      final forceUpdate = data['force_update'] as bool? ?? false;
+      final message = data['update_message'] as String? ??
+          'Eine neue Version ist verfügbar.';
+      final iosUrl = data['ios_url'] as String? ?? '';
+      final androidUrl = data['android_url'] as String? ?? '';
+
+      final info = await PackageInfo.fromPlatform();
+      final currentVersion = info.version; // e.g. "1.0.0"
+
+      if (_isVersionLessThan(currentVersion, minVersion) && mounted) {
+        UpdateDialog.show(
+          context,
+          message: message,
+          iosUrl: iosUrl,
+          androidUrl: androidUrl,
+          forceUpdate: forceUpdate,
+        );
+      }
+    } catch (_) {
+      // Version-Check darf die App nicht blockieren
+    }
+  }
+
+  /// Vergleicht zwei Semver-Strings. Gibt true zurück wenn [a] < [b].
+  bool _isVersionLessThan(String a, String b) {
+    final partsA = a.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final partsB = b.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    for (var i = 0; i < 3; i++) {
+      final va = i < partsA.length ? partsA[i] : 0;
+      final vb = i < partsB.length ? partsB[i] : 0;
+      if (va < vb) return true;
+      if (va > vb) return false;
+    }
+    return false;
   }
 
   @override

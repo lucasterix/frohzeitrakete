@@ -66,6 +66,18 @@ from app.services.patient_service import (
 router = APIRouter()
 
 
+@router.get("/app-version")
+def mobile_app_version():
+    return {
+        "min_version": "1.0.0",
+        "latest_version": "1.0.0",
+        "force_update": False,
+        "update_message": "Eine neue Version ist verfügbar. Bitte aktualisiere die App.",
+        "ios_url": "https://apps.apple.com/app/frohzeit-rakete/id0000000000",
+        "android_url": "https://play.google.com/store/apps/details?id=de.froehlichdienste.frohzeitrakete",
+    }
+
+
 @router.get("/patients", response_model=list[MobilePatient])
 def mobile_get_patients(
     current_user: User = Depends(get_current_user),
