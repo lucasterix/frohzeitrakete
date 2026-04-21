@@ -19,7 +19,7 @@ class EntryCreate(BaseModel):
     trip: TripInputSchema | None = None
     entry_type: str = Field(
         default="patient",
-        pattern="^(patient|office|training|other|home_commute)$",
+        pattern="^(patient|office|training|other|home_commute|sick)$",
     )
     category_label: str | None = None
     home_commute_start_address: str | None = None

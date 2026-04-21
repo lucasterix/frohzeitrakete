@@ -4,18 +4,21 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { User, getMe, logout } from "@/lib/api";
+import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import {
   DashboardIcon,
   LogoutIcon,
   RocketIcon,
   UsersIcon,
   InboxIcon,
+  UserCircleIcon,
 } from "@/components/icons";
 
 const NAV_ITEMS = [
   { href: "/user", label: "Start", icon: DashboardIcon },
   { href: "/user/patienten", label: "Patienten", icon: UsersIcon },
-  { href: "/user/nachrichten", label: "Nachrichten", icon: InboxIcon },
+  { href: "/user/nachrichten", label: "Nachrichten", icon: InboxIcon, badgeKey: "nachrichten" as const },
+  { href: "/user/profil", label: "Profil", icon: UserCircleIcon },
 ];
 
 export default function UserLayout({
@@ -26,6 +29,7 @@ export default function UserLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<User | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     getMe()
@@ -37,6 +41,15 @@ export default function UserLayout({
         setMe(u);
       })
       .catch(() => router.replace("/"));
+
+    fetchWithRefresh(`${API_BASE_URL}/mobile/notifications/unread-count`, {
+      headers: buildHeaders(),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.count === "number") setUnreadCount(data.count);
+      })
+      .catch(() => {});
   }, [router]);
 
   return (
@@ -68,15 +81,19 @@ export default function UserLayout({
           </button>
         </div>
         <nav className="-mb-px mx-auto flex max-w-6xl gap-0 overflow-x-auto px-3 sm:px-4 lg:px-8">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          {NAV_ITEMS.map(({ href, label, icon: Icon, ...rest }) => {
             const active =
               pathname === href ||
               (href !== "/user" && pathname?.startsWith(href));
+            const badge =
+              "badgeKey" in rest && rest.badgeKey === "nachrichten"
+                ? unreadCount
+                : 0;
             return (
               <Link
                 key={href}
                 href={href}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm ${
+                className={`relative inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm ${
                   active
                     ? "border-brand-600 text-brand-700"
                     : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
@@ -84,6 +101,11 @@ export default function UserLayout({
               >
                 <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 {label}
+                {badge > 0 && (
+                  <span className="ml-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </Link>
             );
           })}
