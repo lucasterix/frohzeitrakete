@@ -21,8 +21,9 @@ jobs:
             git pull
             cd infra/staging
 
-            # Orphaned Container aufräumen
+            # Alle Container + orphans stoppen und entfernen
             docker compose down --remove-orphans || true
+            docker container prune -f || true
 
             # Nur backend + admin-web bauen (mobile-web wird selten
             # geändert und das Flutter-Base-Image hat Rate-Limits)

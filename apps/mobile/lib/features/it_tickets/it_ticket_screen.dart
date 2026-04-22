@@ -17,7 +17,6 @@ class _ItTicketScreenState extends ConsumerState<ItTicketScreen> {
   final _descriptionController = TextEditingController();
   String _category = 'bug';
   bool _submitting = false;
-  bool _submitted = false;
   List<Map<String, dynamic>> _tickets = [];
   bool _loadingTickets = true;
 
@@ -90,7 +89,7 @@ class _ItTicketScreenState extends ConsumerState<ItTicketScreen> {
         'device_info': deviceInfo,
       });
       if (response.statusCode == 201 || response.statusCode == 200) {
-        setState(() => _submitted = true);
+        // Ticket erfolgreich erstellt
         _titleController.clear();
         _descriptionController.clear();
         _loadTickets();
