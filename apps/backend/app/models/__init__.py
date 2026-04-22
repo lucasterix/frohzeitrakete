@@ -1,4 +1,5 @@
 from app.models.announcement import Announcement
+from app.models.budget_inquiry import BudgetInquiry
 from app.models.call_request import CallRequest
 from app.models.it_ticket import ItTicket
 from app.models.entry import Entry
@@ -25,6 +26,7 @@ from app.models.vacation_request import VacationRequest
 
 __all__ = [
     "Announcement",
+    "BudgetInquiry",
     "CallRequest",
     "Entry",
     "HrRequest",

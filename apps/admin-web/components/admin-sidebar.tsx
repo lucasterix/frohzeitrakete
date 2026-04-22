@@ -37,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon },
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
   { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon },
+  { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon },
   { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon },
