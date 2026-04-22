@@ -55,9 +55,8 @@ Future<void> _reportCrashToBackend(Object error, StackTrace? stack) async {
       'device_info': deviceInfo,
       'priority': 'high',
     });
-  } catch (_) {
-    // Crash-Reporting selbst darf niemals die App zum Absturz bringen
-    debugPrint('[CrashReport] Konnte Crash nicht melden: $_');
+  } catch (e) {
+    debugPrint('[CrashReport] Konnte Crash nicht melden: $e');
   }
 }
 

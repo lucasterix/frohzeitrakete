@@ -1,7 +1,8 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -15,8 +16,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     defaultConfig {
@@ -27,13 +30,11 @@ android {
         versionName = flutter.versionName
     }
 
-    // Release-Signing: lädt Keystore aus ../key.properties (nicht commited).
-    // Siehe infra/mobile/RELEASE.md für Setup.
     signingConfigs {
         create("release") {
             val keyPropsFile = rootProject.file("key.properties")
             if (keyPropsFile.exists()) {
-                val props = java.util.Properties()
+                val props = Properties()
                 props.load(keyPropsFile.inputStream())
                 keyAlias = props.getProperty("keyAlias")
                 keyPassword = props.getProperty("keyPassword")
@@ -49,7 +50,6 @@ android {
             signingConfig = if (keyPropsFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
-                // Fallback: Debug-Signing, damit `flutter run --release` lokal läuft.
                 signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true
