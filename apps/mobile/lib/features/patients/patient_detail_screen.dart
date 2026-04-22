@@ -617,25 +617,6 @@ class _PatientDetailScreenState extends ConsumerState<PatientDetailScreen> {
                         ),
                       ),
                     ),
-                    if (e.isPrimary)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: green.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Haupt',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: green,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
                 const SizedBox(height: 2),

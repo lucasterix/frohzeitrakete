@@ -436,12 +436,6 @@ class _PatientCard extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(width: 8),
-                  if (patient.isPrimary)
-                    _chip(
-                      label: 'Hauptpatient',
-                      color: green,
-                      icon: Icons.star,
-                    ),
                   if (!patient.active) ...[
                     const SizedBox(width: 8),
                     _chip(
