@@ -20,6 +20,16 @@ type Hilfsmittel = {
   preis_cent: number;
 };
 
+type Patient = {
+  id: number;
+  name: string;
+  versichertennummer: string;
+  geburtsdatum: string | null;
+  address: string;
+  kasse_id: number | null;
+  kasse_name: string | null;
+};
+
 type SelectedItem = {
   hilfsmittel_id: number;
   menge: number;
@@ -34,9 +44,14 @@ export default function NeueAbrechnungPage() {
   const [booting, setBooting] = useState(true);
   const [kostentraeger, setKostentraeger] = useState<Kostentraeger[]>([]);
   const [hilfsmittel, setHilfsmittel] = useState<Hilfsmittel[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Patient selection mode
+  const [usePatientDropdown, setUsePatientDropdown] = useState(true);
+  const [selectedPatientId, setSelectedPatientId] = useState<number | "">("");
 
   // Form state
   const [patientName, setPatientName] = useState("");
@@ -51,16 +66,20 @@ export default function NeueAbrechnungPage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [ktRes, hmRes] = await Promise.all([
+      const [ktRes, hmRes, pRes] = await Promise.all([
         fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/kostentraeger`, {
           headers: buildHeaders(),
         }),
         fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/hilfsmittel`, {
           headers: buildHeaders(),
         }),
+        fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/patients`, {
+          headers: buildHeaders(),
+        }),
       ]);
       if (ktRes.ok) setKostentraeger(await ktRes.json());
       if (hmRes.ok) setHilfsmittel(await hmRes.json());
+      if (pRes.ok) setPatients(await pRes.json());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Laden der Stammdaten");
     }
@@ -83,6 +102,17 @@ export default function NeueAbrechnungPage() {
       }
     })();
   }, [loadData, router]);
+
+  // When a patient is selected from dropdown, auto-fill fields
+  useEffect(() => {
+    if (!selectedPatientId) return;
+    const p = patients.find((pat) => pat.id === selectedPatientId);
+    if (!p) return;
+    setPatientName(p.name);
+    setVersichertennr(p.versichertennummer || "");
+    setGeburtsdatum(p.geburtsdatum || "");
+    if (p.kasse_id) setKostentraegerId(p.kasse_id);
+  }, [selectedPatientId, patients]);
 
   function toggleItem(id: number) {
     setSelectedItems((prev) => {
@@ -123,19 +153,24 @@ export default function NeueAbrechnungPage() {
 
     setSaving(true);
     try {
+      const body: Record<string, unknown> = {
+        patient_name: patientName.trim(),
+        versichertennr: versichertennr.trim(),
+        geburtsdatum: geburtsdatum.trim(),
+        kostentraeger_id: kostentraegerId,
+        monat,
+        positionen: selectedItems,
+      };
+      if (usePatientDropdown && selectedPatientId) {
+        body.patient_id = selectedPatientId;
+      }
+
       const res = await fetchWithRefresh(
         `${API_BASE_URL}/admin/pflegehilfsmittel/abrechnungen`,
         {
           method: "POST",
           headers: { ...buildHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            patient_name: patientName.trim(),
-            versichertennr: versichertennr.trim(),
-            geburtsdatum: geburtsdatum.trim(),
-            kostentraeger_id: kostentraegerId,
-            monat,
-            positionen: selectedItems,
-          }),
+          body: JSON.stringify(body),
         }
       );
       if (!res.ok) {
@@ -181,6 +216,57 @@ export default function NeueAbrechnungPage() {
         {/* Patient-Daten */}
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-slate-900">Patient</h2>
+
+          {/* Toggle: Dropdown vs Freitext */}
+          <div className="mb-4 flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="radio"
+                checked={usePatientDropdown}
+                onChange={() => setUsePatientDropdown(true)}
+                className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              Gespeicherten Patienten auswaehlen
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="radio"
+                checked={!usePatientDropdown}
+                onChange={() => {
+                  setUsePatientDropdown(false);
+                  setSelectedPatientId("");
+                }}
+                className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              Daten manuell eingeben
+            </label>
+          </div>
+
+          {usePatientDropdown && (
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Patient auswaehlen *
+              </label>
+              <select
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value ? Number(e.target.value) : "")}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="">Bitte waehlen...</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.versichertennummer})
+                  </option>
+                ))}
+              </select>
+              {patients.length === 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Noch keine Patienten gespeichert. Freitext nutzen oder zuerst Patienten anlegen.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Name *</label>
@@ -189,7 +275,8 @@ export default function NeueAbrechnungPage() {
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 placeholder="Vor- und Nachname"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                readOnly={usePatientDropdown && !!selectedPatientId}
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ${usePatientDropdown && selectedPatientId ? "bg-slate-50" : ""}`}
               />
             </div>
             <div>
@@ -199,7 +286,8 @@ export default function NeueAbrechnungPage() {
                 value={versichertennr}
                 onChange={(e) => setVersichertennr(e.target.value)}
                 placeholder="z.B. A123456789"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                readOnly={usePatientDropdown && !!selectedPatientId}
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ${usePatientDropdown && selectedPatientId ? "bg-slate-50" : ""}`}
               />
             </div>
             <div>
@@ -209,7 +297,8 @@ export default function NeueAbrechnungPage() {
                 value={geburtsdatum}
                 onChange={(e) => setGeburtsdatum(e.target.value)}
                 placeholder="TT.MM.JJJJ"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                readOnly={usePatientDropdown && !!selectedPatientId}
+                className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 ${usePatientDropdown && selectedPatientId ? "bg-slate-50" : ""}`}
               />
             </div>
           </div>

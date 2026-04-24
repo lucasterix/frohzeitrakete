@@ -10,6 +10,7 @@ import { AlertCircleIcon, RefreshIcon } from "@/components/icons";
 type Abrechnung = {
   id: number;
   patient_name: string;
+  patient_id: number | null;
   monat: string;
   betrag_cent: number;
   status: string;
@@ -179,6 +180,7 @@ export default function AbrechnungenPage() {
                   <th className="px-3 py-3">Monat</th>
                   <th className="px-3 py-3">Betrag</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Downloads</th>
                   <th className="px-3 py-3">Aktionen</th>
                 </tr>
               </thead>
@@ -200,7 +202,7 @@ export default function AbrechnungenPage() {
                           disabled={busyId === item.id}
                           className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
                         >
-                          PDF
+                          Rechnung PDF
                         </button>
                         <button
                           onClick={() => handleAction(item.id, "edifact")}
@@ -209,6 +211,23 @@ export default function AbrechnungenPage() {
                         >
                           EDIFACT
                         </button>
+                        {item.patient_id && (
+                          <button
+                            onClick={() =>
+                              window.open(
+                                `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${item.patient_id}/pflegeantrag`,
+                                "_blank"
+                              )
+                            }
+                            className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                          >
+                            Pflegeantrag PDF
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
                         {item.status === "entwurf" && (
                           <button
                             onClick={() => handleAction(item.id, "senden")}
