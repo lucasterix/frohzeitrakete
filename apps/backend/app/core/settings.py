@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "fz_refresh_token"
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
+    # Optional cookie domain (leer = host-only). Set to ".froehlichdienste.de"
+    # to share the session with sibling subdomains (e.g. buchhaltung-api.*).
+    cookie_domain: str = ""
 
     # Observability
     sentry_dsn: str = ""

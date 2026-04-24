@@ -34,6 +34,7 @@ logger = get_logger("auth")
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str):
+    cookie_domain = settings.cookie_domain or None
     response.set_cookie(
         key=settings.access_cookie_name,
         value=access_token,
@@ -42,6 +43,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         samesite=settings.cookie_samesite,
         max_age=settings.access_token_expire_minutes * 60,
         path="/",
+        domain=cookie_domain,
     )
     response.set_cookie(
         key=settings.refresh_cookie_name,
@@ -51,12 +53,14 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         samesite=settings.cookie_samesite,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         path="/",
+        domain=cookie_domain,
     )
 
 
 def _clear_auth_cookies(response: Response):
-    response.delete_cookie(key=settings.access_cookie_name, path="/")
-    response.delete_cookie(key=settings.refresh_cookie_name, path="/")
+    cookie_domain = settings.cookie_domain or None
+    response.delete_cookie(key=settings.access_cookie_name, path="/", domain=cookie_domain)
+    response.delete_cookie(key=settings.refresh_cookie_name, path="/", domain=cookie_domain)
 
 
 @router.post("/login", response_model=AuthResponse)

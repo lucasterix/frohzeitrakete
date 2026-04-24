@@ -125,6 +125,7 @@ export default function UserForm({ onUserCreated }: UserFormProps) {
             <option value="caretaker">caretaker</option>
             <option value="buero">buero</option>
             <option value="standortleiter">standortleiter</option>
+            <option value="buchhaltung">buchhaltung</option>
             <option value="admin">admin</option>
           </select>
         </label>

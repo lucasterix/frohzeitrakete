@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { User, getMe, logout } from "@/lib/api";
 import {
   AlertCircleIcon,
+  CalculatorIcon,
   DashboardIcon,
   InboxIcon,
   LogoutIcon,
@@ -22,6 +23,7 @@ type NavItem = {
   label: string;
   Icon: typeof DashboardIcon;
   adminOnly?: boolean;
+  roles?: string[]; // if set, only users whose role is in this list see the item
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -40,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon },
+  { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"] },
   { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
 ];
@@ -75,9 +78,11 @@ export default function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV_ITEMS.filter(
-          (item) => !item.adminOnly || me?.role === "admin"
-        ).map(({ href, label, Icon }) => {
+        {NAV_ITEMS.filter((item) => {
+          if (item.roles) return me?.role ? item.roles.includes(me.role) : false;
+          if (item.adminOnly) return me?.role === "admin";
+          return true;
+        }).map(({ href, label, Icon }) => {
           const isActive =
             pathname === href ||
             (href !== "/admin" && pathname?.startsWith(href));

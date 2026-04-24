@@ -60,6 +60,10 @@ apps/mobile/android/app/google-services.json
 
 # Claude Code local config
 .claude/
+memory/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Flutter (mobile app)
 apps/mobile/build/

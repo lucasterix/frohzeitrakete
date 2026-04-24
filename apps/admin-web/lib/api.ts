@@ -1,6 +1,22 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.froehlichdienste.de";
 
+// datev-buchungstool (eigener FastAPI-Service). Teilt sich JWT-Cookie mit FZR
+// via `.froehlichdienste.de` Cookie-Domain. Wird erst ab Phase 1 aktiv benutzt.
+const DATEV_API_BASE_URL =
+  process.env.NEXT_PUBLIC_DATEV_API_BASE_URL ||
+  "https://buchhaltung-api.froehlichdienste.de";
+
+export async function getDatevHealth(): Promise<{ status: string }> {
+  const response = await fetch(`${DATEV_API_BASE_URL}/health`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error(`Datev /health returned ${response.status}`);
+  }
+  return response.json();
+}
+
 /* =========================
    TYPES
 ========================= */
