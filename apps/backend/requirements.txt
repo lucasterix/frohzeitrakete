@@ -48,6 +48,9 @@ pytest==8.3.3
 reportlab==4.2.5
 pypdf==5.1.0
 
+# File uploads (Antrag-Upload)
+python-multipart==0.0.20
+
 # Google Sheets (Stundenübersicht-Sync)
 google-auth==2.49.2
 google-auth-httplib2==0.3.1
