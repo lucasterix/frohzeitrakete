@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, require_office_user
 from app.db.session import get_db
+from app.models.pflegehm_patient import PflegehmPatient
+from app.models.pflegehm_settings import PflegehmSettings
 from app.models.user import User
 from app.services import pflegehm_service as svc
 from app.services.pflegehm_edifact import build_edifact
-from app.services.pflegehm_pdf import make_invoice_pdf_from_abrechnung
+from app.services.pflegehm_email import send_abrechnung_email
+from app.services.pflegehm_pdf import (
+    generate_pflegeantrag_pdf,
+    generate_unterschrift_pdf,
+    make_invoice_pdf_from_abrechnung,
+)
 
 # ---------------------------------------------------------------------------
 # Routers
@@ -72,6 +80,7 @@ class AbrechnungCreate(BaseModel):
     kasse_id: int
     abrechnungsmonat: str  # YYYY-MM
     positionen: list[PositionInput]
+    pflegehm_patient_id: int | None = None
 
 
 class PositionResponse(BaseModel):
@@ -100,6 +109,7 @@ class AbrechnungResponse(BaseModel):
     gesendet_am: datetime | None = None
     storniert_am: datetime | None = None
     signature_event_id: int | None = None
+    pflegehm_patient_id: int | None = None
     created_by_user_id: int | None = None
     created_at: datetime | None = None
     positionen: list[PositionResponse] = []
@@ -110,41 +120,151 @@ class AbrechnungResponse(BaseModel):
 
 class ConfigPayload(BaseModel):
     ik: str | None = None
-    name: str | None = None
-    strasse: str | None = None
-    plz: str | None = None
-    ort: str | None = None
-    kontakt_telefon: str | None = None
-    kontakt_person: str | None = None
-    kontakt_fax: str | None = None
-    email_absender: str | None = None
+    abrechnungscode: str | None = None
+    tarifkennzeichen: str | None = None
+    verfahrenskennung: str | None = None
     smtp_server: str | None = None
     smtp_port: int | None = None
     smtp_user: str | None = None
     smtp_password: str | None = None
     smtp_use_tls: bool | None = None
-    abrechnungscode: str | None = None
-    tarifkennzeichen: str | None = None
-    ust_satz: str | None = None
+    email_absender: str | None = None
+    ust_pflichtig: bool | None = None
+    ust_satz: float | None = None
+    firma_name: str | None = None
+    firma_address: str | None = None
+    firma_phone: str | None = None
+    firma_email: str | None = None
+    kontakt_person: str | None = None
+    kontakt_telefon: str | None = None
+    kontakt_fax: str | None = None
     bank_name: str | None = None
     bank_iban: str | None = None
     bank_bic: str | None = None
 
 
-# ---------------------------------------------------------------------------
-# In-memory config store (persists for app lifetime; replace with DB later)
-# ---------------------------------------------------------------------------
+class PatientCreate(BaseModel):
+    name: str
+    versichertennummer: str
+    geburtsdatum: str | None = None
+    address: str | None = None
+    kasse_id: int | None = None
 
-_config_store: dict[str, Any] = {}
+
+class PatientUpdate(BaseModel):
+    name: str | None = None
+    versichertennummer: str | None = None
+    geburtsdatum: str | None = None
+    address: str | None = None
+    kasse_id: int | None = None
 
 
-def _get_config() -> dict[str, Any]:
-    return dict(_config_store)
+class PatientResponse(BaseModel):
+    id: int
+    name: str
+    versichertennummer: str
+    geburtsdatum: str | None = None
+    address: str | None = None
+    kasse_id: int | None = None
+    kasse_name: str | None = None
+    unterschriebener_antrag: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _get_settings(db: Session) -> PflegehmSettings:
+    """Get or create the singleton PflegehmSettings row."""
+    settings = db.get(PflegehmSettings, 1)
+    if not settings:
+        settings = PflegehmSettings(id=1)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+def _settings_to_dict(s: PflegehmSettings) -> dict[str, Any]:
+    """Convert settings model to a dict for the API response and internal use."""
+    return {
+        "ik": s.ik,
+        "abrechnungscode": s.abrechnungscode,
+        "tarifkennzeichen": s.tarifkennzeichen,
+        "verfahrenskennung": s.verfahrenskennung,
+        "smtp_server": s.smtp_server,
+        "smtp_port": s.smtp_port,
+        "smtp_user": s.smtp_user,
+        "smtp_password": "***" if s.smtp_password else None,
+        "smtp_use_tls": s.smtp_use_tls,
+        "email_absender": s.email_absender,
+        "ust_pflichtig": s.ust_pflichtig,
+        "ust_satz": s.ust_satz,
+        "firma_name": s.firma_name,
+        "firma_address": s.firma_address,
+        "firma_phone": s.firma_phone,
+        "firma_email": s.firma_email,
+        "kontakt_person": s.kontakt_person,
+        "kontakt_telefon": s.kontakt_telefon,
+        "kontakt_fax": s.kontakt_fax,
+        "bank_name": s.bank_name,
+        "bank_iban": s.bank_iban,
+        "bank_bic": s.bank_bic,
+    }
+
+
+def _settings_to_cfg(s: PflegehmSettings) -> dict[str, Any]:
+    """Convert settings model to cfg dict for EDIFACT/PDF."""
+    return {
+        "ik": s.ik or "000000000",
+        "name": s.firma_name or "",
+        "strasse": "",
+        "plz": "",
+        "ort": s.firma_address or "",
+        "kontakt_telefon": s.firma_phone or s.kontakt_telefon or "",
+        "kontakt_person": s.kontakt_person or "",
+        "kontakt_fax": s.kontakt_fax or "",
+        "email_absender": s.email_absender or "",
+        "abrechnungscode": s.abrechnungscode or "",
+        "tarifkennzeichen": s.tarifkennzeichen or "",
+        "ust_satz": str(s.ust_satz or "19"),
+        "bank_name": s.bank_name or "",
+        "bank_iban": s.bank_iban or "",
+        "bank_bic": s.bank_bic or "",
+    }
+
+
+def _patient_to_response(p: PflegehmPatient) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "versichertennummer": p.versichertennummer,
+        "geburtsdatum": p.geburtsdatum.isoformat() if p.geburtsdatum else None,
+        "address": p.address,
+        "kasse_id": p.kasse_id,
+        "kasse_name": p.kasse.name if p.kasse else None,
+        "unterschriebener_antrag": p.unterschriebener_antrag,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+    }
+
+
+def _parse_date(s: str | None) -> date | None:
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
+
 
 def _abr_to_response(abr: Any) -> dict:
     positionen = []
@@ -171,6 +291,7 @@ def _abr_to_response(abr: Any) -> dict:
         "gesendet_am": abr.gesendet_am,
         "storniert_am": abr.storniert_am,
         "signature_event_id": abr.signature_event_id,
+        "pflegehm_patient_id": getattr(abr, "pflegehm_patient_id", None),
         "created_by_user_id": abr.created_by_user_id,
         "created_at": abr.created_at,
         "positionen": positionen,
@@ -224,6 +345,148 @@ def import_kostentraeger(
     return {"imported": count}
 
 
+# --- Pflegehm Patients (separate from Patti patients) ---
+
+@admin_router.get("/pflegehilfsmittel/patients")
+def list_pflegehm_patients(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+
+    stmt = (
+        select(PflegehmPatient)
+        .options(joinedload(PflegehmPatient.kasse))
+        .order_by(PflegehmPatient.name)
+    )
+    patients = list(db.execute(stmt).unique().scalars().all())
+    return [_patient_to_response(p) for p in patients]
+
+
+@admin_router.post("/pflegehilfsmittel/patients")
+def create_pflegehm_patient(
+    payload: PatientCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    patient = PflegehmPatient(
+        name=payload.name,
+        versichertennummer=payload.versichertennummer,
+        geburtsdatum=_parse_date(payload.geburtsdatum),
+        address=payload.address,
+        kasse_id=payload.kasse_id,
+    )
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    return _patient_to_response(patient)
+
+
+@admin_router.put("/pflegehilfsmittel/patients/{patient_id}")
+def update_pflegehm_patient(
+    patient_id: int,
+    payload: PatientUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "geburtsdatum" in data:
+        data["geburtsdatum"] = _parse_date(data["geburtsdatum"])
+    for key, value in data.items():
+        setattr(patient, key, value)
+
+    db.commit()
+    db.refresh(patient)
+    return _patient_to_response(patient)
+
+
+@admin_router.delete("/pflegehilfsmittel/patients/{patient_id}")
+def delete_pflegehm_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    db.delete(patient)
+    db.commit()
+    return {"ok": True}
+
+
+@admin_router.post("/pflegehilfsmittel/patients/{patient_id}/antrag-upload")
+async def upload_antrag(
+    patient_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Upload a signed Pflegeantrag PDF for a patient."""
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+
+    content_type = (file.content_type or "").lower()
+    filename_lower = (file.filename or "").lower()
+    if "pdf" not in content_type and not filename_lower.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Bitte eine PDF-Datei hochladen.")
+
+    # Store in static/pflegehm/uploads/<patient_id>/
+    upload_dir = (
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        + f"/app/static/pflegehm/uploads/{patient_id}"
+    )
+    # Use absolute path relative to app
+    from pathlib import Path as P
+    base = P(__file__).resolve().parent.parent / "static" / "pflegehm" / "uploads" / str(patient_id)
+    base.mkdir(parents=True, exist_ok=True)
+    target = base / "Unterschriebener_Antrag.pdf"
+
+    data = await file.read()
+    target.write_bytes(data)
+
+    patient.unterschriebener_antrag = str(target)
+    db.commit()
+    db.refresh(patient)
+    return {"ok": True, "path": str(target)}
+
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/pflegeantrag.pdf")
+def get_pflegeantrag_pdf(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Generate and return a Pflegeantrag PDF for the given patient."""
+    from sqlalchemy.orm import joinedload
+
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+
+    # Ensure kasse is loaded
+    if patient.kasse_id and not patient.kasse:
+        from sqlalchemy import select
+        stmt = select(PflegehmPatient).options(
+            joinedload(PflegehmPatient.kasse)
+        ).where(PflegehmPatient.id == patient_id)
+        patient = db.execute(stmt).unique().scalar_one()
+
+    pdf_buf = generate_pflegeantrag_pdf(patient)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=pflegeantrag_{patient_id}.pdf"
+        },
+    )
+
+
 # --- Abrechnungen ---
 
 @admin_router.get("/pflegehilfsmittel/abrechnungen")
@@ -252,6 +515,7 @@ def create_abrechnung(
         monat=payload.abrechnungsmonat,
         positionen=[p.model_dump() for p in payload.positionen],
         user_id=user.id,
+        pflegehm_patient_id=payload.pflegehm_patient_id,
     )
     return _abr_to_response(abr)
 
@@ -277,7 +541,8 @@ def get_abrechnung_pdf(
     abr = svc.get_abrechnung(db, abr_id)
     if not abr:
         raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
-    cfg = _get_config()
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
     pdf_buf = make_invoice_pdf_from_abrechnung(abr, cfg=cfg)
     return Response(
         content=pdf_buf.read(),
@@ -295,7 +560,8 @@ def get_abrechnung_edifact(
     abr = svc.get_abrechnung(db, abr_id)
     if not abr:
         raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
-    cfg = _get_config()
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
     try:
         data = build_edifact(abr, cfg=cfg)
     except ValueError as e:
@@ -319,8 +585,10 @@ def send_abrechnung(
     if abr.status == "storniert":
         raise HTTPException(status_code=400, detail="Stornierte Abrechnung kann nicht gesendet werden")
 
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+
     # Build EDIFACT
-    cfg = _get_config()
     try:
         edifact_data = build_edifact(abr, cfg=cfg)
     except ValueError as e:
@@ -334,8 +602,29 @@ def send_abrechnung(
             detail="Keine Annahmestellen-Email fuer den Kostentraeger hinterlegt",
         )
 
-    # For now mark as sent; actual email sending requires SMTP config + AUF generation
-    # which is a follow-up task
+    # Validate SMTP config
+    if not settings.smtp_server or not settings.email_absender:
+        raise HTTPException(
+            status_code=422,
+            detail="SMTP-Server oder Absender-Email nicht konfiguriert. Bitte Einstellungen pruefen.",
+        )
+
+    # Real email sending
+    try:
+        send_abrechnung_email(
+            settings=settings,
+            edifact_data=edifact_data,
+            empfaenger_email=kasse.annahmestelle_email,
+            empfaenger_ik=kasse.annahmestelle_ik or kasse.ik,
+            abrechnung_id=abr.id,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Email-Versand fehlgeschlagen: {str(e)}",
+        )
+
+    # Mark as sent
     abr = svc.mark_gesendet(db, abr_id)
     return _abr_to_response(abr)
 
@@ -352,23 +641,31 @@ def storno_abrechnung(
     return _abr_to_response(abr)
 
 
-# --- Config ---
+# --- Config (DB-backed via PflegehmSettings) ---
 
 @admin_router.get("/pflegehilfsmittel/config")
 def get_config(
+    db: Session = Depends(get_db),
     user: User = Depends(require_office_user),
 ):
-    return _get_config()
+    settings = _get_settings(db)
+    return _settings_to_dict(settings)
 
 
 @admin_router.post("/pflegehilfsmittel/config")
 def save_config(
     payload: ConfigPayload,
+    db: Session = Depends(get_db),
     user: User = Depends(require_office_user),
 ):
+    settings = _get_settings(db)
     data = payload.model_dump(exclude_unset=True)
-    _config_store.update(data)
-    return _get_config()
+    for key, value in data.items():
+        if hasattr(settings, key):
+            setattr(settings, key, value)
+    db.commit()
+    db.refresh(settings)
+    return _settings_to_dict(settings)
 
 
 # ===================================================================

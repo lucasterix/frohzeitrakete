@@ -524,3 +524,163 @@ def render_pflegeantrag(data: dict, template_path: str | None = None) -> BytesIO
     c.save()
     buf.seek(0)
     return _merge_overlay(template_path, buf)
+
+
+# ---------------------------------------------------------------------------
+# Pflegeantrag PDF from PflegehmPatient model
+# ---------------------------------------------------------------------------
+
+def generate_pflegeantrag_pdf(patient: Any) -> BytesIO:
+    """Generate a Pflegeantrag PDF for a PflegehmPatient."""
+    geb = ""
+    if patient.geburtsdatum:
+        geb = patient.geburtsdatum.strftime("%d.%m.%Y")
+
+    kasse_name = ""
+    if patient.kasse:
+        kasse_name = patient.kasse.name or ""
+
+    data = {
+        "name": patient.name or "",
+        "geburtsdatum": geb,
+        "versichertennr": patient.versichertennummer or "",
+        "anschrift": patient.address or "",
+        "pflegekasse": kasse_name,
+    }
+    return render_pflegeantrag(data)
+
+
+# ---------------------------------------------------------------------------
+# Rechnung PDF from Abrechnung + PflegehmSettings
+# ---------------------------------------------------------------------------
+
+def generate_rechnung_pdf(
+    abrechnung: Any,
+    positionen: list,
+    settings: Any,
+) -> BytesIO:
+    """Generate an invoice PDF using PflegehmSettings for provider data."""
+    cfg = _settings_to_cfg(settings)
+    return make_invoice_pdf_from_abrechnung(abrechnung, cfg=cfg)
+
+
+def _settings_to_cfg(settings: Any) -> dict:
+    """Convert PflegehmSettings model to cfg dict used by PDF renderer."""
+    if settings is None:
+        return {}
+    return {
+        "name": settings.firma_name or "",
+        "strasse": "",  # address is combined in firma_address
+        "plz": "",
+        "ort": settings.firma_address or "",
+        "kontakt_telefon": settings.firma_phone or settings.kontakt_telefon or "",
+        "kontakt_person": settings.kontakt_person or "",
+        "kontakt_fax": settings.kontakt_fax or "",
+        "email_absender": settings.email_absender or "",
+        "ik": settings.ik or "000000000",
+        "abrechnungscode": settings.abrechnungscode or "",
+        "tarifkennzeichen": settings.tarifkennzeichen or "",
+        "ust_satz": str(settings.ust_satz or "19"),
+        "bank_name": settings.bank_name or "",
+        "bank_iban": settings.bank_iban or "",
+        "bank_bic": settings.bank_bic or "",
+        "smtp_server": settings.smtp_server or "",
+        "smtp_port": settings.smtp_port,
+        "smtp_user": settings.smtp_user or "",
+        "smtp_password": settings.smtp_password or "",
+        "smtp_use_tls": settings.smtp_use_tls,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Unterschrift Eins PDF (template overlay)
+# ---------------------------------------------------------------------------
+
+# Koordinaten (aus pflegekreuzer/app/pdf_unterschrift_eins.py)
+_DATE1_X_MM = 91.0
+_DATE1_Y_MM = 167.0
+_DATE1_STEP_MM = 5.4
+_DATE2_X_MM = 28.5
+_DATE2_Y_MM = 107.0
+_DATE2_STEP_MM = 5.4
+_MITARBEITER_X_MM = 88.0
+_MITARBEITER_Y_MM = 158.0
+
+
+def _normalize_datum_numeric(raw: str) -> str:
+    if not raw:
+        return ""
+    s = raw.strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y.%m.%d", "%d-%m-%Y"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return f"{dt.day:02d}{dt.month:02d}{dt.year:04d}"
+        except ValueError:
+            pass
+    only_digits = "".join(ch for ch in s if ch.isdigit())
+    return only_digits[:8]
+
+
+def _draw_spaced_text_mm(
+    c: canvas.Canvas,
+    x_mm: float,
+    y_mm: float,
+    text: str,
+    step_mm: float = 3.0,
+    font: str = "Courier",
+    size: int = 11,
+    max_len: int | None = None,
+) -> None:
+    if not text:
+        return
+    c.saveState()
+    c.setFont(font, size)
+    step = step_mm * mm
+    n = len(text) if max_len is None else min(max_len, len(text))
+    x0 = mmx(x_mm)
+    y0 = mmy(y_mm)
+    for i in range(n):
+        c.drawString(x0 + i * step, y0, text[i])
+    c.restoreState()
+
+
+def render_unterschrift_eins(data: dict, template_path: str | None = None) -> BytesIO:
+    """Render unterschrift_eins.pdf overlay with date and staff name."""
+    if template_path is None:
+        template_path = str(STATIC_DIR / "unterschrift_eins.pdf")
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setFont("Courier", 11)
+
+    beratung_datum_raw = (data.get("beratung_datum") or "").strip()
+    beratung_datum2_raw = (data.get("beratung_datum_2") or "").strip()
+    beratung_mitarbeiter = (data.get("beratung_mitarbeiter") or "").strip()
+
+    datum1 = _normalize_datum_numeric(beratung_datum_raw)
+    datum2 = _normalize_datum_numeric(beratung_datum2_raw or beratung_datum_raw)
+
+    if datum1:
+        _draw_spaced_text_mm(
+            c, x_mm=_DATE1_X_MM, y_mm=_DATE1_Y_MM, text=datum1,
+            step_mm=_DATE1_STEP_MM, font="Courier", size=11, max_len=8,
+        )
+    if datum2:
+        _draw_spaced_text_mm(
+            c, x_mm=_DATE2_X_MM, y_mm=_DATE2_Y_MM, text=datum2,
+            step_mm=_DATE2_STEP_MM, font="Courier", size=11, max_len=8,
+        )
+    if beratung_mitarbeiter:
+        c.drawString(mmx(_MITARBEITER_X_MM), mmy(_MITARBEITER_Y_MM), beratung_mitarbeiter)
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return _merge_overlay(template_path, buf)
+
+
+def generate_unterschrift_pdf(patient: Any, data: dict | None = None) -> BytesIO:
+    """Generate unterschrift_eins.pdf for a PflegehmPatient."""
+    d = dict(data or {})
+    d.setdefault("name", patient.name or "")
+    return render_unterschrift_eins(d)

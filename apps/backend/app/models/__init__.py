@@ -12,7 +12,9 @@ from app.models.patient_extras import PatientExtras
 from app.models.patient_intake import PatientIntakeRequest
 from app.models.pflegehilfsmittel import Pflegehilfsmittel
 from app.models.pflegehm_abrechnung import PflegehmAbrechnung
+from app.models.pflegehm_patient import PflegehmPatient
 from app.models.pflegehm_position import PflegehmPosition
+from app.models.pflegehm_settings import PflegehmSettings
 from app.models.sick_leave import SickLeave
 from app.models.sync_error import SyncError
 from app.models.signature_asset import SignatureAsset
@@ -39,7 +41,9 @@ __all__ = [
     "PatientIntakeRequest",
     "Pflegehilfsmittel",
     "PflegehmAbrechnung",
+    "PflegehmPatient",
     "PflegehmPosition",
+    "PflegehmSettings",
     "SickLeave",
     "SyncError",
     "SignatureAsset",

@@ -181,6 +181,7 @@ def create_abrechnung(
     monat: str,
     positionen: list[dict],  # [{hilfsmittel_id, menge}]
     user_id: int | None = None,
+    pflegehm_patient_id: int | None = None,
 ) -> PflegehmAbrechnung:
     abrechnung = PflegehmAbrechnung(
         patient_id=patient_id,
@@ -191,6 +192,7 @@ def create_abrechnung(
         abrechnungsmonat=monat,
         status="entwurf",
         created_by_user_id=user_id,
+        pflegehm_patient_id=pflegehm_patient_id,
     )
     db.add(abrechnung)
     db.flush()  # get abrechnung.id

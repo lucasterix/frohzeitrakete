@@ -25,6 +25,10 @@ class PflegehmAbrechnung(Base):
     gesendet_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     storniert_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    pflegehm_patient_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("pflegehm_patients.id"), nullable=True
+    )
+
     signature_event_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("signature_events.id"), nullable=True
     )
@@ -37,6 +41,7 @@ class PflegehmAbrechnung(Base):
     )
 
     kasse = relationship("Kostentraeger", lazy="joined")
+    pflegehm_patient = relationship("PflegehmPatient", lazy="joined")
     positionen = relationship(
         "PflegehmPosition", back_populates="abrechnung", cascade="all, delete-orphan"
     )

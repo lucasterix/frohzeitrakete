@@ -36,6 +36,15 @@ function statusBadge(status: string) {
   return map[status] ?? "bg-slate-100 text-slate-800";
 }
 
+const NAV_LINKS = [
+  { href: "/admin/pflegehilfsmittel/patienten", label: "Patienten" },
+  { href: "/admin/pflegehilfsmittel/abrechnungen", label: "Abrechnungen" },
+  { href: "/admin/pflegehilfsmittel/versand", label: "Versand" },
+  { href: "/admin/pflegehilfsmittel/katalog", label: "Katalog" },
+  { href: "/admin/pflegehilfsmittel/kassen", label: "Kassen" },
+  { href: "/admin/pflegehilfsmittel/einstellungen", label: "Einstellungen" },
+];
+
 export default function PflegehilfsmittelDashboard() {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
@@ -50,7 +59,7 @@ export default function PflegehilfsmittelDashboard() {
         fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/stats`, {
           headers: buildHeaders(),
         }),
-        fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/abrechnungen?limit=10`, {
+        fetchWithRefresh(`${API_BASE_URL}/admin/pflegehilfsmittel/abrechnungen?limit=5`, {
           headers: buildHeaders(),
         }),
       ]);
@@ -107,6 +116,19 @@ export default function PflegehilfsmittelDashboard() {
         </div>
       </div>
 
+      {/* Sub-Navigation */}
+      <nav className="flex flex-wrap gap-2">
+        {NAV_LINKS.map((link) => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-brand-300"
+          >
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+
       {error && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircleIcon className="h-5 w-5 shrink-0" />
@@ -134,8 +156,24 @@ export default function PflegehilfsmittelDashboard() {
         </div>
       </div>
 
+      {/* Noch nicht versendet - Zaehler */}
+      {stats.offen > 0 && (
+        <Link
+          href="/admin/pflegehilfsmittel/versand"
+          className="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm transition hover:bg-amber-100"
+        >
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              {stats.offen} Abrechnung{stats.offen !== 1 ? "en" : ""} noch nicht versendet
+            </p>
+            <p className="text-xs text-amber-600">Zum Versand wechseln</p>
+          </div>
+          <span className="text-lg text-amber-600">&rarr;</span>
+        </Link>
+      )}
+
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Link
           href="/admin/pflegehilfsmittel/abrechnungen/neu"
           className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
@@ -143,23 +181,41 @@ export default function PflegehilfsmittelDashboard() {
           + Neue Abrechnung
         </Link>
         <Link
+          href="/admin/pflegehilfsmittel/patienten"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          Patienten
+        </Link>
+        <Link
+          href="/admin/pflegehilfsmittel/versand"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          Versand
+        </Link>
+        <Link
           href="/admin/pflegehilfsmittel/katalog"
           className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          Katalog bearbeiten
+          Katalog
         </Link>
         <Link
           href="/admin/pflegehilfsmittel/kassen"
           className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
-          Kassen verwalten
+          Kassen
+        </Link>
+        <Link
+          href="/admin/pflegehilfsmittel/einstellungen"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          Einstellungen
         </Link>
       </div>
 
-      {/* Letzte 10 Abrechnungen */}
+      {/* Letzte 5 Abrechnungen */}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Letzte Abrechnungen</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Letzte 5 Abrechnungen</h2>
           <Link
             href="/admin/pflegehilfsmittel/abrechnungen"
             className="text-sm font-medium text-brand-600 hover:text-brand-700"
