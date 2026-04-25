@@ -90,7 +90,7 @@ export default function VersandPage() {
     setFlash("");
     try {
       const res = await fetchWithRefresh(
-        `${API_BASE_URL}/admin/pflegehilfsmittel/abrechnungen/${id}/senden`,
+        `${API_BASE_URL}/admin/pflegehilfsmittel/abrechnungen/${id}/send`,
         { method: "POST", headers: buildHeaders() }
       );
       if (!res.ok) throw new Error("Senden fehlgeschlagen");
@@ -109,11 +109,10 @@ export default function VersandPage() {
     setFlash("");
     try {
       const res = await fetchWithRefresh(
-        `${API_BASE_URL}/admin/pflegehilfsmittel/versand/send_all`,
+        `${API_BASE_URL}/admin/pflegehilfsmittel/absenden/send-all`,
         {
           method: "POST",
-          headers: { ...buildHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({ monat }),
+          headers: buildHeaders(),
         }
       );
       if (!res.ok) throw new Error("Sammelversand fehlgeschlagen");

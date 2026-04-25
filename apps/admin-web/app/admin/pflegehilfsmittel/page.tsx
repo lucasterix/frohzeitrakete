@@ -40,6 +40,7 @@ const NAV_LINKS = [
   { href: "/admin/pflegehilfsmittel/patienten", label: "Patienten" },
   { href: "/admin/pflegehilfsmittel/abrechnungen", label: "Abrechnungen" },
   { href: "/admin/pflegehilfsmittel/versand", label: "Versand" },
+  { href: "/admin/pflegehilfsmittel/archiv", label: "Archiv" },
   { href: "/admin/pflegehilfsmittel/katalog", label: "Katalog" },
   { href: "/admin/pflegehilfsmittel/kassen", label: "Kassen" },
   { href: "/admin/pflegehilfsmittel/einstellungen", label: "Einstellungen" },
@@ -173,7 +174,7 @@ export default function PflegehilfsmittelDashboard() {
       )}
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <Link
           href="/admin/pflegehilfsmittel/abrechnungen/neu"
           className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
@@ -191,6 +192,12 @@ export default function PflegehilfsmittelDashboard() {
           className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         >
           Versand
+        </Link>
+        <Link
+          href="/admin/pflegehilfsmittel/archiv"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          Archiv
         </Link>
         <Link
           href="/admin/pflegehilfsmittel/katalog"

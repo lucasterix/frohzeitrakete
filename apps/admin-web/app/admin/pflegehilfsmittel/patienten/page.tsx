@@ -52,6 +52,9 @@ export default function PatientenPage() {
   // Delete modal
   const [deletePatient, setDeletePatient] = useState<Patient | null>(null);
 
+  // PDF import
+  const [importing, setImporting] = useState(false);
+
   const loadData = useCallback(async () => {
     setError("");
     try {
@@ -217,6 +220,38 @@ export default function PatientenPage() {
     }
   }
 
+  async function handlePdfImport(file: File) {
+    setImporting(true);
+    setError("");
+    setFlash("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetchWithRefresh(
+        `${API_BASE_URL}/admin/pflegehilfsmittel/patients/parse-pdf`,
+        { method: "POST", body: fd }
+      );
+      if (!res.ok) throw new Error("PDF-Analyse fehlgeschlagen");
+      const data = await res.json();
+      if (data.name) setFormName(data.name);
+      if (data.versichertennummer) setFormVsnr(data.versichertennummer);
+      if (data.geburtsdatum) {
+        // Convert DD.MM.YYYY to YYYY-MM-DD for date input
+        const parts = data.geburtsdatum.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (parts) {
+          setFormGebdat(`${parts[3]}-${parts[2]}-${parts[1]}`);
+        } else {
+          setFormGebdat(data.geburtsdatum);
+        }
+      }
+      setFlash("Daten aus PDF uebernommen! Bitte pruefen und ergaenzen.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler beim Import");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const filtered = patients.filter((p) => {
     if (!filter) return true;
     const q = filter.toLowerCase();
@@ -341,13 +376,29 @@ export default function PatientenPage() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="mt-4 rounded-2xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-60"
-          >
-            {saving ? "Speichere..." : "Patient speichern"}
-          </button>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-2xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-60"
+            >
+              {saving ? "Speichere..." : "Patient speichern"}
+            </button>
+            <label className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+              {importing ? "Analysiere PDF..." : "Aus PDF importieren"}
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePdfImport(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
         </form>
       </section>
 
@@ -417,13 +468,35 @@ export default function PatientenPage() {
                         <button
                           onClick={() =>
                             window.open(
-                              `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/pflegeantrag`,
+                              `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/pflegeantrag.pdf`,
                               "_blank"
                             )
                           }
                           className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
                         >
                           Pflegeantrag PDF
+                        </button>
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/unterschrift-eins.pdf`,
+                              "_blank"
+                            )
+                          }
+                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                        >
+                          Unterschrift PDF
+                        </button>
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/antrag-komplett.pdf`,
+                              "_blank"
+                            )
+                          }
+                          className="rounded-lg border border-brand-200 bg-brand-50 px-2 py-1 text-xs text-brand-700 hover:bg-brand-100"
+                        >
+                          Antrag Komplett
                         </button>
                         <label className="cursor-pointer rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">
                           Antrag hochladen
@@ -439,17 +512,30 @@ export default function PatientenPage() {
                           />
                         </label>
                         {p.unterschriebener_antrag && (
-                          <button
-                            onClick={() =>
-                              window.open(
-                                `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/antrag_download`,
-                                "_blank"
-                              )
-                            }
-                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
-                          >
-                            Antrag ansehen
-                          </button>
+                          <>
+                            <button
+                              onClick={() =>
+                                window.open(
+                                  `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/antrag-download`,
+                                  "_blank"
+                                )
+                              }
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Antrag ansehen
+                            </button>
+                            <button
+                              onClick={() =>
+                                window.open(
+                                  `${API_BASE_URL}/admin/pflegehilfsmittel/patients/${p.id}/antrag-final.pdf`,
+                                  "_blank"
+                                )
+                              }
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Antrag Final
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => setDeletePatient(p)}

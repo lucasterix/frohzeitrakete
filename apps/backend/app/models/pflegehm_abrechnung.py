@@ -40,6 +40,10 @@ class PflegehmAbrechnung(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
+    leistungsnachweis_path: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+
     kasse = relationship("Kostentraeger", lazy="joined")
     pflegehm_patient = relationship("PflegehmPatient", lazy="joined")
     positionen = relationship(

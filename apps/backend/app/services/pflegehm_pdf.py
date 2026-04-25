@@ -684,3 +684,364 @@ def generate_unterschrift_pdf(patient: Any, data: dict | None = None) -> BytesIO
     d = dict(data or {})
     d.setdefault("name", patient.name or "")
     return render_unterschrift_eins(d)
+
+
+# ---------------------------------------------------------------------------
+# Begleitzettel PDF
+# ---------------------------------------------------------------------------
+
+def render_begleitzettel(
+    absender: dict,
+    empfaenger: dict,
+    abrechnungsmonat: str,
+    positionen_summary: list[dict],
+    versanddatum: str | None = None,
+) -> BytesIO:
+    """Render a Begleitzettel (cover sheet) for an EDIFACT shipment."""
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+
+    y = _draw_header(c, "Begleitzettel")
+    y -= BLOCK_GAP
+
+    # Absender
+    c.setFont(FONT_B, 10)
+    c.drawString(MARGIN_L, y, "Absender:")
+    y -= LINE_H
+    c.setFont(FONT, 10)
+    for line in (absender.get("name", ""), absender.get("addr", ""), f"IK: {absender.get('ik', '')}"):
+        if line.strip():
+            c.drawString(MARGIN_L, y, line.strip())
+            y -= LINE_H
+    y -= BLOCK_GAP / 2
+
+    # Empfaenger
+    c.setFont(FONT_B, 10)
+    c.drawString(MARGIN_L, y, "Empfaenger (Datenannahmestelle):")
+    y -= LINE_H
+    c.setFont(FONT, 10)
+    for line in (empfaenger.get("name", ""), empfaenger.get("addr", ""), f"IK: {empfaenger.get('ik', '')}"):
+        if line.strip():
+            c.drawString(MARGIN_L, y, line.strip())
+            y -= LINE_H
+    y -= BLOCK_GAP
+
+    # Meta
+    vm = _fmt_versorgungsmonat(abrechnungsmonat)
+    vd = versanddatum or datetime.now().strftime("%d.%m.%Y")
+    y = _draw_kv(c, MARGIN_L, y, [
+        ("Abrechnungsmonat:", vm),
+        ("Versanddatum:", vd),
+    ], label_w=38 * mm, line_h=LINE_H, size=10)
+    y -= BLOCK_GAP
+
+    # Positionen-Zusammenfassung
+    if positionen_summary:
+        c.setFont(FONT_B, 10)
+        c.drawString(MARGIN_L, y, "Positionen:")
+        y -= LINE_H * 1.2
+        c.setFont(FONT, 9.5)
+        for pos in positionen_summary:
+            name = pos.get("name", "")
+            menge = pos.get("menge", 0)
+            betrag = pos.get("betrag", 0.0)
+            line = f"{name}  x{menge}  {eur(betrag)}"
+            c.drawString(MARGIN_L + 4 * mm, y, line)
+            y -= LINE_H
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf
+
+
+def generate_begleitzettel_pdf(abrechnung: Any, cfg: dict) -> BytesIO:
+    """Generate Begleitzettel from Abrechnung + cfg."""
+    provider = _provider_from_cfg(cfg)
+    kasse = abrechnung.kasse
+
+    absender = {
+        "name": provider.get("name", ""),
+        "addr": provider.get("addr", ""),
+        "ik": provider.get("ik", ""),
+    }
+    empfaenger = {
+        "name": kasse.name if kasse else "",
+        "addr": kasse.address if kasse else "",
+        "ik": (kasse.annahmestelle_ik or kasse.ik) if kasse else "",
+    }
+
+    positionen_summary = []
+    for pos in (abrechnung.positionen or []):
+        hm = pos.hilfsmittel
+        positionen_summary.append({
+            "name": hm.bezeichnung if hm else "",
+            "menge": pos.menge,
+            "betrag": pos.betrag_gesamt,
+        })
+
+    return render_begleitzettel(
+        absender=absender,
+        empfaenger=empfaenger,
+        abrechnungsmonat=abrechnung.abrechnungsmonat,
+        positionen_summary=positionen_summary,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Antrag Kasse PDF (cover letter to insurance)
+# ---------------------------------------------------------------------------
+
+def render_antrag_kasse(
+    absender: dict,
+    empfaenger: dict,
+    patient_name: str,
+    versichertennummer: str,
+    abrechnungsmonat: str,
+    positionen_summary: list[dict],
+) -> BytesIO:
+    """Render an Antrag-Anschreiben to the Krankenkasse."""
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+
+    y = _draw_header(c, "Antrag auf Kostenuebernahme")
+    y -= BLOCK_GAP
+
+    # Absender (right side)
+    total_w = PAGE_W - MARGIN_L - MARGIN_R
+    left_w = total_w * 0.55
+    right_w = total_w - left_w - 10 * mm
+
+    # Empfaenger left
+    c.setFont(FONT_B, 10)
+    empf_lines = [empfaenger.get("name", "")]
+    if empfaenger.get("addr"):
+        empf_lines.extend(empfaenger["addr"].splitlines())
+    for line in empf_lines:
+        if line.strip():
+            c.drawString(MARGIN_L, y, line.strip())
+            y -= LINE_H
+
+    y -= BLOCK_GAP
+
+    # Absender right block
+    abs_y = PAGE_H - MARGIN_T - HEADER_H - BLOCK_GAP
+    x_right = MARGIN_L + left_w + 10 * mm
+    c.setFont(FONT, 9)
+    for line in (absender.get("name", ""), absender.get("addr", ""), f"IK: {absender.get('ik', '')}"):
+        if line.strip():
+            c.drawString(x_right, abs_y, line.strip())
+            abs_y -= LINE_H
+
+    # Date
+    c.setFont(FONT, 10)
+    c.drawRightString(PAGE_W - MARGIN_R, y, datetime.now().strftime("%d.%m.%Y"))
+    y -= BLOCK_GAP
+
+    # Subject
+    vm = _fmt_versorgungsmonat(abrechnungsmonat)
+    c.setFont(FONT_B, 11)
+    c.drawString(MARGIN_L, y, f"Antrag auf Kostenuebernahme - Pflegehilfsmittel ({vm})")
+    y -= BLOCK_GAP * 1.5
+
+    # Body
+    c.setFont(FONT, 10)
+    body_lines = [
+        "Sehr geehrte Damen und Herren,",
+        "",
+        f"hiermit beantragen wir die Kostenuebernahme fuer die Versorgung mit",
+        f"zum Verbrauch bestimmten Pflegehilfsmitteln gemaess Paragraph 40 SGB XI",
+        f"fuer den Versorgungsmonat {vm}.",
+        "",
+        f"Versicherte/r: {patient_name}",
+        f"Versichertennr.: {versichertennummer}",
+        "",
+        "Folgende Positionen wurden geliefert:",
+    ]
+    for line in body_lines:
+        c.drawString(MARGIN_L, y, line)
+        y -= LINE_H
+
+    y -= LINE_H * 0.5
+
+    # Table
+    if positionen_summary:
+        c.setFont(FONT, 9.5)
+        for pos in positionen_summary:
+            name = pos.get("name", "")
+            menge = pos.get("menge", 0)
+            betrag = pos.get("betrag", 0.0)
+            c.drawString(MARGIN_L + 4 * mm, y, f"- {name}  x{menge}  {eur(betrag)}")
+            y -= LINE_H
+
+    y -= BLOCK_GAP
+    c.setFont(FONT, 10)
+    c.drawString(MARGIN_L, y, "Wir bitten um Genehmigung und Kostenuebernahme.")
+    y -= LINE_H * 2
+    c.drawString(MARGIN_L, y, "Mit freundlichen Gruessen")
+    y -= LINE_H * 2
+    c.drawString(MARGIN_L, y, absender.get("name", ""))
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf
+
+
+def generate_antrag_kasse_pdf(abrechnung: Any, cfg: dict) -> BytesIO:
+    """Generate Antrag Kasse PDF from Abrechnung + cfg."""
+    provider = _provider_from_cfg(cfg)
+    kasse = abrechnung.kasse
+
+    absender = {
+        "name": provider.get("name", ""),
+        "addr": provider.get("addr", ""),
+        "ik": provider.get("ik", ""),
+    }
+    empfaenger = {
+        "name": kasse.name if kasse else "",
+        "addr": kasse.address if kasse else "",
+    }
+
+    positionen_summary = []
+    for pos in (abrechnung.positionen or []):
+        hm = pos.hilfsmittel
+        positionen_summary.append({
+            "name": hm.bezeichnung if hm else "",
+            "menge": pos.menge,
+            "betrag": pos.betrag_gesamt,
+        })
+
+    return render_antrag_kasse(
+        absender=absender,
+        empfaenger=empfaenger,
+        patient_name=abrechnung.patient_name,
+        versichertennummer=abrechnung.versichertennummer,
+        abrechnungsmonat=abrechnung.abrechnungsmonat,
+        positionen_summary=positionen_summary,
+    )
+
+
+def generate_antrag_kasse_for_patient(patient: Any, cfg: dict) -> BytesIO:
+    """Generate a generic Antrag Kasse PDF for a patient (not tied to specific Abrechnung)."""
+    provider = _provider_from_cfg(cfg)
+    kasse = patient.kasse
+
+    absender = {
+        "name": provider.get("name", ""),
+        "addr": provider.get("addr", ""),
+        "ik": provider.get("ik", ""),
+    }
+    empfaenger = {
+        "name": kasse.name if kasse else "",
+        "addr": kasse.address if kasse else "",
+    }
+
+    geb = ""
+    if patient.geburtsdatum:
+        geb = patient.geburtsdatum.strftime("%d.%m.%Y")
+
+    now = datetime.now()
+    monat = now.strftime("%Y-%m")
+
+    return render_antrag_kasse(
+        absender=absender,
+        empfaenger=empfaenger,
+        patient_name=patient.name or "",
+        versichertennummer=patient.versichertennummer or "",
+        abrechnungsmonat=monat,
+        positionen_summary=[],
+    )
+
+
+# ---------------------------------------------------------------------------
+# PDF Combine (merge multiple PDFs)
+# ---------------------------------------------------------------------------
+
+def combine_pdfs(pdf_buffers: list[BytesIO]) -> BytesIO:
+    """Merge multiple PDF BytesIO objects into one."""
+    writer = PdfWriter()
+    for buf in pdf_buffers:
+        buf.seek(0)
+        reader = PdfReader(buf)
+        for page in reader.pages:
+            writer.add_page(page)
+    out = BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out
+
+
+def generate_antrag_komplett_pdf(patient: Any, cfg: dict) -> BytesIO:
+    """Generate combined PDF: Pflegeantrag + Unterschrift + Antrag Kasse."""
+    parts: list[BytesIO] = []
+
+    # 1. Pflegeantrag
+    parts.append(generate_pflegeantrag_pdf(patient))
+
+    # 2. Unterschrift Eins
+    parts.append(generate_unterschrift_pdf(patient))
+
+    # 3. Antrag Kasse
+    parts.append(generate_antrag_kasse_for_patient(patient, cfg))
+
+    return combine_pdfs(parts)
+
+
+# ---------------------------------------------------------------------------
+# PDF text extraction (parse patient data from uploaded PDF)
+# ---------------------------------------------------------------------------
+
+def parse_patient_from_pdf(pdf_bytes: bytes) -> dict:
+    """Try to extract Name, Versichertennr, Geburtsdatum from a PDF."""
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+    except Exception:
+        return {}
+
+    text = ""
+    for page in reader.pages:
+        text += (page.extract_text() or "") + "\n"
+
+    result: dict[str, str] = {}
+
+    # Versichertennummer patterns
+    vsnr_patterns = [
+        r"[A-Z]\d{9}",  # e.g. A123456789
+        r"Versichertennr\.?\s*:?\s*([A-Z0-9]+)",
+        r"Vers\.\s*-?\s*Nr\.?\s*:?\s*([A-Z0-9]+)",
+    ]
+    for pat in vsnr_patterns:
+        m = re.search(pat, text)
+        if m:
+            result["versichertennummer"] = m.group(0) if not m.groups() else m.group(1)
+            break
+
+    # Geburtsdatum
+    geb_patterns = [
+        r"Geburtsdatum\s*:?\s*(\d{2}\.\d{2}\.\d{4})",
+        r"geb\.\s*:?\s*(\d{2}\.\d{2}\.\d{4})",
+        r"geboren\s+am\s*:?\s*(\d{2}\.\d{2}\.\d{4})",
+    ]
+    for pat in geb_patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            result["geburtsdatum"] = m.group(1)
+            break
+
+    # Name
+    name_patterns = [
+        r"Name\s*:?\s*(.+)",
+        r"Patient\s*:?\s*(.+)",
+        r"Versicherte/?r?\s*:?\s*(.+)",
+    ]
+    for pat in name_patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            name_candidate = m.group(1).strip()
+            # Limit to reasonable length and filter out noise
+            if 3 < len(name_candidate) < 100:
+                result["name"] = name_candidate.split("\n")[0].strip()
+                break
+
+    return result

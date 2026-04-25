@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime
+from pathlib import Path as P
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -20,9 +21,15 @@ from app.services import pflegehm_service as svc
 from app.services.pflegehm_edifact import build_edifact
 from app.services.pflegehm_email import send_abrechnung_email
 from app.services.pflegehm_pdf import (
+    combine_pdfs,
+    generate_antrag_kasse_for_patient,
+    generate_antrag_kasse_pdf,
+    generate_antrag_komplett_pdf,
+    generate_begleitzettel_pdf,
     generate_pflegeantrag_pdf,
     generate_unterschrift_pdf,
     make_invoice_pdf_from_abrechnung,
+    parse_patient_from_pdf,
 )
 
 # ---------------------------------------------------------------------------
@@ -112,6 +119,7 @@ class AbrechnungResponse(BaseModel):
     pflegehm_patient_id: int | None = None
     created_by_user_id: int | None = None
     created_at: datetime | None = None
+    leistungsnachweis_path: str | None = None
     positionen: list[PositionResponse] = []
 
     class Config:
@@ -294,6 +302,7 @@ def _abr_to_response(abr: Any) -> dict:
         "pflegehm_patient_id": getattr(abr, "pflegehm_patient_id", None),
         "created_by_user_id": abr.created_by_user_id,
         "created_at": abr.created_at,
+        "leistungsnachweis_path": getattr(abr, "leistungsnachweis_path", None),
         "positionen": positionen,
     }
 
@@ -666,6 +675,349 @@ def save_config(
     db.commit()
     db.refresh(settings)
     return _settings_to_dict(settings)
+
+
+# --- Archiv ---
+
+@admin_router.get("/pflegehilfsmittel/archiv")
+def list_archiv(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """List all patients with their Abrechnung summary (grouped by patient)."""
+    from sqlalchemy import func, select as sa_select
+
+    stmt = (
+        sa_select(
+            PflegehmAbrechnung.pflegehm_patient_id,
+            PflegehmAbrechnung.patient_name,
+            func.count(PflegehmAbrechnung.id).label("count"),
+            func.max(PflegehmAbrechnung.created_at).label("last_abrechnung"),
+            func.sum(PflegehmAbrechnung.gesamt_betrag).label("total_betrag"),
+        )
+        .where(PflegehmAbrechnung.pflegehm_patient_id.isnot(None))
+        .group_by(PflegehmAbrechnung.pflegehm_patient_id, PflegehmAbrechnung.patient_name)
+        .order_by(PflegehmAbrechnung.patient_name)
+    )
+    rows = db.execute(stmt).all()
+    return [
+        {
+            "patient_id": r.pflegehm_patient_id,
+            "patient_name": r.patient_name,
+            "abrechnungen_count": r.count,
+            "last_abrechnung": r.last_abrechnung,
+            "total_betrag": float(r.total_betrag or 0),
+        }
+        for r in rows
+    ]
+
+
+@admin_router.get("/pflegehilfsmittel/archiv/{patient_id}")
+def get_archiv_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Get all Abrechnungen + Dokumente for a patient."""
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+
+    rows = svc.list_abrechnungen(db, patient_id=patient_id)
+    return {
+        "patient": _patient_to_response(patient),
+        "abrechnungen": [_abr_to_response(r) for r in rows],
+    }
+
+
+# --- Begleitzettel ---
+
+@admin_router.get("/pflegehilfsmittel/abrechnungen/{abr_id}/begleitzettel.pdf")
+def get_begleitzettel_pdf(
+    abr_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    abr = svc.get_abrechnung(db, abr_id)
+    if not abr:
+        raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+    pdf_buf = generate_begleitzettel_pdf(abr, cfg)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=begleitzettel_{abr_id}.pdf"},
+    )
+
+
+# --- Antrag Kasse ---
+
+@admin_router.get("/pflegehilfsmittel/abrechnungen/{abr_id}/antrag-kasse.pdf")
+def get_antrag_kasse_pdf(
+    abr_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    abr = svc.get_abrechnung(db, abr_id)
+    if not abr:
+        raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+    pdf_buf = generate_antrag_kasse_pdf(abr, cfg)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=antrag_kasse_{abr_id}.pdf"},
+    )
+
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/antrag-kasse.pdf")
+def get_antrag_kasse_patient_pdf(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    if patient.kasse_id and not patient.kasse:
+        stmt = select(PflegehmPatient).options(
+            joinedload(PflegehmPatient.kasse)
+        ).where(PflegehmPatient.id == patient_id)
+        patient = db.execute(stmt).unique().scalar_one()
+
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+    pdf_buf = generate_antrag_kasse_for_patient(patient, cfg)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=antrag_kasse_patient_{patient_id}.pdf"},
+    )
+
+
+# --- Unterschrift PDFs ---
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/unterschrift-eins.pdf")
+def get_unterschrift_eins_pdf(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    pdf_buf = generate_unterschrift_pdf(patient)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=unterschrift_eins_{patient_id}.pdf"},
+    )
+
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/antrag-komplett.pdf")
+def get_antrag_komplett_pdf(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    if patient.kasse_id and not patient.kasse:
+        stmt = select(PflegehmPatient).options(
+            joinedload(PflegehmPatient.kasse)
+        ).where(PflegehmPatient.id == patient_id)
+        patient = db.execute(stmt).unique().scalar_one()
+
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+    pdf_buf = generate_antrag_komplett_pdf(patient, cfg)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=antrag_komplett_{patient_id}.pdf"},
+    )
+
+
+# --- Antrag Download / Final ---
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/antrag-download")
+def get_antrag_download(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Return the uploaded signed Antrag PDF for a patient."""
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    if not patient.unterschriebener_antrag:
+        raise HTTPException(status_code=404, detail="Kein unterschriebener Antrag vorhanden")
+
+    path = P(patient.unterschriebener_antrag)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Antragsdatei nicht gefunden")
+
+    return Response(
+        content=path.read_bytes(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=antrag_unterschrieben_{patient_id}.pdf"},
+    )
+
+
+@admin_router.get("/pflegehilfsmittel/patients/{patient_id}/antrag-final.pdf")
+def get_antrag_final_pdf(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Combined PDF: generated Pflegeantrag + uploaded signed Antrag."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+    from io import BytesIO
+
+    patient = db.get(PflegehmPatient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient nicht gefunden")
+    if patient.kasse_id and not patient.kasse:
+        stmt = select(PflegehmPatient).options(
+            joinedload(PflegehmPatient.kasse)
+        ).where(PflegehmPatient.id == patient_id)
+        patient = db.execute(stmt).unique().scalar_one()
+
+    parts = [generate_pflegeantrag_pdf(patient)]
+
+    if patient.unterschriebener_antrag:
+        path = P(patient.unterschriebener_antrag)
+        if path.exists():
+            parts.append(BytesIO(path.read_bytes()))
+
+    pdf_buf = combine_pdfs(parts)
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=antrag_final_{patient_id}.pdf"},
+    )
+
+
+# --- Leistungsnachweis Upload / Download ---
+
+@admin_router.post("/pflegehilfsmittel/abrechnungen/{abr_id}/leistungsnachweis-upload")
+async def upload_leistungsnachweis(
+    abr_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Upload a Leistungsnachweis PDF for an Abrechnung."""
+    abr = svc.get_abrechnung(db, abr_id)
+    if not abr:
+        raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
+
+    content_type = (file.content_type or "").lower()
+    filename_lower = (file.filename or "").lower()
+    if "pdf" not in content_type and not filename_lower.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Bitte eine PDF-Datei hochladen.")
+
+    base = P(__file__).resolve().parent.parent / "static" / "pflegehm" / "uploads" / "leistungsnachweise"
+    base.mkdir(parents=True, exist_ok=True)
+    target = base / f"leistungsnachweis_{abr_id}.pdf"
+
+    data = await file.read()
+    target.write_bytes(data)
+
+    abr.leistungsnachweis_path = str(target)
+    db.commit()
+    db.refresh(abr)
+    return {"ok": True, "path": str(target)}
+
+
+@admin_router.get("/pflegehilfsmittel/abrechnungen/{abr_id}/leistungsnachweis.pdf")
+def get_leistungsnachweis_pdf(
+    abr_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    abr = svc.get_abrechnung(db, abr_id)
+    if not abr:
+        raise HTTPException(status_code=404, detail="Abrechnung nicht gefunden")
+    if not abr.leistungsnachweis_path:
+        raise HTTPException(status_code=404, detail="Kein Leistungsnachweis vorhanden")
+
+    path = P(abr.leistungsnachweis_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Leistungsnachweis-Datei nicht gefunden")
+
+    return Response(
+        content=path.read_bytes(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=leistungsnachweis_{abr_id}.pdf"},
+    )
+
+
+# --- PDF Parse (extract patient data from PDF) ---
+
+@admin_router.post("/pflegehilfsmittel/patients/parse-pdf")
+async def parse_pdf_for_patient(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Upload a PDF and try to extract Name, Versichertennr, Geburtsdatum."""
+    data = await file.read()
+    result = parse_patient_from_pdf(data)
+    return result
+
+
+# --- Batch Send (send all open Abrechnungen) ---
+
+@admin_router.post("/pflegehilfsmittel/absenden/send-all")
+def send_all_abrechnungen(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Send ALL open (status=entwurf) Abrechnungen."""
+    rows = svc.list_abrechnungen(db, status_filter="entwurf")
+    if not rows:
+        return {"count": 0, "errors": []}
+
+    settings = _get_settings(db)
+    cfg = _settings_to_cfg(settings)
+
+    sent = 0
+    errors = []
+    for abr in rows:
+        try:
+            edifact_data = build_edifact(abr, cfg=cfg)
+            kasse = abr.kasse
+            if not kasse or not kasse.annahmestelle_email:
+                errors.append({"id": abr.id, "error": "Keine Annahmestellen-Email"})
+                continue
+            if not settings.smtp_server or not settings.email_absender:
+                errors.append({"id": abr.id, "error": "SMTP nicht konfiguriert"})
+                continue
+
+            send_abrechnung_email(
+                settings=settings,
+                edifact_data=edifact_data,
+                empfaenger_email=kasse.annahmestelle_email,
+                empfaenger_ik=kasse.annahmestelle_ik or kasse.ik,
+                abrechnung_id=abr.id,
+            )
+            svc.mark_gesendet(db, abr.id)
+            sent += 1
+        except Exception as e:
+            errors.append({"id": abr.id, "error": str(e)})
+
+    return {"count": sent, "errors": errors}
 
 
 # ===================================================================
