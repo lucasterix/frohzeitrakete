@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  OnboardingForm,
+  emptyPayload,
+  type OnboardingPayload,
+} from "@/components/OnboardingForm";
+
 const DATEV_API_BASE_URL =
   process.env.NEXT_PUBLIC_DATEV_API_BASE_URL ||
   "https://buchhaltung-api.froehlichdienste.de";
@@ -191,6 +197,8 @@ export default function MitarbeiterPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [pattiFilter, setPattiFilter] = useState<"alle" | "verknuepft" | "unverknuepft">("alle");
   const [authExpired, setAuthExpired] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showLinksModal, setShowLinksModal] = useState(false);
 
   const handleApiError = useCallback((e: unknown) => {
     if (e instanceof AuthExpiredError) {
@@ -394,6 +402,18 @@ export default function MitarbeiterPage() {
         <span className="ml-auto text-xs text-slate-500">
           {filtered.length} von {employees.length}
         </span>
+        <button
+          onClick={() => setShowLinksModal(true)}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        >
+          Onboarding-Links
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        >
+          + Neuer Mitarbeiter
+        </button>
       </div>
 
       {info ? (
@@ -481,6 +501,20 @@ export default function MitarbeiterPage() {
           onClose={() => setSelected(null)}
           onChanged={loadAll}
         />
+      ) : null}
+
+      {showAddModal ? (
+        <AddEmployeeModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={async () => {
+            setShowAddModal(false);
+            await loadAll();
+          }}
+        />
+      ) : null}
+
+      {showLinksModal ? (
+        <OnboardingLinksModal onClose={() => setShowLinksModal(false)} />
       ) : null}
     </div>
   );
@@ -1807,6 +1841,282 @@ function SaveBar({ onSave, disabled }: { onSave: () => void; disabled: boolean }
       <button onClick={onSave} disabled={disabled} className={btnPrimary}>
         Änderungen einreihen
       </button>
+    </div>
+  );
+}
+
+// --- Add Employee Modal ---------------------------------------------------
+
+function AddEmployeeModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => Promise<void> | void;
+}) {
+  const [payload, setPayload] = useState<OnboardingPayload>(() => emptyPayload());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ pnr: number; warnings: string[] } | null>(null);
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api<{
+        personnel_number: number;
+        warnings: string[];
+      }>(`/datev/employees`, { method: "POST", json: payload });
+      setDone({ pnr: r.personnel_number, warnings: r.warnings ?? [] });
+      await onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Anlegen fehlgeschlagen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-6">
+      <div className="my-6 w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-900">Neuer Mitarbeiter</h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="px-6 py-5">
+          {done ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Mitarbeiter angelegt — DATEV-Personalnummer{" "}
+                <span className="font-mono font-semibold">{done.pnr}</span>.
+              </div>
+              {done.warnings.length > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                  <div className="mb-1 font-semibold">Hinweise (nicht-blockierend):</div>
+                  <ul className="list-disc pl-5">
+                    {done.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <button
+                onClick={onClose}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Schließen
+              </button>
+            </div>
+          ) : (
+            <OnboardingForm
+              payload={payload}
+              onChange={setPayload}
+              submitLabel="Mitarbeiter anlegen"
+              onSubmit={submit}
+              saving={saving}
+              error={error}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Onboarding Links Modal ----------------------------------------------
+
+type OnboardingLink = {
+  id: number;
+  token: string;
+  label: string | null;
+  note: string | null;
+  state: "open" | "consumed" | "revoked" | "expired";
+  created_at: string;
+  expires_at: string;
+  consumed_at: string | null;
+  consumed_personnel_number: number | null;
+  public_url: string;
+};
+
+function OnboardingLinksModal({ onClose }: { onClose: () => void }) {
+  const [links, setLinks] = useState<OnboardingLink[]>([]);
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await api<OnboardingLink[]>(`/datev/onboarding/links`);
+      setLinks(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+    }
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const create = async () => {
+    setCreating(true);
+    setError("");
+    try {
+      await api<OnboardingLink>(`/datev/onboarding/links`, {
+        method: "POST",
+        json: { label: newLabel || undefined, expires_in_days: 14 },
+      });
+      setNewLabel("");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erstellen fehlgeschlagen");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (id: number) => {
+    if (!confirm("Link wirklich zurückziehen?")) return;
+    try {
+      await api(`/datev/onboarding/links/${id}`, { method: "DELETE" });
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Zurückziehen fehlgeschlagen");
+    }
+  };
+
+  const copy = async (link: OnboardingLink) => {
+    try {
+      await navigator.clipboard.writeText(link.public_url);
+      setCopied(link.id);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-6">
+      <div className="my-6 w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Onboarding-Links</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Einmal-Link für neue Mitarbeiter. Sobald jemand das Formular abschickt,
+              wird der Link unbrauchbar.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <label className="block flex-1">
+              <span className="mb-1 block text-xs font-medium text-slate-700">
+                Beschriftung (optional, intern)
+              </span>
+              <input
+                type="text"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="z.B. Anna Müller (Pflege Göttingen)"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+              />
+            </label>
+            <button
+              onClick={create}
+              disabled={creating}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {creating ? "…" : "+ Link erzeugen"}
+            </button>
+          </div>
+
+          {error ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              {error}
+            </div>
+          ) : null}
+
+          {links.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              Noch keine Onboarding-Links erzeugt.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {links.map((l) => {
+                const stateLabels = {
+                  open: { text: "offen", cls: "bg-emerald-100 text-emerald-800" },
+                  consumed: { text: "eingelöst", cls: "bg-blue-100 text-blue-800" },
+                  revoked: { text: "zurückgezogen", cls: "bg-slate-200 text-slate-700" },
+                  expired: { text: "abgelaufen", cls: "bg-amber-100 text-amber-800" },
+                }[l.state];
+                return (
+                  <div
+                    key={l.id}
+                    className="rounded-xl border border-slate-200 bg-white p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateLabels.cls}`}
+                          >
+                            {stateLabels.text}
+                          </span>
+                          {l.label ? (
+                            <span className="text-sm font-medium text-slate-900">
+                              {l.label}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 truncate font-mono text-xs text-slate-600">
+                          {l.public_url}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          erstellt {formatDateTime(l.created_at)} · gültig bis{" "}
+                          {formatDate(l.expires_at)}
+                          {l.consumed_personnel_number
+                            ? ` · eingelöst → PersNr ${l.consumed_personnel_number}`
+                            : ""}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {l.state === "open" ? (
+                          <>
+                            <button
+                              onClick={() => copy(l)}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              {copied === l.id ? "✓ Kopiert" : "Kopieren"}
+                            </button>
+                            <button
+                              onClick={() => revoke(l.id)}
+                              className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                            >
+                              Zurückziehen
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
