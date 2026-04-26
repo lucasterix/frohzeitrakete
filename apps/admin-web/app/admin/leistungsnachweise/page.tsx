@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LeistungsnachweisPatient,
   User,
@@ -12,6 +12,7 @@ import {
   setLeistungsnachweisOfficeProcessed,
 } from "@/lib/api";
 import { useRequireOffice } from "@/lib/use-require-role";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 import { AlertCircleIcon, SparkleIcon } from "@/components/icons";
 
 const MONTH_NAMES = [
@@ -44,31 +45,27 @@ export default function LeistungsnachweisePage() {
   const [rows, setRows] = useState<UserRow[]>([]);
   const [error, setError] = useState("");
 
+  const { data: allUsers = [] } = useCachedFetch<User[]>(
+    authorized ? "leistungsnachweise/users" : null,
+    getUsers
+  );
+
+  const caretakers = useMemo(
+    () => allUsers.filter((u) => u.role === "caretaker"),
+    [allUsers]
+  );
+
   useEffect(() => {
-    if (!authorized) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const users = await getUsers();
-        const caretakers = users.filter((u) => u.role === "caretaker");
-        if (!cancelled) {
-          setRows(
-            caretakers.map((u) => ({
-              user: u,
-              patients: null,
-              loading: false,
-              error: null,
-            }))
-          );
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Fehler beim Laden");
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [authorized]);
+    if (caretakers.length === 0) return;
+    setRows(
+      caretakers.map((u) => ({
+        user: u,
+        patients: null,
+        loading: false,
+        error: null,
+      }))
+    );
+  }, [caretakers]);
 
   async function loadPatientsFor(userId: number) {
     setRows((rows) =>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   MailEntryRecord,
   MailIntakeStats,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { useRequireOffice } from "@/lib/use-require-role";
 import { RefreshIcon } from "@/components/icons";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 
 // ── Label maps ──────────────────────────────────────────────────────────
 
@@ -112,17 +113,45 @@ function openSinceColor(days: number): string {
 
 export default function PosteingangPage() {
   const { user: me, authorized, isLoading } = useRequireOffice();
-  const [booting, setBooting] = useState(true);
-  const [entries, setEntries] = useState<MailEntryRecord[]>([]);
-  const [stats, setStats] = useState<MailIntakeStats | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // Filters
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+
+  // SWR-cached data
+  const {
+    data: entriesData,
+    isLoading: entriesLoading,
+    mutate: mutateEntries,
+  } = useCachedFetch<{ items: MailEntryRecord[]; stats: MailIntakeStats | null }>(
+    authorized
+      ? `posteingang/entries?d=${departmentFilter}&s=${statusFilter}&p=${priorityFilter}`
+      : null,
+    async () => {
+      const data = await getMailEntries({
+        department: departmentFilter || undefined,
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+        stats: true,
+      });
+      if (data && typeof data === "object" && "items" in data) {
+        return { items: data.items, stats: data.stats };
+      }
+      return { items: data as MailEntryRecord[], stats: null };
+    }
+  );
+
+  const entries = entriesData?.items ?? [];
+  const stats = entriesData?.stats ?? null;
+
+  const { data: users = [], isLoading: usersLoading } = useCachedFetch<User[]>(
+    authorized ? "posteingang/users" : null,
+    () => getUsers().then((u) => u.filter((x) => x.is_active))
+  );
+
+  const loading = entriesLoading || usersLoading;
 
   // Editing
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -158,38 +187,6 @@ export default function PosteingangPage() {
   // AI classify
   const [classifyingId, setClassifyingId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [data, usersData] = await Promise.all([
-        getMailEntries({
-          department: departmentFilter || undefined,
-          status: statusFilter || undefined,
-          priority: priorityFilter || undefined,
-          stats: true,
-        }),
-        getUsers(),
-      ]);
-      if (data && typeof data === "object" && "items" in data) {
-        setEntries(data.items);
-        setStats(data.stats);
-      } else {
-        setEntries(data as MailEntryRecord[]);
-        setStats(null);
-      }
-      setUsers(usersData.filter((u) => u.is_active));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
-    } finally {
-      setLoading(false);
-      setBooting(false);
-    }
-  }, [departmentFilter, statusFilter, priorityFilter]);
-
-  useEffect(() => {
-    if (authorized) load();
-  }, [authorized, load]);
 
   // ── Create Step 1: Create entry + upload scan ──────────────────────
 
@@ -265,7 +262,7 @@ export default function PosteingangPage() {
       setNewStep(1);
       if (newScanFileRef.current) newScanFileRef.current.value = "";
       setShowNew(false);
-      load();
+      mutateEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Speichern");
     } finally {
@@ -315,7 +312,7 @@ export default function PosteingangPage() {
         handler_note: editNote || undefined,
       });
       setEditingId(null);
-      load();
+      mutateEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Speichern");
     } finally {
@@ -329,7 +326,7 @@ export default function PosteingangPage() {
     setUploadingId(id);
     try {
       await uploadMailScan(id, file);
-      load();
+      mutateEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload fehlgeschlagen");
     } finally {
@@ -343,7 +340,7 @@ export default function PosteingangPage() {
     setClassifyingId(id);
     try {
       await classifyMailEntry(id);
-      load();
+      mutateEntries();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Klassifizierung fehlgeschlagen");
     } finally {
@@ -363,7 +360,7 @@ export default function PosteingangPage() {
 
   // ── Render ──────────────────────────────────────────────────────────
 
-  if (isLoading || !authorized || booting) {
+  if (isLoading || !authorized || (entriesLoading && !entriesData)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />
@@ -383,7 +380,7 @@ export default function PosteingangPage() {
             {showNew ? "Abbrechen" : "Neuer Brief"}
           </button>
           <button
-            onClick={load}
+            onClick={() => mutateEntries()}
             disabled={loading}
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >

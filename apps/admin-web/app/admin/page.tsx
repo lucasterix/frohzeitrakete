@@ -16,6 +16,7 @@ import {
   UsersIcon,
 } from "@/components/icons";
 import { useRequireAdmin } from "@/lib/use-require-role";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.froehlichdienste.de";
@@ -35,11 +36,16 @@ type HealthState = "loading" | "ready" | "down";
 export default function AdminDashboardPage() {
   const { user: currentUser, isLoading: authLoading, authorized } = useRequireAdmin();
 
-  const [booting, setBooting] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    data: stats,
+    error: statsError,
+    isLoading: statsLoading,
+    mutate: mutateStats,
+  } = useCachedFetch<DashboardStats>(
+    authorized ? "dashboard/stats" : null,
+    getDashboardStats
+  );
 
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [pageError, setPageError] = useState("");
   const [health, setHealth] = useState<HealthState>("loading");
 
   const checkHealth = useCallback(async () => {
@@ -53,33 +59,17 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  const loadDashboard = useCallback(async () => {
-    setRefreshing(true);
-    setPageError("");
-
-    try {
-      const [dashboardStats] = await Promise.all([
-        getDashboardStats(),
-        checkHealth(),
-      ]);
-      setStats(dashboardStats);
-    } catch (error) {
-      setPageError(
-        error instanceof Error
-          ? error.message
-          : "Fehler beim Laden des Dashboards"
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }, [checkHealth]);
-
   useEffect(() => {
     if (!authorized) return;
-    loadDashboard().finally(() => setBooting(false));
-  }, [authorized, loadDashboard]);
+    checkHealth();
+  }, [authorized, checkHealth]);
 
-  if (booting) {
+  const handleRefresh = useCallback(() => {
+    mutateStats();
+    checkHealth();
+  }, [mutateStats, checkHealth]);
+
+  if (authLoading || statsLoading) {
     return <DashboardSkeleton />;
   }
 
@@ -103,14 +93,11 @@ export default function AdminDashboardPage() {
         </div>
 
         <button
-          onClick={loadDashboard}
-          disabled={refreshing}
-          className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={handleRefresh}
+          className="inline-flex items-center gap-2 self-start rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
         >
-          <RefreshIcon
-            className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-          />
-          {refreshing ? "Laedt ..." : "Aktualisieren"}
+          <RefreshIcon className="h-4 w-4" />
+          Aktualisieren
         </button>
       </div>
 
@@ -124,10 +111,12 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
-      {pageError && (
+      {statsError && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircleIcon className="h-5 w-5 shrink-0" />
-          {pageError}
+          {statsError instanceof Error
+            ? statsError.message
+            : "Fehler beim Laden des Dashboards"}
         </div>
       )}
 

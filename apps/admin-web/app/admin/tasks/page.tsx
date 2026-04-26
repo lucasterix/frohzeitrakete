@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AdminCallTask,
   AdminCallTaskKind,
@@ -9,6 +9,7 @@ import {
   markOfficeCallDone,
 } from "@/lib/api";
 import { useRequireOffice } from "@/lib/use-require-role";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -57,33 +58,19 @@ function formatDate(value: string | null): string {
 
 export default function AdminTasksPage() {
   const { user, isLoading: authLoading, authorized } = useRequireOffice();
-  const [booting, setBooting] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [tasks, setTasks] = useState<AdminCallTask[]>([]);
+  const {
+    data: tasks = [],
+    error: fetchError,
+    isLoading: dataLoading,
+    mutate: mutateTasks,
+  } = useCachedFetch<AdminCallTask[]>(
+    authorized ? "tasks" : null,
+    getAdminCallTasks
+  );
   const [filter, setFilter] = useState<FilterKind>("all");
   const [pageError, setPageError] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [flash, setFlash] = useState("");
-
-  const loadData = useCallback(async () => {
-    setRefreshing(true);
-    setPageError("");
-    try {
-      const data = await getAdminCallTasks();
-      setTasks(data);
-    } catch (error) {
-      setPageError(
-        error instanceof Error ? error.message : "Fehler beim Laden der Aufgaben"
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!authorized) return;
-    loadData().finally(() => setBooting(false));
-  }, [authorized, loadData]);
 
   const filteredTasks = useMemo(() => {
     if (filter === "all") return tasks;
@@ -126,7 +113,7 @@ export default function AdminTasksPage() {
           } erfasst.`
         );
       }
-      await loadData();
+      await mutateTasks();
     } catch (error) {
       setPageError(
         error instanceof Error
@@ -138,7 +125,7 @@ export default function AdminTasksPage() {
     }
   }
 
-  if (booting) {
+  if (authLoading || dataLoading) {
     return (
       <div className="space-y-6">
         <div className="h-32 animate-pulse rounded-3xl bg-white/60" />
@@ -171,22 +158,19 @@ export default function AdminTasksPage() {
             </p>
           </div>
           <button
-            onClick={loadData}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => mutateTasks()}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
           >
-            <RefreshIcon
-              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-            />
+            <RefreshIcon className="h-4 w-4" />
             Aktualisieren
           </button>
         </div>
       </div>
 
-      {pageError && (
+      {(pageError || fetchError) && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircleIcon className="h-5 w-5 shrink-0" />
-          {pageError}
+          {pageError || (fetchError instanceof Error ? fetchError.message : "Fehler beim Laden der Aufgaben")}
         </div>
       )}
       {flash && (

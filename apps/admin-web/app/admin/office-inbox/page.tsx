@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AdminAnnouncement,
   HrRequestRecord,
@@ -17,6 +17,7 @@ import {
   resolveVacationRequest,
 } from "@/lib/api";
 import { useRequireOffice } from "@/lib/use-require-role";
+import { useCachedFetch } from "@/lib/use-cached-fetch";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -60,45 +61,40 @@ function formatDateTime(iso: string | null): string {
 
 export default function OfficeInboxPage() {
   const { user: me, isLoading: authLoading, authorized } = useRequireOffice();
-  const [booting, setBooting] = useState(true);
   const [tab, setTab] = useState<Tab>("vacation");
 
-  const [vacations, setVacations] = useState<VacationRequest[]>([]);
-  const [sickLeaves, setSickLeaves] = useState<SickLeave[]>([]);
-  const [hrRequests, setHrRequests] = useState<HrRequestRecord[]>([]);
-  const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
+  const { data: vacations = [], mutate: mutateVacations } = useCachedFetch<VacationRequest[]>(
+    authorized ? "office-inbox/vacations" : null,
+    getVacationRequests
+  );
+  const { data: sickLeaves = [], mutate: mutateSick } = useCachedFetch<SickLeave[]>(
+    authorized ? "office-inbox/sick" : null,
+    getSickLeaves
+  );
+  const { data: hrRequests = [], mutate: mutateHr } = useCachedFetch<HrRequestRecord[]>(
+    authorized ? "office-inbox/hr" : null,
+    getHrRequests
+  );
+  const { data: announcements = [], mutate: mutateAnn } = useCachedFetch<AdminAnnouncement[]>(
+    authorized ? "office-inbox/announcements" : null,
+    getAnnouncements
+  );
 
   const [kuerzel, setKuerzel] = useState("");
   const [flash, setFlash] = useState("");
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const loadAll = useCallback(async () => {
-    setError("");
-    try {
-      const [v, s, h, a] = await Promise.all([
-        getVacationRequests(),
-        getSickLeaves(),
-        getHrRequests(),
-        getAnnouncements(),
-      ]);
-      setVacations(v);
-      setSickLeaves(s);
-      setHrRequests(h);
-      setAnnouncements(a);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Fehler beim Laden");
-    }
-  }, []);
+  function handleRefresh() {
+    mutateVacations();
+    mutateSick();
+    mutateHr();
+    mutateAnn();
+  }
 
   useEffect(() => {
     if (me) setKuerzel(me.full_name.split(" ")[0] ?? "");
   }, [me]);
-
-  useEffect(() => {
-    if (!authorized) return;
-    loadAll().finally(() => setBooting(false));
-  }, [authorized, loadAll]);
 
   async function handleVacationResolve(
     row: VacationRequest,
@@ -147,7 +143,7 @@ export default function OfficeInboxPage() {
         handler_kuerzel: kuerzel,
       });
       setFlash(`Urlaubsantrag ${row.id} bearbeitet.`);
-      await loadAll();
+      await mutateVacations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -173,7 +169,7 @@ export default function OfficeInboxPage() {
         handler_kuerzel: kuerzel,
       });
       setFlash(`Krankmeldung ${row.id} als gesichtet markiert.`);
-      await loadAll();
+      await mutateSick();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -203,7 +199,7 @@ export default function OfficeInboxPage() {
         handler_kuerzel: kuerzel,
       });
       setFlash(`HR-Anfrage ${row.id} bearbeitet.`);
-      await loadAll();
+      await mutateHr();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -229,7 +225,7 @@ export default function OfficeInboxPage() {
         visible_until: new Date(`${until}T23:59:59`).toISOString(),
       });
       setFlash("Ankündigung veröffentlicht.");
-      await loadAll();
+      await mutateAnn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     }
@@ -240,13 +236,13 @@ export default function OfficeInboxPage() {
     try {
       await deleteAnnouncement(id);
       setFlash("Ankündigung gelöscht.");
-      await loadAll();
+      await mutateAnn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     }
   }
 
-  if (booting) {
+  if (authLoading) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 
@@ -277,7 +273,7 @@ export default function OfficeInboxPage() {
               />
             </label>
             <button
-              onClick={loadAll}
+              onClick={handleRefresh}
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
               <RefreshIcon className="h-4 w-4" />
