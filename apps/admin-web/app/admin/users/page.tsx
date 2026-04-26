@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { getUsers, runSheetsSync } from "@/lib/api";
+import { User, getUsers, runSheetsSync } from "@/lib/api";
 import { useRequireAdmin } from "@/lib/use-require-role";
 import { AlertCircleIcon, RefreshIcon, UsersIcon } from "@/components/icons";
 
