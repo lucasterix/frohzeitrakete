@@ -122,11 +122,12 @@ export default function UserForm({ onUserCreated }: UserFormProps) {
             onChange={(e) => updateField("role", e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
           >
-            <option value="caretaker">caretaker</option>
-            <option value="buero">buero</option>
-            <option value="standortleiter">standortleiter</option>
-            <option value="buchhaltung">buchhaltung</option>
-            <option value="admin">admin</option>
+            <option value="caretaker">Betreuungskraft</option>
+            <option value="buero">Büro</option>
+            <option value="standortleiter">Standortleiter</option>
+            <option value="pflegehilfsmittel">Pflegehilfsmittel</option>
+            <option value="buchhaltung">Buchhaltung</option>
+            <option value="admin">Admin</option>
           </select>
         </label>
 

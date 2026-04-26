@@ -28,20 +28,19 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/admin", label: "Dashboard", Icon: DashboardIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin", label: "Dashboard", Icon: DashboardIcon, access: "Alle" },
   { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon, access: "Alle" },
   { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon, access: "Alle" },
-  { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon, access: "Alle" },
   { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon, access: "Alle" },
   { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon, access: "Alle" },
   { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon, access: "Alle" },
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon, access: "Alle" },
-  { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon, access: "Alle" },
+  { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon, roles: ["admin", "pflegehilfsmittel"], access: "Admin, PHM" },
   { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon, access: "Alle" },
   { href: "/admin/posteingang", label: "Posteingang", Icon: InboxIcon, access: "Alle" },
-  { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon, access: "Alle" },
+  { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"], access: "Admin, Buchhaltung" },

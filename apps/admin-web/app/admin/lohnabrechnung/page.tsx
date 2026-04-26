@@ -116,11 +116,7 @@ export default function LohnabrechnungPage() {
     (async () => {
       try {
         const meData = await getMe();
-        if (
-          meData.role !== "admin" &&
-          meData.role !== "buero" &&
-          meData.role !== "standortleiter"
-        ) {
+        if (meData.role !== "admin") {
           router.replace("/user");
           return;
         }

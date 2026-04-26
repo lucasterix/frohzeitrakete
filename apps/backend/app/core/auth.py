@@ -81,7 +81,7 @@ def require_office_user(
     operativen Admin-Web-Seiten (Aufgaben, Office Inbox, Vertretungen,
     Neuaufnahmen, Leistungsnachweise, VP-Anträge, Verträge), dürfen
     aber keine User anlegen/löschen."""
-    if current_user.role not in ("admin", "buero", "standortleiter"):
+    if current_user.role not in ("admin", "buero", "standortleiter", "pflegehilfsmittel", "buchhaltung"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Keine Büro-Berechtigung",

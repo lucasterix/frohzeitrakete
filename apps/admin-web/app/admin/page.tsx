@@ -145,16 +145,16 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Backend-Status"
-          value={health === "ready" ? "Online" : health === "down" ? "Down" : "--"}
-          subtext={health === "ready" ? "DB erreichbar" : "kein /health/ready"}
+          value={health === "ready" ? "Online" : health === "down" ? "OFFLINE" : "--"}
+          subtext={health === "ready" ? "DB erreichbar" : "⚠️ IT anrufen: Lucas oder Daniel!"}
           tone={health === "ready" ? "emerald" : "red"}
           Icon={ShieldIcon}
           stringValue
         />
         <KpiCard
           label="App-Status"
-          value={health === "ready" ? "Online" : health === "down" ? "Down" : "--"}
-          subtext="Frontend erreichbar"
+          value={health === "ready" ? "Online" : health === "down" ? "OFFLINE" : "--"}
+          subtext={health === "ready" ? "Frontend erreichbar" : "⚠️ IT anrufen: Lucas oder Daniel!"}
           tone={health === "ready" ? "emerald" : "red"}
           Icon={ShieldIcon}
           stringValue
@@ -320,6 +320,58 @@ export default function AdminDashboardPage() {
             </ul>
           )}
         </section>
+      </div>
+
+      {/* Schnellzugriffe */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Link
+          href="/admin/vertretungen"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
+            <UsersIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Vertretungen</p>
+            <p className="text-xs text-slate-500">Vertretungsplan verwalten</p>
+          </div>
+        </Link>
+        <Link
+          href="/admin/lohnabrechnung"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-purple-50 text-purple-600">
+            <SparkleIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Lohnabrechnung melden</p>
+            <p className="text-xs text-slate-500">Krank, Vorschuss, Rückfrage</p>
+          </div>
+        </Link>
+        <Link
+          href="/admin/posteingang"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600">
+            <InboxIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Posteingang</p>
+            <p className="text-xs text-slate-500">Briefe einscannen & zuweisen</p>
+          </div>
+        </Link>
+        <Link
+          href="/admin/budget-inquiries"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
+            <ShieldIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Budgetabfragen</p>
+            <p className="text-xs text-slate-500">§45b Anfragen erstellen</p>
+          </div>
+        </Link>
       </div>
     </div>
   );
