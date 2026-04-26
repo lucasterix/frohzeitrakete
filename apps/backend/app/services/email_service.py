@@ -254,6 +254,80 @@ def send_applicant_trial_work(name: str, email: str, position: str, trial_date: 
     return send_email(email, subject, html)
 
 
+def send_applicant_criminal_record_request(name: str, email: str, position: str) -> bool:
+    subject = f"Erweitertes Führungszeugnis benötigt – {position}"
+    html = f"""\
+<!DOCTYPE html><html><head>{MAIL_STYLE}</head><body>
+<div class="wrap">
+  <div class="header">
+    <h1>Führungszeugnis benötigt</h1>
+    <div class="sub">Fröhlich Dienste GmbH · Personalbereich</div>
+  </div>
+  <div class="body">
+    <p>Liebe/r {name},</p>
+    <p>für Ihre Einstellung als <strong>{position}</strong> benötigen wir ein
+    <strong>erweitertes Führungszeugnis</strong> (Belegart OE).</p>
+    <div class="highlight">
+      <strong>So beantragen Sie es:</strong><br>
+      1. Gehen Sie zu Ihrem zuständigen Bürgeramt/Einwohnermeldeamt<br>
+      2. Beantragen Sie ein <em>erweitertes Führungszeugnis (Belegart OE)</em><br>
+      3. Kosten: ca. 13 €<br>
+      4. Bearbeitungszeit: ca. 2–3 Wochen
+    </div>
+    <p>Sobald Sie das Führungszeugnis erhalten haben, senden Sie es bitte
+    per Post oder E-Mail an uns. Wir können mit der Vertragserstellung
+    beginnen, sobald es vorliegt.</p>
+    <p>Bei Fragen helfen wir Ihnen gerne weiter.</p>
+    <p style="margin-top:24px">Herzliche Grüße,<br>
+    <strong>Ihr Personalteam</strong><br>
+    Fröhlich Dienste GmbH</p>
+  </div>
+  {MAIL_FOOTER}
+</div>
+</body></html>"""
+    return send_email(email, subject, html)
+
+
+def send_applicant_contract_info(name: str, email: str, position: str, start_date: str = "", note: str = "") -> bool:
+    subject = f"Ihr Arbeitsvertrag – {position} bei Fröhlich Dienste"
+    start_block = f"<br><strong>Geplanter Arbeitsbeginn:</strong> {start_date}" if start_date else ""
+    note_block = f'<p style="margin-top:12px">{note}</p>' if note else ""
+    html = f"""\
+<!DOCTYPE html><html><head>{MAIL_STYLE}</head><body>
+<div class="wrap">
+  <div class="header" style="background:linear-gradient(135deg,#0891b2 0%,#0e7490 100%)">
+    <h1>Ihr Arbeitsvertrag</h1>
+    <div class="sub">Fröhlich Dienste GmbH · Personalbereich</div>
+  </div>
+  <div class="body">
+    <p>Liebe/r {name},</p>
+    <p>wir freuen uns, Ihnen Ihren Arbeitsvertrag als <strong>{position}</strong>
+    bei der Fröhlich Dienste GmbH zukommen zu lassen!</p>
+    <div class="highlight" style="border-left-color:#0891b2">
+      <strong style="color:#0891b2">Vertrag beiliegend</strong><br>
+      Bitte lesen Sie den Vertrag sorgfältig durch und senden Sie ihn
+      unterschrieben an uns zurück.{start_block}
+    </div>
+    {note_block}
+    <p><strong>Bitte mitbringen am ersten Arbeitstag:</strong></p>
+    <ul style="padding-left:20px;margin:8px 0 16px">
+      <li>Personalausweis oder Reisepass</li>
+      <li>Sozialversicherungsausweis</li>
+      <li>Bankverbindung (IBAN)</li>
+      <li>Steuer-ID</li>
+      <li>Erweitertes Führungszeugnis (falls noch nicht eingereicht)</li>
+    </ul>
+    <p>Wir freuen uns auf die Zusammenarbeit!</p>
+    <p style="margin-top:24px">Herzliche Grüße,<br>
+    <strong>Ihr Personalteam</strong><br>
+    Fröhlich Dienste GmbH</p>
+  </div>
+  {MAIL_FOOTER}
+</div>
+</body></html>"""
+    return send_email(email, subject, html)
+
+
 def send_applicant_status_update(
     name: str, email: str, position: str, status_label: str, message: str
 ) -> bool:

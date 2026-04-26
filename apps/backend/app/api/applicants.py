@@ -28,6 +28,8 @@ from app.models.applicant import Applicant
 from app.models.user import User
 from app.services.email_service import (
     send_applicant_confirmation,
+    send_applicant_contract_info,
+    send_applicant_criminal_record_request,
     send_applicant_invitation,
     send_applicant_offer,
     send_applicant_rejection,
@@ -398,6 +400,23 @@ def send_applicant_email(
         if success:
             applicant.status = "probearbeit"
             applicant.trial_work_date = datetime.fromisoformat(body.trial_date)
+
+    elif template == "criminal_record":
+        success = send_applicant_criminal_record_request(
+            applicant.name, applicant.email, applicant.position
+        )
+        if success:
+            applicant.status = "fuehrungszeugnis"
+            applicant.criminal_record_requested_at = now
+
+    elif template == "contract":
+        success = send_applicant_contract_info(
+            applicant.name, applicant.email, applicant.position,
+            applicant.start_date or "", body.note or ""
+        )
+        if success:
+            applicant.status = "vertrag"
+            applicant.contract_sent_at = now
 
     elif template == "status_update":
         if not body.message:

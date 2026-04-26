@@ -2138,7 +2138,7 @@ export function getApplicantResumeUrl(id: number): string {
 
 export async function sendApplicantEmail(
   id: number,
-  template: "confirmation" | "invitation" | "rejection" | "offer" | "trial_work" | "status_update",
+  template: "confirmation" | "invitation" | "rejection" | "offer" | "trial_work" | "criminal_record" | "contract" | "status_update",
   payload?: { interview_date?: string; trial_date?: string; note?: string; status_label?: string; message?: string }
 ): Promise<ApplicantRecord> {
   const response = await fetchWithRefresh(
