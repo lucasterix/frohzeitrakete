@@ -9,6 +9,7 @@ import {
   getMe,
 } from "@/lib/api";
 import Link from "next/link";
+import { getDailyQuote } from "@/lib/daily-quotes";
 import {
   AlertCircleIcon,
   InboxIcon,
@@ -135,42 +136,14 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Tagesspruch */}
-      {(() => {
-        const quotes = [
-          "Ein guter Tag beginnt mit einem Lächeln und einem klaren Plan.",
-          "Gemeinsam schaffen wir mehr als alleine — Teamwork macht den Unterschied.",
-          "Jeder erledigte Vorgang ist ein kleiner Sieg für unsere Patienten.",
-          "Ordnung im Büro, Klarheit im Kopf — du rockst das!",
-          "Auch kleine Schritte bringen uns dem Ziel näher.",
-          "Deine Arbeit gibt anderen Menschen Sicherheit und Halt.",
-          "Kaffee ist gut, aber dein Engagement ist besser.",
-          "Heute ist ein perfekter Tag, um etwas Großartiges zu erledigen.",
-          "Hinter jedem Formular steckt ein Mensch, dem wir helfen.",
-          "Du bist das Rückgrat des Teams — danke, dass du da bist.",
-          "Struktur schafft Freiheit — und du schaffst Struktur.",
-          "Ein Anruf, eine Lösung — manchmal ist es so einfach.",
-          "Wer den Überblick behält, hat schon halb gewonnen.",
-          "Pflege beginnt im Büro — mit deiner Arbeit.",
-          "Jeder Tag ist eine neue Chance, etwas zu bewegen.",
-          "Das Büro läuft, weil du läufst. Danke dafür!",
-          "Geduld und Genauigkeit sind deine Superkräfte.",
-          "Zusammen sind wir nicht nur ein Team — wir sind eine Familie.",
-          "Mach dir bewusst: deine Arbeit hat echten Impact.",
-          "Atme durch, priorisiere, und leg los — du schaffst das.",
-        ];
-        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-        const quote = quotes[dayOfYear % quotes.length];
-        return (
-          <div className="rounded-2xl border border-brand-200 bg-brand-50/50 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-              ✨ Tagesspruch
-            </p>
-            <p className="mt-1 text-sm font-medium leading-relaxed text-slate-800">
-              {quote}
-            </p>
-          </div>
-        );
-      })()}
+      <div className="rounded-2xl border border-brand-200 bg-brand-50/50 px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
+          ✨ Tagesspruch
+        </p>
+        <p className="mt-1 text-sm font-medium leading-relaxed text-slate-800">
+          {getDailyQuote()}
+        </p>
+      </div>
 
       {pageError && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
