@@ -2005,6 +2005,26 @@ export type ApplicantRecord = {
   interview_date: string | null;
   rejection_reason: string | null;
   resume_path: string | null;
+  desired_hours: number | null;
+  desired_location: string | null;
+  desired_role: string | null;
+  available_from: string | null;
+  has_drivers_license: boolean | null;
+  has_experience: boolean | null;
+  experience_note: string | null;
+  trial_work_date: string | null;
+  criminal_record_requested_at: string | null;
+  criminal_record_received_at: string | null;
+  hired_at: string | null;
+  hired_hours: number | null;
+  hired_location: string | null;
+  hired_role: string | null;
+  contract_sent_at: string | null;
+  start_date: string | null;
+  confirmation_sent_at: string | null;
+  invitation_sent_at: string | null;
+  rejection_sent_at: string | null;
+  offer_sent_at: string | null;
   created_by_user_id: number;
   created_at: string | null;
   updated_at: string | null;
@@ -2026,6 +2046,21 @@ export async function getApplicants(
   return response.json();
 }
 
+export type ApplicantStats = {
+  total: number;
+  by_status: Record<string, number>;
+};
+
+export async function getApplicantStats(): Promise<ApplicantStats> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/applicants/stats`, {
+    headers: buildHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Fehler beim Laden der Statistiken"));
+  }
+  return response.json();
+}
+
 export async function createApplicant(payload: {
   name: string;
   email: string;
@@ -2033,6 +2068,13 @@ export async function createApplicant(payload: {
   position: string;
   source?: string | null;
   note?: string | null;
+  desired_hours?: number | null;
+  desired_location?: string | null;
+  desired_role?: string | null;
+  available_from?: string | null;
+  has_drivers_license?: boolean | null;
+  has_experience?: boolean | null;
+  experience_note?: string | null;
   send_confirmation?: boolean;
 }): Promise<ApplicantRecord> {
   const response = await fetchWithRefresh(`${API_BASE_URL}/admin/applicants`, {
@@ -2048,18 +2090,7 @@ export async function createApplicant(payload: {
 
 export async function updateApplicant(
   id: number,
-  payload: Partial<{
-    name: string;
-    email: string;
-    phone: string | null;
-    position: string;
-    source: string | null;
-    status: string;
-    note: string | null;
-    handler_user_id: number | null;
-    interview_date: string | null;
-    rejection_reason: string | null;
-  }>
+  payload: Partial<Omit<ApplicantRecord, "id" | "created_at" | "updated_at" | "created_by_user_id" | "resume_path" | "confirmation_sent_at" | "invitation_sent_at" | "rejection_sent_at" | "offer_sent_at">>
 ): Promise<ApplicantRecord> {
   const response = await fetchWithRefresh(
     `${API_BASE_URL}/admin/applicants/${id}`,
@@ -2107,8 +2138,8 @@ export function getApplicantResumeUrl(id: number): string {
 
 export async function sendApplicantEmail(
   id: number,
-  template: "confirmation" | "invitation" | "rejection" | "offer",
-  payload?: { interview_date?: string; note?: string }
+  template: "confirmation" | "invitation" | "rejection" | "offer" | "trial_work" | "status_update",
+  payload?: { interview_date?: string; trial_date?: string; note?: string; status_label?: string; message?: string }
 ): Promise<ApplicantRecord> {
   const response = await fetchWithRefresh(
     `${API_BASE_URL}/admin/applicants/${id}/email/${template}`,

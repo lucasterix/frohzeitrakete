@@ -1,13 +1,15 @@
 """Bewerbertool (Applicant Tracking) endpoints.
 
 Admin endpoints:
-- GET    /admin/applicants              — List with filters
-- POST   /admin/applicants              — Create applicant
-- PATCH  /admin/applicants/{id}         — Update applicant (status, notes, handler)
-- DELETE /admin/applicants/{id}         — Delete applicant
-- POST   /admin/applicants/{id}/upload  — Upload resume
-- GET    /admin/applicants/{id}/resume  — Download resume
-- POST   /admin/applicants/{id}/email/{template} — Send email
+- GET    /admin/applicants                          — List with filters
+- GET    /admin/applicants/stats                    — Pipeline statistics
+- POST   /admin/applicants                          — Create applicant
+- GET    /admin/applicants/{id}                     — Get single applicant
+- PATCH  /admin/applicants/{id}                     — Update applicant
+- DELETE /admin/applicants/{id}                     — Delete applicant
+- POST   /admin/applicants/{id}/upload              — Upload resume
+- GET    /admin/applicants/{id}/resume              — Download resume
+- POST   /admin/applicants/{id}/email/{template}    — Send email
 """
 
 import os
@@ -17,7 +19,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_office_user
@@ -29,6 +31,8 @@ from app.services.email_service import (
     send_applicant_invitation,
     send_applicant_offer,
     send_applicant_rejection,
+    send_applicant_status_update,
+    send_applicant_trial_work,
 )
 
 router = APIRouter()
@@ -39,6 +43,34 @@ UPLOAD_DIR = os.path.join(
     "applicants",
 )
 
+VALID_STATUSES = [
+    "eingegangen",
+    "in_pruefung",
+    "einladung",
+    "gespraech",
+    "probearbeit",
+    "zusage",
+    "fuehrungszeugnis",
+    "vertrag",
+    "eingestellt",
+    "absage",
+    "zurueckgezogen",
+]
+
+STATUS_LABELS = {
+    "eingegangen": "Eingegangen",
+    "in_pruefung": "In Prüfung",
+    "einladung": "Einladung versendet",
+    "gespraech": "Gespräch geführt",
+    "probearbeit": "Probearbeit",
+    "zusage": "Zusage",
+    "fuehrungszeugnis": "Führungszeugnis beantragt",
+    "vertrag": "Vertrag versendet",
+    "eingestellt": "Eingestellt",
+    "absage": "Absage",
+    "zurueckgezogen": "Zurückgezogen",
+}
+
 
 class CreateApplicantBody(BaseModel):
     name: str
@@ -47,6 +79,13 @@ class CreateApplicantBody(BaseModel):
     position: str
     source: str | None = None
     note: str | None = None
+    desired_hours: float | None = None
+    desired_location: str | None = None
+    desired_role: str | None = None
+    available_from: str | None = None
+    has_drivers_license: bool | None = None
+    has_experience: bool | None = None
+    experience_note: str | None = None
     send_confirmation: bool = True
 
 
@@ -61,25 +100,43 @@ class UpdateApplicantBody(BaseModel):
     handler_user_id: int | None = None
     interview_date: str | None = None
     rejection_reason: str | None = None
+    desired_hours: float | None = None
+    desired_location: str | None = None
+    desired_role: str | None = None
+    available_from: str | None = None
+    has_drivers_license: bool | None = None
+    has_experience: bool | None = None
+    experience_note: str | None = None
+    trial_work_date: str | None = None
+    criminal_record_requested_at: str | None = None
+    criminal_record_received_at: str | None = None
+    hired_at: str | None = None
+    hired_hours: float | None = None
+    hired_location: str | None = None
+    hired_role: str | None = None
+    contract_sent_at: str | None = None
+    start_date: str | None = None
 
 
 class SendEmailBody(BaseModel):
     interview_date: str | None = None
+    trial_date: str | None = None
     note: str | None = None
+    status_label: str | None = None
+    message: str | None = None
 
 
-VALID_STATUSES = [
-    "eingegangen",
-    "in_pruefung",
-    "einladung",
-    "gespraech",
-    "zusage",
-    "absage",
-    "zurueckgezogen",
-]
+DATETIME_FIELDS = {
+    "interview_date", "trial_work_date",
+    "criminal_record_requested_at", "criminal_record_received_at",
+    "hired_at", "contract_sent_at",
+}
 
 
 def _applicant_to_dict(a: Applicant) -> dict:
+    def _dt(v: datetime | None) -> str | None:
+        return v.isoformat() if v else None
+
     return {
         "id": a.id,
         "name": a.name,
@@ -90,13 +147,51 @@ def _applicant_to_dict(a: Applicant) -> dict:
         "status": a.status,
         "note": a.note,
         "handler_user_id": a.handler_user_id,
-        "interview_date": a.interview_date.isoformat() if a.interview_date else None,
+        "interview_date": _dt(a.interview_date),
         "rejection_reason": a.rejection_reason,
         "resume_path": a.resume_path,
+        "desired_hours": a.desired_hours,
+        "desired_location": a.desired_location,
+        "desired_role": a.desired_role,
+        "available_from": a.available_from,
+        "has_drivers_license": a.has_drivers_license,
+        "has_experience": a.has_experience,
+        "experience_note": a.experience_note,
+        "trial_work_date": _dt(a.trial_work_date),
+        "criminal_record_requested_at": _dt(a.criminal_record_requested_at),
+        "criminal_record_received_at": _dt(a.criminal_record_received_at),
+        "hired_at": _dt(a.hired_at),
+        "hired_hours": a.hired_hours,
+        "hired_location": a.hired_location,
+        "hired_role": a.hired_role,
+        "contract_sent_at": _dt(a.contract_sent_at),
+        "start_date": a.start_date,
+        "confirmation_sent_at": _dt(a.confirmation_sent_at),
+        "invitation_sent_at": _dt(a.invitation_sent_at),
+        "rejection_sent_at": _dt(a.rejection_sent_at),
+        "offer_sent_at": _dt(a.offer_sent_at),
         "created_by_user_id": a.created_by_user_id,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
-        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        "created_at": _dt(a.created_at),
+        "updated_at": _dt(a.updated_at),
     }
+
+
+@router.get("/applicants/stats")
+def applicant_stats(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_office_user),
+):
+    rows = (
+        db.query(Applicant.status, func.count(Applicant.id))
+        .group_by(Applicant.status)
+        .all()
+    )
+    counts = {s: 0 for s in VALID_STATUSES}
+    total = 0
+    for status, count in rows:
+        counts[status] = count
+        total += count
+    return {"total": total, "by_status": counts}
 
 
 @router.get("/applicants")
@@ -115,6 +210,18 @@ def list_applicants(
     return [_applicant_to_dict(a) for a in rows]
 
 
+@router.get("/applicants/{applicant_id}")
+def get_applicant(
+    applicant_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_office_user),
+):
+    applicant = db.query(Applicant).filter(Applicant.id == applicant_id).first()
+    if not applicant:
+        raise HTTPException(404, "Bewerber nicht gefunden")
+    return _applicant_to_dict(applicant)
+
+
 @router.post("/applicants", status_code=201)
 def create_applicant(
     body: CreateApplicantBody,
@@ -128,6 +235,13 @@ def create_applicant(
         position=body.position,
         source=body.source,
         note=body.note,
+        desired_hours=body.desired_hours,
+        desired_location=body.desired_location,
+        desired_role=body.desired_role,
+        available_from=body.available_from,
+        has_drivers_license=body.has_drivers_license,
+        has_experience=body.has_experience,
+        experience_note=body.experience_note,
         status="eingegangen",
         created_by_user_id=user.id,
     )
@@ -136,7 +250,11 @@ def create_applicant(
     db.refresh(applicant)
 
     if body.send_confirmation:
-        send_applicant_confirmation(body.name, body.email, body.position)
+        ok = send_applicant_confirmation(body.name, body.email, body.position)
+        if ok:
+            applicant.confirmation_sent_at = datetime.utcnow()
+            db.commit()
+            db.refresh(applicant)
 
     return _applicant_to_dict(applicant)
 
@@ -157,9 +275,10 @@ def update_applicant(
     if "status" in updates and updates["status"] not in VALID_STATUSES:
         raise HTTPException(400, f"Ungültiger Status: {updates['status']}")
 
-    if "interview_date" in updates:
-        val = updates.pop("interview_date")
-        applicant.interview_date = datetime.fromisoformat(val) if val else None
+    for field in DATETIME_FIELDS:
+        if field in updates:
+            val = updates.pop(field)
+            setattr(applicant, field, datetime.fromisoformat(val) if val else None)
 
     for key, val in updates.items():
         setattr(applicant, key, val)
@@ -234,8 +353,13 @@ def send_applicant_email(
         raise HTTPException(404, "Bewerber nicht gefunden")
 
     success = False
+    now = datetime.utcnow()
+
     if template == "confirmation":
         success = send_applicant_confirmation(applicant.name, applicant.email, applicant.position)
+        if success:
+            applicant.confirmation_sent_at = now
+
     elif template == "invitation":
         if not body.interview_date:
             raise HTTPException(400, "interview_date erforderlich für Einladung")
@@ -246,24 +370,49 @@ def send_applicant_email(
         if success:
             applicant.status = "einladung"
             applicant.interview_date = datetime.fromisoformat(body.interview_date)
-            db.commit()
+            applicant.invitation_sent_at = now
+
     elif template == "rejection":
-        success = send_applicant_rejection(applicant.name, applicant.email, applicant.position)
+        success = send_applicant_rejection(
+            applicant.name, applicant.email, applicant.position,
+            applicant.rejection_reason or ""
+        )
         if success:
             applicant.status = "absage"
-            db.commit()
+            applicant.rejection_sent_at = now
+
     elif template == "offer":
         success = send_applicant_offer(
             applicant.name, applicant.email, applicant.position, body.note or ""
         )
         if success:
             applicant.status = "zusage"
-            db.commit()
+            applicant.offer_sent_at = now
+
+    elif template == "trial_work":
+        if not body.trial_date:
+            raise HTTPException(400, "trial_date erforderlich für Probearbeit")
+        success = send_applicant_trial_work(
+            applicant.name, applicant.email, applicant.position, body.trial_date
+        )
+        if success:
+            applicant.status = "probearbeit"
+            applicant.trial_work_date = datetime.fromisoformat(body.trial_date)
+
+    elif template == "status_update":
+        if not body.message:
+            raise HTTPException(400, "message erforderlich für Statusupdate")
+        label = body.status_label or STATUS_LABELS.get(applicant.status, applicant.status)
+        success = send_applicant_status_update(
+            applicant.name, applicant.email, applicant.position, label, body.message
+        )
+
     else:
         raise HTTPException(400, f"Unbekanntes Template: {template}")
 
     if not success:
         raise HTTPException(500, "E-Mail konnte nicht gesendet werden. SMTP-Konfiguration prüfen.")
 
+    db.commit()
     db.refresh(applicant)
     return _applicant_to_dict(applicant)
