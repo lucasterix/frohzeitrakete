@@ -1,9 +1,9 @@
 """Postannahmestelle (Mail Intake) endpoints.
 
 Admin endpoints:
-- GET    /admin/mail-intake              — Liste mit Filtern
-- POST   /admin/mail-intake              — Neuen Brief erfassen
-- POST   /admin/mail-intake/{id}/upload  — Scan hochladen (PDF/JPG)
+- GET    /admin/mail-intake              — Liste mit Filtern + optionale Statistiken
+- POST   /admin/mail-intake              — Neuen Brief erfassen (auto-klassifiziert)
+- POST   /admin/mail-intake/{id}/upload  — Scan hochladen (PDF/JPG) + auto-reklassifiziert
 - GET    /admin/mail-intake/{id}/scan    — Scan herunterladen
 - PATCH  /admin/mail-intake/{id}         — Status/department/priority/assigned_to/note aendern
 - POST   /admin/mail-intake/{id}/classify — AI-Klassifizierung triggern
@@ -17,6 +17,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_office_user
@@ -102,9 +103,12 @@ def _classify_text(title: str, text: str) -> dict:
     """Keyword-basierte Klassifizierung (kein LLM-Call)."""
     combined = (title + " " + text).lower()
 
-    # Critical keywords first
-    critical_keywords = ["kündigung", "klage", "gericht", "finanzamt"]
-    for kw in critical_keywords:
+    # ── geschaeftsfuehrung (critical) ────────────────────────────────
+    gf_keywords = [
+        "kündigung", "klage", "gericht", "anwalt", "vollstreckung",
+        "insolvenz", "behörde", "staatsanwalt", "finanzamt",
+    ]
+    for kw in gf_keywords:
         if kw in combined:
             return {
                 "department": "geschaeftsfuehrung",
@@ -112,49 +116,94 @@ def _classify_text(title: str, text: str) -> dict:
                 "summary": f"Kritisch: Keyword '{kw}' gefunden. Weiterleitung an Geschaeftsfuehrung.",
             }
 
-    # Department-specific keywords
-    lohn_keywords = ["steuer", "lohn", "sozialversicherung", "gehalt", "lohnsteuer"]
+    # ── Mahnung / Frist → high priority ──────────────────────────────
+    high_keywords = ["mahnung", "frist"]
+    matched_high = None
+    for kw in high_keywords:
+        if kw in combined:
+            matched_high = kw
+            break
+
+    # ── lohnabrechnung ───────────────────────────────────────────────
+    lohn_keywords = [
+        "steuer", "lohn", "gehalt", "sozialversicherung", "lohnsteuer",
+        "finanzamt lohn", "krankenkassenbeitrag", "rentenversicherung",
+        "sv-meldung", "bescheid", "nachzahlung sozial",
+    ]
     for kw in lohn_keywords:
         if kw in combined:
+            priority = "high" if matched_high else "medium"
             return {
                 "department": "lohnabrechnung",
-                "priority": "medium",
+                "priority": priority,
                 "summary": f"Lohnabrechnung: Keyword '{kw}' gefunden.",
             }
 
-    finanz_keywords = ["rechnung", "mahnung", "zahlung"]
-    for kw in finanz_keywords:
-        if kw in combined:
-            return {
-                "department": "finanzassistenz",
-                "priority": "medium",
-                "summary": f"Finanzassistenz: Keyword '{kw}' gefunden.",
-            }
-
-    tages_keywords = ["strafzettel", "bußgeld", "bussgeld", "ordnungswidrigkeit"]
-    for kw in tages_keywords:
-        if kw in combined:
-            return {
-                "department": "tagesgeschaeft",
-                "priority": "medium",
-                "summary": f"Tagesgeschaeft: Keyword '{kw}' gefunden.",
-            }
-
-    mahn_keywords = ["krankenkasse", "avise", "zahlungsnachweis"]
+    # ── mahnwesen ────────────────────────────────────────────────────
+    mahn_keywords = [
+        "mahnung", "zahlungserinnerung", "krankenkasse", "avise",
+        "zahlungsnachweis", "erstattung", "vergütung",
+        "leistungsabrechnung krankenkasse",
+    ]
     for kw in mahn_keywords:
         if kw in combined:
+            priority = "high" if matched_high else "medium"
             return {
                 "department": "mahnwesen",
-                "priority": "medium",
+                "priority": priority,
                 "summary": f"Mahnwesen: Keyword '{kw}' gefunden.",
             }
 
-    # Default
+    # ── finanzassistenz ──────────────────────────────────────────────
+    finanz_keywords = [
+        "rechnung", "invoice", "zahlungsaufforderung", "lastschrift",
+        "gutschrift", "kontoauszug",
+    ]
+    for kw in finanz_keywords:
+        if kw in combined:
+            priority = "high" if matched_high else "medium"
+            return {
+                "department": "finanzassistenz",
+                "priority": priority,
+                "summary": f"Finanzassistenz: Keyword '{kw}' gefunden.",
+            }
+
+    # ── tagesgeschaeft ───────────────────────────────────────────────
+    tages_keywords = [
+        "strafzettel", "bußgeld", "bussgeld", "ordnungswidrigkeit",
+        "verkehr", "parkverstoß", "termin", "einladung",
+    ]
+    for kw in tages_keywords:
+        if kw in combined:
+            priority = "high" if matched_high else "medium"
+            return {
+                "department": "tagesgeschaeft",
+                "priority": priority,
+                "summary": f"Tagesgeschaeft: Keyword '{kw}' gefunden.",
+            }
+
+    # ── If only high-priority keyword found but no dept match ────────
+    if matched_high:
+        return {
+            "department": "assistenz_gf",
+            "priority": "high",
+            "summary": f"Keyword '{matched_high}' gefunden, keine Abteilung erkannt. Weiterleitung an Assistenz der GF.",
+        }
+
+    # ── Default: assistenz_gf ────────────────────────────────────────
     return {
-        "department": "unklar",
+        "department": "assistenz_gf",
         "priority": "medium",
         "summary": "Keine passenden Keywords gefunden. Weiterleitung an Assistenz der GF.",
     }
+
+
+def _apply_classification(entry: MailEntry, result: dict) -> None:
+    """Apply classification result to a MailEntry."""
+    entry.ai_classification = json.dumps(result, ensure_ascii=False)
+    entry.department = result["department"]
+    entry.priority = result["priority"]
+    entry.description = result.get("summary")
 
 
 def _extract_text_from_pdf(filepath: str) -> str:
@@ -172,6 +221,46 @@ def _extract_text_from_pdf(filepath: str) -> str:
         return ""
 
 
+def _compute_stats(db: Session) -> dict:
+    """Compute mail intake statistics."""
+    total_open = db.query(func.count(MailEntry.id)).filter(
+        MailEntry.status != "erledigt"
+    ).scalar() or 0
+
+    # Average days for completed entries
+    completed = db.query(MailEntry).filter(
+        MailEntry.status == "erledigt",
+        MailEntry.handled_at.isnot(None),
+    ).all()
+
+    avg_overall = 0.0
+    dept_totals: dict[str, list[float]] = {}
+
+    for e in completed:
+        try:
+            rd = datetime.strptime(e.received_date, "%Y-%m-%d")
+            days = (e.handled_at - rd).total_seconds() / 86400
+            if days < 0:
+                days = 0
+            dept_totals.setdefault(e.department, []).append(days)
+        except Exception:
+            pass
+
+    all_days = [d for vals in dept_totals.values() for d in vals]
+    if all_days:
+        avg_overall = round(sum(all_days) / len(all_days), 1)
+
+    avg_by_dept = {}
+    for dept, vals in dept_totals.items():
+        avg_by_dept[dept] = round(sum(vals) / len(vals), 1)
+
+    return {
+        "total_open": total_open,
+        "avg_days_overall": avg_overall,
+        "avg_days_by_department": avg_by_dept,
+    }
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────
 
 @router.get("/mail-intake")
@@ -179,6 +268,7 @@ def list_mail_entries(
     department: str | None = Query(None),
     status: str | None = Query(None),
     priority: str | None = Query(None),
+    stats: bool = Query(False),
     admin_user: User = Depends(require_office_user),
     db: Session = Depends(get_db),
 ):
@@ -190,7 +280,11 @@ def list_mail_entries(
     if priority:
         q = q.filter(MailEntry.priority == priority)
     entries = q.order_by(MailEntry.received_date.desc(), MailEntry.id.desc()).all()
-    return [_entry_to_dict(e, db) for e in entries]
+    items = [_entry_to_dict(e, db) for e in entries]
+
+    if stats:
+        return {"items": items, "stats": _compute_stats(db)}
+    return items
 
 
 @router.post("/mail-intake")
@@ -211,6 +305,13 @@ def create_mail_entry(
     db.add(entry)
     db.commit()
     db.refresh(entry)
+
+    # Auto-classify based on title
+    result = _classify_text(entry.title, "")
+    _apply_classification(entry, result)
+    db.commit()
+    db.refresh(entry)
+
     return _entry_to_dict(entry, db)
 
 
@@ -235,9 +336,17 @@ async def upload_scan(
         f.write(content)
 
     entry.scan_path = filepath
+
+    # Auto-reclassify with extracted text from scan
+    scan_text = ""
+    if filepath.lower().endswith(".pdf"):
+        scan_text = _extract_text_from_pdf(filepath)
+    result = _classify_text(entry.title, scan_text)
+    _apply_classification(entry, result)
+
     db.commit()
     db.refresh(entry)
-    return {"ok": True, "scan_path": filepath}
+    return _entry_to_dict(entry, db)
 
 
 @router.get("/mail-intake/{entry_id}/scan")
@@ -268,6 +377,14 @@ def update_mail_entry(
     entry = db.query(MailEntry).filter(MailEntry.id == entry_id).first()
     if entry is None:
         raise HTTPException(status_code=404, detail="mail_entry_not_found")
+
+    # Erledigt requires handler_note with min 5 chars
+    if payload.status == "erledigt":
+        if not payload.handler_note or len(payload.handler_note.strip()) < 5:
+            raise HTTPException(
+                status_code=422,
+                detail="handler_note_required_min_5_chars",
+            )
 
     if payload.status is not None:
         entry.status = payload.status
@@ -306,10 +423,7 @@ def classify_mail_entry(
             scan_text = _extract_text_from_pdf(entry.scan_path)
 
     result = _classify_text(entry.title, scan_text)
-    entry.ai_classification = json.dumps(result, ensure_ascii=False)
-    entry.department = result["department"]
-    entry.priority = result["priority"]
-    entry.description = result.get("summary")
+    _apply_classification(entry, result)
 
     db.commit()
     db.refresh(entry)

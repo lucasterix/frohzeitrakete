@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   MailEntryRecord,
+  MailIntakeStats,
   User,
   classifyMailEntry,
   createMailEntry,
@@ -20,9 +21,9 @@ import { RefreshIcon } from "@/components/icons";
 
 const DEPARTMENT_LABELS: Record<string, string> = {
   assistenz_gf: "Assistenz GF",
-  geschaeftsfuehrung: "Geschäftsführung",
+  geschaeftsfuehrung: "Geschaeftsfuehrung",
   lohnabrechnung: "Lohnabrechnung",
-  tagesgeschaeft: "Tagesgeschäft",
+  tagesgeschaeft: "Tagesgeschaeft",
   finanzassistenz: "Finanzassistenz",
   mahnwesen: "Mahnwesen",
   unklar: "Unklar",
@@ -93,11 +94,29 @@ function formatDateTime(value: string | null): string {
   }
 }
 
+function daysSince(dateStr: string | null): number {
+  if (!dateStr) return 0;
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return Math.floor((now.getTime() - d.getTime()) / 86400000);
+  } catch {
+    return 0;
+  }
+}
+
+function openSinceColor(days: number): string {
+  if (days <= 2) return "text-emerald-600";
+  if (days <= 7) return "text-amber-600";
+  return "text-red-600";
+}
+
 export default function PosteingangPage() {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
   const [me, setMe] = useState<User | null>(null);
   const [entries, setEntries] = useState<MailEntryRecord[]>([]);
+  const [stats, setStats] = useState<MailIntakeStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -114,16 +133,24 @@ export default function PosteingangPage() {
   const [editPriority, setEditPriority] = useState("");
   const [editAssignedTo, setEditAssignedTo] = useState<number | null>(null);
   const [editNote, setEditNote] = useState("");
+  const [editNoteError, setEditNoteError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // New entry form
+  // New entry form — 2-step
   const [showNew, setShowNew] = useState(false);
+  const [newStep, setNewStep] = useState<1 | 2>(1);
   const [newTitle, setNewTitle] = useState("");
   const [newSender, setNewSender] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newDepartment, setNewDepartment] = useState("unklar");
   const [newPriority, setNewPriority] = useState("medium");
   const [creating, setCreating] = useState(false);
+  const [newEntryId, setNewEntryId] = useState<number | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    department: string;
+    priority: string;
+    summary: string;
+  } | null>(null);
 
   // File upload refs
   const scanFileRef = useRef<HTMLInputElement>(null);
@@ -143,11 +170,18 @@ export default function PosteingangPage() {
           department: departmentFilter || undefined,
           status: statusFilter || undefined,
           priority: priorityFilter || undefined,
+          stats: true,
         }),
         getUsers(),
       ]);
       setMe(meData);
-      setEntries(data);
+      if (data && typeof data === "object" && "items" in data) {
+        setEntries(data.items);
+        setStats(data.stats);
+      } else {
+        setEntries(data as MailEntryRecord[]);
+        setStats(null);
+      }
       setUsers(usersData.filter((u) => u.is_active));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Laden");
@@ -161,39 +195,99 @@ export default function PosteingangPage() {
     load();
   }, [load]);
 
-  // ── Create ──────────────────────────────────────────────────────────
+  // ── Create Step 1: Create entry + upload scan ──────────────────────
 
-  async function handleCreate() {
+  async function handleCreateStep1() {
     if (!newTitle.trim() || !newDate) return;
     setCreating(true);
     try {
-      const created = await createMailEntry({
+      let created = await createMailEntry({
         title: newTitle,
         sender: newSender || null,
         received_date: newDate,
-        department: newDepartment,
-        priority: newPriority,
       });
 
-      // Upload scan if selected
+      // Upload scan if selected — this also triggers reclassification
       const file = newScanFileRef.current?.files?.[0];
       if (file) {
-        await uploadMailScan(created.id, file);
+        created = await uploadMailScan(created.id, file);
       }
 
-      setNewTitle("");
-      setNewSender("");
-      setNewDate(new Date().toISOString().slice(0, 10));
-      setNewDepartment("unklar");
-      setNewPriority("medium");
-      if (newScanFileRef.current) newScanFileRef.current.value = "";
-      setShowNew(false);
-      load();
+      // Parse AI classification for the suggestion
+      if (created.ai_classification) {
+        try {
+          const c = JSON.parse(created.ai_classification);
+          setAiSuggestion({
+            department: c.department || created.department,
+            priority: c.priority || created.priority,
+            summary: c.summary || "",
+          });
+        } catch {
+          setAiSuggestion({
+            department: created.department,
+            priority: created.priority,
+            summary: "",
+          });
+        }
+      } else {
+        setAiSuggestion({
+          department: created.department,
+          priority: created.priority,
+          summary: "",
+        });
+      }
+
+      setNewDepartment(created.department);
+      setNewPriority(created.priority);
+      setNewEntryId(created.id);
+      setNewStep(2);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Erstellen");
     } finally {
       setCreating(false);
     }
+  }
+
+  // ── Create Step 2: Apply department + priority ─────────────────────
+
+  async function handleCreateStep2() {
+    if (!newEntryId) return;
+    setCreating(true);
+    try {
+      await updateMailEntry(newEntryId, {
+        department: newDepartment,
+        priority: newPriority,
+      });
+      // Reset form
+      setNewTitle("");
+      setNewSender("");
+      setNewDate(new Date().toISOString().slice(0, 10));
+      setNewDepartment("unklar");
+      setNewPriority("medium");
+      setNewEntryId(null);
+      setAiSuggestion(null);
+      setNewStep(1);
+      if (newScanFileRef.current) newScanFileRef.current.value = "";
+      setShowNew(false);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Speichern");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function handleCancelNew() {
+    setShowNew(false);
+    setNewStep(1);
+    setNewTitle("");
+    setNewSender("");
+    setNewDate(new Date().toISOString().slice(0, 10));
+    setNewDepartment("unklar");
+    setNewPriority("medium");
+    setNewEntryId(null);
+    setAiSuggestion(null);
+    if (newScanFileRef.current) newScanFileRef.current.value = "";
   }
 
   // ── Edit ────────────────────────────────────────────────────────────
@@ -205,9 +299,16 @@ export default function PosteingangPage() {
     setEditPriority(entry.priority);
     setEditAssignedTo(entry.assigned_to_user_id);
     setEditNote(entry.handler_note ?? "");
+    setEditNoteError("");
   }
 
   async function handleSave(id: number) {
+    // Validate note when setting to erledigt
+    if (editStatus === "erledigt" && (!editNote || editNote.trim().length < 5)) {
+      setEditNoteError("Notiz ist Pflicht bei 'Erledigt' (mind. 5 Zeichen).");
+      return;
+    }
+    setEditNoteError("");
     setSaving(true);
     try {
       await updateMailEntry(id, {
@@ -280,7 +381,7 @@ export default function PosteingangPage() {
         <h1 className="text-2xl font-bold text-slate-900">Posteingang</h1>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowNew((p) => !p)}
+            onClick={() => (showNew ? handleCancelNew() : setShowNew(true))}
             className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
             {showNew ? "Abbrechen" : "Neuer Brief"}
@@ -304,102 +405,209 @@ export default function PosteingangPage() {
         </div>
       )}
 
-      {/* ── New entry form ─────────────────────────────────────────────── */}
+      {/* ── Statistics cards ───────────────────────────────────────────── */}
+      {stats && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Offene Briefe
+            </div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">
+              {stats.total_open}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Durchschn. Bearbeitungszeit
+            </div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">
+              {stats.avg_days_overall} Tage
+            </div>
+          </div>
+          <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-2">
+            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+              Durchschn. pro Abteilung
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(stats.avg_days_by_department).map(
+                ([dept, days]) => (
+                  <span
+                    key={dept}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                      DEPARTMENT_COLORS[dept] ?? "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {DEPARTMENT_LABELS[dept] ?? dept}: {days} Tage
+                  </span>
+                )
+              )}
+              {Object.keys(stats.avg_days_by_department).length === 0 && (
+                <span className="text-xs text-slate-400">
+                  Noch keine erledigten Briefe
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── New entry form — 2-step ───────────────────────────────────── */}
       {showNew && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">Neuen Brief erfassen</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Titel / Betreff *
-              </span>
-              <input
-                type="text"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
-                required
-              />
-            </label>
+          {newStep === 1 && (
+            <>
+              <h2 className="mb-4 text-lg font-semibold">
+                Schritt 1: Brief erfassen
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Titel / Betreff *
+                  </span>
+                  <input
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                    required
+                  />
+                </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Absender
-              </span>
-              <input
-                type="text"
-                value={newSender}
-                onChange={(e) => setNewSender(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
-              />
-            </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Absender
+                  </span>
+                  <input
+                    type="text"
+                    value={newSender}
+                    onChange={(e) => setNewSender(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                  />
+                </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Eingangsdatum *
-              </span>
-              <input
-                type="date"
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
-                required
-              />
-            </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Eingangsdatum *
+                  </span>
+                  <input
+                    type="date"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                    required
+                  />
+                </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Abteilung
-              </span>
-              <select
-                value={newDepartment}
-                onChange={(e) => setNewDepartment(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Scan (PDF/JPG)
+                  </span>
+                  <input
+                    type="file"
+                    ref={newScanFileRef}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm"
+                  />
+                </label>
+              </div>
+              <button
+                onClick={handleCreateStep1}
+                disabled={creating || !newTitle.trim()}
+                className="mt-4 rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
               >
-                {Object.entries(DEPARTMENT_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {creating ? "Wird klassifiziert..." : "Weiter: Klassifizieren"}
+              </button>
+            </>
+          )}
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Priorität
-              </span>
-              <select
-                value={newPriority}
-                onChange={(e) => setNewPriority(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
-              >
-                {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {newStep === 2 && aiSuggestion && (
+            <>
+              <h2 className="mb-4 text-lg font-semibold">
+                Schritt 2: KI-Vorschlag pruefen
+              </h2>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
-                Scan (PDF/JPG)
-              </span>
-              <input
-                type="file"
-                ref={newScanFileRef}
-                accept=".pdf,.jpg,.jpeg,.png"
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm"
-              />
-            </label>
-          </div>
-          <button
-            onClick={handleCreate}
-            disabled={creating || !newTitle.trim()}
-            className="mt-4 rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-          >
-            {creating ? "Erstellt..." : "Brief erfassen"}
-          </button>
+              {/* AI suggestion box */}
+              <div className="mb-5 rounded-xl border border-emerald-300 bg-emerald-50 p-4">
+                <div className="mb-1 text-sm font-semibold text-emerald-800">
+                  KI-Vorschlag
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-emerald-700">
+                    Abteilung:{" "}
+                    <strong>
+                      {DEPARTMENT_LABELS[aiSuggestion.department] ??
+                        aiSuggestion.department}
+                    </strong>
+                  </span>
+                  <span className="text-emerald-400">|</span>
+                  <span className="text-sm text-emerald-700">
+                    Prioritaet:{" "}
+                    <strong>
+                      {PRIORITY_LABELS[aiSuggestion.priority] ??
+                        aiSuggestion.priority}
+                    </strong>
+                  </span>
+                </div>
+                {aiSuggestion.summary && (
+                  <div className="mt-2 text-xs text-emerald-600">
+                    {aiSuggestion.summary}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Abteilung
+                  </span>
+                  <select
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                  >
+                    {Object.entries(DEPARTMENT_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Prioritaet
+                  </span>
+                  <select
+                    value={newPriority}
+                    onChange={(e) => setNewPriority(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                  >
+                    {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={handleCreateStep2}
+                  disabled={creating}
+                  className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {creating ? "Speichert..." : "Absenden"}
+                </button>
+                <button
+                  onClick={handleCancelNew}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -436,7 +644,7 @@ export default function PosteingangPage() {
           onChange={(e) => setPriorityFilter(e.target.value)}
           className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
         >
-          <option value="">Alle Prioritäten</option>
+          <option value="">Alle Prioritaeten</option>
           {Object.entries(PRIORITY_LABELS).map(([val, label]) => (
             <option key={val} value={val}>
               {label}
@@ -454,8 +662,9 @@ export default function PosteingangPage() {
               <th className="px-4 py-3">Absender</th>
               <th className="px-4 py-3">Titel</th>
               <th className="px-4 py-3">Abteilung</th>
-              <th className="px-4 py-3">Priorität</th>
+              <th className="px-4 py-3">Prioritaet</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Offen seit</th>
               <th className="px-4 py-3">Zugewiesen</th>
               <th className="px-4 py-3">Bearbeiter</th>
               <th className="px-4 py-3">Aktionen</th>
@@ -464,135 +673,154 @@ export default function PosteingangPage() {
           <tbody className="divide-y divide-slate-100">
             {entries.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
-                  {loading ? "Laden..." : "Keine Einträge"}
+                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                  {loading ? "Laden..." : "Keine Eintraege"}
                 </td>
               </tr>
             )}
-            {entries.map((entry) => (
-              <tr key={entry.id} className="hover:bg-slate-50">
-                <td className="whitespace-nowrap px-4 py-3">
-                  {formatDate(entry.received_date)}
-                </td>
-                <td className="px-4 py-3">{entry.sender || "--"}</td>
-                <td className="px-4 py-3">
-                  <div className="font-medium">{entry.title}</div>
-                  {entry.description && (
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {entry.description}
-                    </div>
-                  )}
-                  {entry.ai_classification && (
-                    <div className="mt-1 text-xs text-indigo-600">
-                      AI: {(() => {
-                        try {
-                          const c = JSON.parse(entry.ai_classification);
-                          return c.summary || JSON.stringify(c);
-                        } catch {
-                          return entry.ai_classification;
-                        }
-                      })()}
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      DEPARTMENT_COLORS[entry.department] ?? "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {DEPARTMENT_LABELS[entry.department] ?? entry.department}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      PRIORITY_COLORS[entry.priority] ?? "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {PRIORITY_LABELS[entry.priority] ?? entry.priority}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  {STATUS_LABELS[entry.status] ?? entry.status}
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  {entry.assigned_to_name || "--"}
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  {entry.handler_name ? (
-                    <div>
-                      {entry.handler_name}
-                      <br />
-                      <span className="text-slate-400">
-                        {formatDateTime(entry.handled_at)}
+            {entries.map((entry) => {
+              const days = daysSince(entry.received_date);
+              const isErledigt = entry.status === "erledigt";
+              return (
+                <tr key={entry.id} className="hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {formatDate(entry.received_date)}
+                  </td>
+                  <td className="px-4 py-3">{entry.sender || "--"}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{entry.title}</div>
+                    {entry.description && (
+                      <div className="mt-0.5 text-xs text-slate-500">
+                        {entry.description}
+                      </div>
+                    )}
+                    {entry.ai_classification && (
+                      <div className="mt-1 text-xs text-indigo-600">
+                        AI:{" "}
+                        {(() => {
+                          try {
+                            const c = JSON.parse(entry.ai_classification);
+                            return c.summary || JSON.stringify(c);
+                          } catch {
+                            return entry.ai_classification;
+                          }
+                        })()}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        DEPARTMENT_COLORS[entry.department] ??
+                        "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {DEPARTMENT_LABELS[entry.department] ?? entry.department}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        PRIORITY_COLORS[entry.priority] ??
+                        "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {PRIORITY_LABELS[entry.priority] ?? entry.priority}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {STATUS_LABELS[entry.status] ?? entry.status}
+                  </td>
+                  {/* Offen seit */}
+                  <td className="whitespace-nowrap px-4 py-3 text-xs">
+                    {isErledigt ? (
+                      <span className="text-slate-500">
+                        Erledigt am {formatDateTime(entry.handled_at)}
                       </span>
-                    </div>
-                  ) : (
-                    "--"
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {/* Edit button */}
-                    <button
-                      onClick={() =>
-                        editingId === entry.id
-                          ? setEditingId(null)
-                          : startEdit(entry)
-                      }
-                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
-                    >
-                      {editingId === entry.id ? "X" : "Bearbeiten"}
-                    </button>
-
-                    {/* AI Classify */}
-                    <button
-                      onClick={() => handleClassify(entry.id)}
-                      disabled={classifyingId === entry.id}
-                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-                    >
-                      {classifyingId === entry.id ? "..." : "AI"}
-                    </button>
-
-                    {/* Scan download */}
-                    {entry.scan_path && (
-                      <a
-                        href={getMailScanUrl(entry.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                    ) : (
+                      <span className={`font-semibold ${openSinceColor(days)}`}>
+                        {days} {days === 1 ? "Tag" : "Tage"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {entry.assigned_to_name || "--"}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {entry.handler_name ? (
+                      <div>
+                        {entry.handler_name}
+                        <br />
+                        <span className="text-slate-400">
+                          {formatDateTime(entry.handled_at)}
+                        </span>
+                      </div>
+                    ) : (
+                      "--"
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {/* Edit button */}
+                      <button
+                        onClick={() =>
+                          editingId === entry.id
+                            ? setEditingId(null)
+                            : startEdit(entry)
+                        }
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                       >
-                        Scan
-                      </a>
-                    )}
+                        {editingId === entry.id ? "X" : "Bearbeiten"}
+                      </button>
 
-                    {/* Scan upload */}
-                    {!entry.scan_path && (
-                      <>
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          className="hidden"
-                          ref={scanFileRef}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) handleUploadScan(entry.id, f);
-                          }}
-                        />
-                        <button
-                          onClick={() => scanFileRef.current?.click()}
-                          disabled={uploadingId === entry.id}
-                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
+                      {/* AI Classify */}
+                      <button
+                        onClick={() => handleClassify(entry.id)}
+                        disabled={classifyingId === entry.id}
+                        className="rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                      >
+                        {classifyingId === entry.id ? "..." : "AI"}
+                      </button>
+
+                      {/* Scan download */}
+                      {entry.scan_path && (
+                        <a
+                          href={getMailScanUrl(entry.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
                         >
-                          {uploadingId === entry.id ? "..." : "Upload"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                          Scan
+                        </a>
+                      )}
+
+                      {/* Scan upload */}
+                      {!entry.scan_path && (
+                        <>
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            className="hidden"
+                            ref={scanFileRef}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleUploadScan(entry.id, f);
+                            }}
+                          />
+                          <button
+                            onClick={() => scanFileRef.current?.click()}
+                            disabled={uploadingId === entry.id}
+                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
+                          >
+                            {uploadingId === entry.id ? "..." : "Upload"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -610,7 +838,10 @@ export default function PosteingangPage() {
               </span>
               <select
                 value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
+                onChange={(e) => {
+                  setEditStatus(e.target.value);
+                  setEditNoteError("");
+                }}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
               >
                 {Object.entries(STATUS_LABELS).map(([val, label]) => (
@@ -640,7 +871,7 @@ export default function PosteingangPage() {
 
             <label className="block">
               <span className="mb-1 block text-sm font-medium text-slate-700">
-                Priorität
+                Prioritaet
               </span>
               <select
                 value={editPriority}
@@ -705,16 +936,43 @@ export default function PosteingangPage() {
 
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-sm font-medium text-slate-700">
-                Notiz
+                Notiz{editStatus === "erledigt" && " (Pflicht, mind. 5 Zeichen) *"}
               </span>
               <textarea
                 value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
+                onChange={(e) => {
+                  setEditNote(e.target.value);
+                  setEditNoteError("");
+                }}
                 rows={2}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                placeholder={
+                  editStatus === "erledigt"
+                    ? "Was wurde mit dem Brief gemacht?"
+                    : ""
+                }
+                className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-slate-500 ${
+                  editNoteError
+                    ? "border-red-400 bg-red-50"
+                    : "border-slate-300"
+                }`}
               />
+              {editNoteError && (
+                <p className="mt-1 text-xs text-red-600">{editNoteError}</p>
+              )}
             </label>
           </div>
+
+          {/* Show erledigt info */}
+          {editStatus === "erledigt" && me && (
+            <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Wird erledigt von: <strong>{me.full_name}</strong> am{" "}
+              {new Intl.DateTimeFormat("de-DE", {
+                dateStyle: "short",
+                timeStyle: "short",
+              }).format(new Date())}
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button
               onClick={() => handleSave(editingId)}

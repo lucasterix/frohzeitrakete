@@ -1852,15 +1852,23 @@ export type MailEntryRecord = {
   updated_at: string | null;
 };
 
+export type MailIntakeStats = {
+  total_open: number;
+  avg_days_overall: number;
+  avg_days_by_department: Record<string, number>;
+};
+
 export async function getMailEntries(filters?: {
   department?: string;
   status?: string;
   priority?: string;
-}): Promise<MailEntryRecord[]> {
+  stats?: boolean;
+}): Promise<MailEntryRecord[] | { items: MailEntryRecord[]; stats: MailIntakeStats }> {
   const url = new URL(`${API_BASE_URL}/admin/mail-intake`);
   if (filters?.department) url.searchParams.set("department", filters.department);
   if (filters?.status) url.searchParams.set("status", filters.status);
   if (filters?.priority) url.searchParams.set("priority", filters.priority);
+  if (filters?.stats) url.searchParams.set("stats", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
     cache: "no-store",
@@ -1913,7 +1921,7 @@ export async function updateMailEntry(
   return response.json();
 }
 
-export async function uploadMailScan(id: number, file: File): Promise<void> {
+export async function uploadMailScan(id: number, file: File): Promise<MailEntryRecord> {
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetchWithRefresh(
@@ -1926,6 +1934,7 @@ export async function uploadMailScan(id: number, file: File): Promise<void> {
   if (!response.ok) {
     throw new Error(await parseError(response, "Scan-Upload fehlgeschlagen"));
   }
+  return response.json();
 }
 
 export function getMailScanUrl(id: number): string {
