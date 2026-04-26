@@ -368,6 +368,7 @@ def list_inquiries(
     *,
     user_id: int | None = None,
     patient_id: int | None = None,
+    task_status: str | None = None,
 ) -> list[BudgetInquiry]:
     """Alle Budgetanfragen, optional gefiltert."""
     q = db.query(BudgetInquiry).order_by(BudgetInquiry.created_at.desc())
@@ -375,8 +376,105 @@ def list_inquiries(
         q = q.filter(BudgetInquiry.user_id == user_id)
     if patient_id is not None:
         q = q.filter(BudgetInquiry.patient_id == patient_id)
+    if task_status is not None:
+        q = q.filter(BudgetInquiry.task_status == task_status)
     return q.all()
 
 
 def get_inquiry(db: Session, inquiry_id: int) -> BudgetInquiry | None:
     return db.query(BudgetInquiry).filter(BudgetInquiry.id == inquiry_id).first()
+
+
+def mark_inquiry_done(db: Session, inquiry_id: int) -> BudgetInquiry | None:
+    """Setzt task_status auf 'done'."""
+    inquiry = db.query(BudgetInquiry).filter(BudgetInquiry.id == inquiry_id).first()
+    if inquiry is None:
+        return None
+    inquiry.task_status = "done"
+    db.commit()
+    db.refresh(inquiry)
+    return inquiry
+
+
+def ensure_pending_budget_inquiry(
+    db: Session,
+    patient_id: int,
+    user_id: int,
+) -> BudgetInquiry | None:
+    """Erstellt eine pending Budgetabfrage fuer einen Patienten, falls noch
+    keine offene existiert. Wird automatisch nach Signatur-Erstellung
+    aufgerufen."""
+    existing = (
+        db.query(BudgetInquiry)
+        .filter(
+            BudgetInquiry.patient_id == patient_id,
+            BudgetInquiry.task_status == "pending",
+        )
+        .first()
+    )
+    if existing is not None:
+        return None  # already has a pending inquiry
+
+    try:
+        client = PattiClient()
+        client.login()
+        pdata = _fetch_patient_data(client, patient_id)
+    except Exception:  # noqa: BLE001
+        pdata = {
+            "name": f"Patient {patient_id}",
+            "insurance_number": "",
+            "birthday": "",
+            "kasse_name": "",
+            "kasse_ik": "",
+        }
+
+    sig_event, _ = _get_latest_leistungsnachweis_signature(db, patient_id)
+
+    inquiry = BudgetInquiry(
+        patient_id=patient_id,
+        patient_name=pdata["name"],
+        versichertennummer=pdata.get("insurance_number"),
+        geburtsdatum=pdata.get("birthday"),
+        kasse_name=pdata.get("kasse_name"),
+        kasse_ik=pdata.get("kasse_ik"),
+        user_id=user_id,
+        signature_event_id=sig_event.id if sig_event else None,
+        task_status="pending",
+    )
+    db.add(inquiry)
+    db.commit()
+    db.refresh(inquiry)
+    return inquiry
+
+
+def generate_batch_all(db: Session) -> int:
+    """Generiert Budgetabfragen fuer ALLE Patienten die mindestens eine
+    Signatur haben. Gibt die Anzahl generierter Eintraege zurueck."""
+    # Alle Patienten mit mindestens einer Signatur
+    patient_rows = (
+        db.query(SignatureEvent.patient_id, SignatureEvent.created_by_user_id)
+        .filter(SignatureEvent.patient_id.is_not(None))
+        .distinct(SignatureEvent.patient_id)
+        .all()
+    )
+
+    count = 0
+    for patient_id, user_id in patient_rows:
+        result = ensure_pending_budget_inquiry(db, patient_id, user_id)
+        if result is not None:
+            count += 1
+    return count
+
+
+def generate_for_selected(
+    db: Session,
+    patient_ids: list[int],
+    user_id: int,
+) -> int:
+    """Generiert Budgetabfragen fuer eine Liste von Patienten-IDs."""
+    count = 0
+    for pid in patient_ids:
+        result = ensure_pending_budget_inquiry(db, pid, user_id)
+        if result is not None:
+            count += 1
+    return count

@@ -151,6 +151,13 @@ def mobile_create_signature(
     if payload.document_type == "betreuungsvertrag":
         refresh_contract_state(db, payload.patient_id)
 
+    # Auto-create pending budget inquiry on first signature for this patient
+    try:
+        from app.services.budget_inquiry_service import ensure_pending_budget_inquiry
+        ensure_pending_budget_inquiry(db, payload.patient_id, current_user.id)
+    except Exception:  # noqa: BLE001
+        pass  # best-effort, don't break signature creation
+
     created = (
         db.query(SignatureEvent)
         .options(joinedload(SignatureEvent.asset))

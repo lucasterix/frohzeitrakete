@@ -736,7 +736,7 @@ def admin_mark_caretaker_changed(
 def admin_list_it_tickets(
     status_filter: str | None = Query(None, alias="status"),
     priority: str | None = Query(None),
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     """Alle IT-Tickets, optional gefiltert nach Status und Priorität."""
@@ -782,7 +782,7 @@ def admin_list_it_tickets(
 def admin_update_it_ticket(
     ticket_id: int,
     payload: dict,
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     """Status ändern, Antwort schreiben, Handler setzen."""
@@ -827,7 +827,7 @@ def admin_update_it_ticket(
 @router.get("/sync-errors")
 def admin_list_sync_errors(
     only_open: bool = True,
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     """Liste der Backend-Sync-Fehler (unzustellbare Patti-Writes). Büro
@@ -858,7 +858,7 @@ def admin_list_sync_errors(
 @router.post("/sync-errors/{error_id}/resolve")
 def admin_resolve_sync_error(
     error_id: int,
-    admin_user: User = Depends(require_office_user),
+    admin_user: User = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ):
     from datetime import datetime as _dt

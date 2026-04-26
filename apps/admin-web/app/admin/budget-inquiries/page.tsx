@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, getMe } from "@/lib/api";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
-import { AlertCircleIcon, RefreshIcon } from "@/components/icons";
+import {
+  AlertCircleIcon,
+  CheckCircleIcon,
+  RefreshIcon,
+} from "@/components/icons";
 
 type BudgetInquiry = {
   id: number;
@@ -16,6 +20,7 @@ type BudgetInquiry = {
   kasse_ik: string | null;
   user_id: number;
   signature_event_id: number | null;
+  task_status: string;
   created_at: string | null;
 };
 
@@ -31,29 +36,41 @@ export default function BudgetInquiriesPage() {
   const [inquiries, setInquiries] = useState<BudgetInquiry[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [error, setError] = useState("");
+  const [flash, setFlash] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Filter
   const [filterUserId, setFilterUserId] = useState<string>("");
+  const [filterTaskStatus, setFilterTaskStatus] = useState<string>("");
 
   // Generate form
   const [genPatientId, setGenPatientId] = useState("");
   const [genUserId, setGenUserId] = useState("");
   const [batchUserId, setBatchUserId] = useState("");
 
-  const loadInquiries = useCallback(async (userId?: string) => {
-    try {
-      const params = new URLSearchParams();
-      if (userId) params.set("user_id", userId);
-      const res = await fetchWithRefresh(
-        `${API_BASE_URL}/admin/budget-inquiries?${params.toString()}`,
-        { headers: buildHeaders() }
-      );
-      if (res.ok) setInquiries(await res.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Fehler beim Laden");
-    }
-  }, []);
+  // Selection for batch-selected
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const loadInquiries = useCallback(
+    async (userId?: string, taskStatus?: string) => {
+      try {
+        const params = new URLSearchParams();
+        if (userId) params.set("user_id", userId);
+        if (taskStatus) params.set("task_status", taskStatus);
+        const res = await fetchWithRefresh(
+          `${API_BASE_URL}/admin/budget-inquiries?${params.toString()}`,
+          { headers: buildHeaders() }
+        );
+        if (res.ok) {
+          setInquiries(await res.json());
+          setSelectedIds(new Set());
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Fehler beim Laden");
+      }
+    },
+    []
+  );
 
   const loadUsers = useCallback(async () => {
     try {
@@ -95,6 +112,7 @@ export default function BudgetInquiriesPage() {
     if (!genPatientId || !genUserId) return;
     setLoading(true);
     setError("");
+    setFlash("");
     try {
       const res = await fetchWithRefresh(
         `${API_BASE_URL}/admin/budget-inquiries/generate`,
@@ -112,7 +130,8 @@ export default function BudgetInquiriesPage() {
         throw new Error(body.detail || "Generierung fehlgeschlagen");
       }
       setGenPatientId("");
-      await loadInquiries(filterUserId);
+      setFlash("Budgetanfrage generiert.");
+      await loadInquiries(filterUserId, filterTaskStatus);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -124,6 +143,7 @@ export default function BudgetInquiriesPage() {
     if (!batchUserId) return;
     setLoading(true);
     setError("");
+    setFlash("");
     try {
       const res = await fetchWithRefresh(
         `${API_BASE_URL}/admin/budget-inquiries/batch`,
@@ -138,9 +158,8 @@ export default function BudgetInquiriesPage() {
         throw new Error(body.detail || "Batch fehlgeschlagen");
       }
       const data = await res.json();
-      setError("");
-      alert(`${data.generated} Budgetanfrage(n) generiert.`);
-      await loadInquiries(filterUserId);
+      setFlash(`${data.generated} Budgetanfrage(n) generiert.`);
+      await loadInquiries(filterUserId, filterTaskStatus);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
     } finally {
@@ -148,9 +167,124 @@ export default function BudgetInquiriesPage() {
     }
   }
 
+  async function handleBatchAll() {
+    if (!window.confirm("Budgetabfragen fuer ALLE Patienten mit Signatur generieren?"))
+      return;
+    setLoading(true);
+    setError("");
+    setFlash("");
+    try {
+      const res = await fetchWithRefresh(
+        `${API_BASE_URL}/admin/budget-inquiries/batch-all`,
+        {
+          method: "POST",
+          headers: { ...buildHeaders(), "Content-Type": "application/json" },
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Batch-All fehlgeschlagen");
+      }
+      const data = await res.json();
+      setFlash(`${data.generated} Budgetanfrage(n) fuer alle Patienten generiert.`);
+      await loadInquiries(filterUserId, filterTaskStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGenerateSelected() {
+    if (selectedIds.size === 0) return;
+    const firstUser = users[0];
+    if (!firstUser) return;
+    setLoading(true);
+    setError("");
+    setFlash("");
+    try {
+      // Collect unique patient_ids from selected inquiries
+      const patientIds = Array.from(selectedIds).map((id) => {
+        const inq = inquiries.find((i) => i.id === id);
+        return inq?.patient_id;
+      }).filter((pid): pid is number => pid !== undefined);
+
+      const uniquePatientIds = Array.from(new Set(patientIds));
+      if (uniquePatientIds.length === 0) return;
+
+      const res = await fetchWithRefresh(
+        `${API_BASE_URL}/admin/budget-inquiries/generate-selected`,
+        {
+          method: "POST",
+          headers: { ...buildHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patient_ids: uniquePatientIds,
+            user_id: firstUser.id,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Generierung fehlgeschlagen");
+      }
+      const data = await res.json();
+      setFlash(`${data.generated} Budgetanfrage(n) fuer ausgewaehlte Patienten generiert.`);
+      setSelectedIds(new Set());
+      await loadInquiries(filterUserId, filterTaskStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleMarkDone(inquiryId: number) {
+    setError("");
+    setFlash("");
+    try {
+      const res = await fetchWithRefresh(
+        `${API_BASE_URL}/admin/budget-inquiries/${inquiryId}/done`,
+        {
+          method: "PATCH",
+          headers: { ...buildHeaders(), "Content-Type": "application/json" },
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Fehler");
+      }
+      setFlash("Als erledigt markiert.");
+      await loadInquiries(filterUserId, filterTaskStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler");
+    }
+  }
+
   function handleFilterChange(userId: string) {
     setFilterUserId(userId);
-    loadInquiries(userId);
+    loadInquiries(userId, filterTaskStatus);
+  }
+
+  function handleTaskStatusFilterChange(status: string) {
+    setFilterTaskStatus(status);
+    loadInquiries(filterUserId, status);
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === inquiries.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(inquiries.map((i) => i.id)));
+    }
   }
 
   function openPdf(id: number) {
@@ -179,13 +313,31 @@ export default function BudgetInquiriesPage() {
               Entlastungsbudget-Anfragen nach §45b SGB XI
             </p>
           </div>
-          <button
-            onClick={() => loadInquiries(filterUserId)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            <RefreshIcon className="h-4 w-4" />
-            Aktualisieren
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleBatchAll}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              Batch: Alle Patienten
+            </button>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleGenerateSelected}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+              >
+                Fuer Ausgewaehlte generieren ({selectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={() => loadInquiries(filterUserId, filterTaskStatus)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <RefreshIcon className="h-4 w-4" />
+              Aktualisieren
+            </button>
+          </div>
         </div>
       </div>
 
@@ -193,6 +345,12 @@ export default function BudgetInquiriesPage() {
         <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircleIcon className="h-5 w-5 shrink-0" />
           {error}
+        </div>
+      )}
+      {flash && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <CheckCircleIcon className="h-5 w-5 shrink-0" />
+          {flash}
         </div>
       )}
 
@@ -216,7 +374,7 @@ export default function BudgetInquiriesPage() {
               onChange={(e) => setGenUserId(e.target.value)}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
             >
-              <option value="">Betreuer wählen...</option>
+              <option value="">Betreuer waehlen...</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name}
@@ -233,7 +391,7 @@ export default function BudgetInquiriesPage() {
           </div>
         </div>
 
-        {/* Batch */}
+        {/* Batch per Betreuer */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">
             Batch: Alle Patienten eines Betreuers
@@ -244,7 +402,7 @@ export default function BudgetInquiriesPage() {
               onChange={(e) => setBatchUserId(e.target.value)}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
             >
-              <option value="">Betreuer wählen...</option>
+              <option value="">Betreuer waehlen...</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name}
@@ -256,31 +414,41 @@ export default function BudgetInquiriesPage() {
               disabled={loading || !batchUserId}
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
             >
-              {loading
-                ? "Wird generiert..."
-                : "Batch generieren"}
+              {loading ? "Wird generiert..." : "Batch generieren"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">
-          Filtern nach Betreuer:
-        </label>
-        <select
-          value={filterUserId}
-          onChange={(e) => handleFilterChange(e.target.value)}
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-        >
-          <option value="">Alle</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.full_name}
-            </option>
-          ))}
-        </select>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-slate-600">Betreuer:</label>
+          <select
+            value={filterUserId}
+            onChange={(e) => handleFilterChange(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">Alle</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-slate-600">Status:</label>
+          <select
+            value={filterTaskStatus}
+            onChange={(e) => handleTaskStatusFilterChange(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">Alle</option>
+            <option value="pending">Offene Aufgaben</option>
+            <option value="done">Erledigt</option>
+          </select>
+        </div>
       </div>
 
       {/* Tabelle */}
@@ -297,12 +465,24 @@ export default function BudgetInquiriesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={
+                        inquiries.length > 0 &&
+                        selectedIds.size === inquiries.length
+                      }
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                    />
+                  </th>
                   <th className="px-3 py-2">Patient</th>
                   <th className="px-3 py-2">Vers.Nr.</th>
                   <th className="px-3 py-2">Kasse</th>
                   <th className="px-3 py-2">Betreuer</th>
+                  <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Erstellt</th>
-                  <th className="px-3 py-2">PDF</th>
+                  <th className="px-3 py-2">Aktionen</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,30 +493,59 @@ export default function BudgetInquiriesPage() {
                       key={inq.id}
                       className="border-b border-slate-100 hover:bg-slate-50"
                     >
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(inq.id)}
+                          onChange={() => toggleSelect(inq.id)}
+                          className="rounded"
+                        />
+                      </td>
                       <td className="px-3 py-2.5 font-medium text-slate-900">
                         {inq.patient_name}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
-                        {inq.versichertennummer || "—"}
+                        {inq.versichertennummer || "--"}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
-                        {inq.kasse_name || "—"}
+                        {inq.kasse_name || "--"}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
                         {betreuer?.full_name || `User #${inq.user_id}`}
                       </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                            inq.task_status === "done"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {inq.task_status === "done" ? "Erledigt" : "Offen"}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5 text-slate-500">
                         {inq.created_at
                           ? new Date(inq.created_at).toLocaleDateString("de-DE")
-                          : "—"}
+                          : "--"}
                       </td>
                       <td className="px-3 py-2.5">
-                        <button
-                          onClick={() => openPdf(inq.id)}
-                          className="rounded-lg bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
-                        >
-                          PDF
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openPdf(inq.id)}
+                            className="rounded-lg bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                          >
+                            PDF
+                          </button>
+                          {inq.task_status === "pending" && (
+                            <button
+                              onClick={() => handleMarkDone(inq.id)}
+                              className="rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Als erledigt markieren
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

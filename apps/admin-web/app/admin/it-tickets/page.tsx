@@ -123,11 +123,7 @@ export default function ItTicketsPage() {
   const bootstrap = useCallback(async () => {
     try {
       const me: User = await getMe();
-      if (
-        me.role !== "admin" &&
-        me.role !== "buero" &&
-        me.role !== "standortleiter"
-      ) {
+      if (me.role !== "admin") {
         router.replace("/user");
         return;
       }

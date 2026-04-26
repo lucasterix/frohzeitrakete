@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon },
   { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon },
   { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon },
-  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon },
+  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true },
   { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true },
   { href: "/admin/signatures", label: "Signaturen", Icon: SignatureIcon, adminOnly: true },
   { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon },
@@ -41,9 +41,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon },
   { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
-  { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon },
+  { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true },
   { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"] },
-  { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon },
+  { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon, adminOnly: true },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
 ];
 

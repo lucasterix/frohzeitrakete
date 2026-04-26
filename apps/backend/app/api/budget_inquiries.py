@@ -32,6 +32,7 @@ class BudgetInquiryResponse(BaseModel):
     kasse_ik: str | None = None
     user_id: int
     signature_event_id: int | None = None
+    task_status: str = "pending"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -48,6 +49,11 @@ class BatchRequest(BaseModel):
     user_id: int
 
 
+class GenerateSelectedRequest(BaseModel):
+    patient_ids: list[int]
+    user_id: int
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -56,11 +62,12 @@ class BatchRequest(BaseModel):
 def list_budget_inquiries(
     user_id: int | None = Query(None),
     patient_id: int | None = Query(None),
+    task_status: str | None = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_office_user),
 ):
-    """Liste aller Budgetanfragen, optional gefiltert nach Betreuer oder Patient."""
-    rows = svc.list_inquiries(db, user_id=user_id, patient_id=patient_id)
+    """Liste aller Budgetanfragen, optional gefiltert nach Betreuer, Patient oder task_status."""
+    rows = svc.list_inquiries(db, user_id=user_id, patient_id=patient_id, task_status=task_status)
     return rows
 
 
@@ -91,6 +98,40 @@ def generate_batch(
     """Batch-Generierung: für alle Patienten eines Betreuers."""
     results = svc.generate_batch_for_user(db, user_id=payload.user_id)
     return {"generated": len(results), "inquiries": results}
+
+
+@router.post("/budget-inquiries/batch-all")
+def generate_batch_all(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Batch-Generierung: fuer ALLE Patienten mit mindestens einer Signatur."""
+    count = svc.generate_batch_all(db)
+    return {"generated": count}
+
+
+@router.post("/budget-inquiries/generate-selected")
+def generate_selected(
+    payload: GenerateSelectedRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Generiert Budgetabfragen fuer eine Liste ausgewaehlter Patienten."""
+    count = svc.generate_for_selected(db, patient_ids=payload.patient_ids, user_id=payload.user_id)
+    return {"generated": count}
+
+
+@router.patch("/budget-inquiries/{inquiry_id}/done")
+def mark_budget_inquiry_done(
+    inquiry_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Setzt task_status auf 'done'."""
+    inquiry = svc.mark_inquiry_done(db, inquiry_id)
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Budgetanfrage nicht gefunden")
+    return {"ok": True, "id": inquiry.id, "task_status": inquiry.task_status}
 
 
 @router.get("/budget-inquiries/{inquiry_id}/pdf")

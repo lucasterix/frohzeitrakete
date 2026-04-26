@@ -23,6 +23,9 @@ class BudgetInquiry(Base):
     signature_event_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("signature_events.id"), nullable=True
     )
+    task_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
