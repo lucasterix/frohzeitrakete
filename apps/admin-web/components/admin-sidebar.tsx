@@ -113,6 +113,21 @@ export default function AdminSidebar() {
         })}
       </nav>
 
+      {/* Patti öffnen */}
+      <div className="mt-4 px-1">
+        <a
+          href="https://patti.app"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-500/20 to-amber-600/10 px-3 py-2.5 text-sm font-medium text-amber-200 transition hover:from-amber-500/30 hover:to-amber-600/20 hover:text-amber-100"
+        >
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-500/20 text-amber-300">
+            <RocketIcon className="h-4 w-4" />
+          </span>
+          Patti öffnen ↗
+        </a>
+      </div>
+
       <div className="mt-6 space-y-3 border-t border-white/10 pt-5">
         <div className="rounded-2xl bg-white/5 px-3 py-3">
           <div className="flex items-center gap-3">
