@@ -45,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/bewerbertool", label: "Bewerbertool", Icon: UsersIcon, access: "Alle" },
+  { href: "/admin/mahnwesen", label: "Mahnwesen", Icon: CalculatorIcon, roles: ["admin", "buchhaltung", "mahnwesen"], access: "Admin, Mahnwesen" },
   { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"], access: "Admin, Buchhaltung" },
   { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon, access: "Alle" },

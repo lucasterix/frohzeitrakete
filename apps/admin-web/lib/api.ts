@@ -2154,3 +2154,104 @@ export async function sendApplicantEmail(
   }
   return response.json();
 }
+
+// ==========================================================================
+// Mahnwesen (Zahlungsavis-Parser)
+// ==========================================================================
+
+export type AvisDocumentRecord = {
+  id: number;
+  filename: string;
+  letter_date: string | null;
+  beleg_no: string | null;
+  doc_type: string;
+  entry_count: number;
+  total_amount: number;
+  warnings: string | null;
+  status: string;
+  note: string | null;
+  source: string;
+  uploaded_by_user_id: number;
+  created_at: string | null;
+  entries?: AvisEntryRecord[];
+};
+
+export type AvisEntryRecord = {
+  id: number;
+  document_id: number;
+  invoice_no: string;
+  amount_eur: number;
+  matched: string;
+  match_note: string | null;
+};
+
+export type MahnwesenStats = {
+  documents: number;
+  entries: number;
+  total_amount: number;
+  unmatched_entries: number;
+  matched_entries: number;
+  by_status: Record<string, number>;
+};
+
+export async function uploadAvisPdfs(files: File[]): Promise<AvisDocumentRecord[]> {
+  const formData = new FormData();
+  for (const f of files) formData.append("files", f);
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Upload fehlgeschlagen"));
+  return response.json();
+}
+
+export async function getAvisDocuments(status?: string): Promise<AvisDocumentRecord[]> {
+  const url = new URL(`${API_BASE_URL}/admin/mahnwesen/documents`);
+  if (status) url.searchParams.set("status", status);
+  const response = await fetchWithRefresh(url.toString(), { headers: buildHeaders() });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler beim Laden"));
+  return response.json();
+}
+
+export async function getAvisDocument(id: number): Promise<AvisDocumentRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/documents/${id}`, { headers: buildHeaders() });
+  if (!response.ok) throw new Error(await parseError(response, "Dokument nicht gefunden"));
+  return response.json();
+}
+
+export async function updateAvisDocument(id: number, payload: { status?: string; note?: string }): Promise<AvisDocumentRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/documents/${id}`, {
+    method: "PATCH", headers: buildHeaders(), body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler beim Aktualisieren"));
+  return response.json();
+}
+
+export async function deleteAvisDocument(id: number): Promise<void> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/documents/${id}`, {
+    method: "DELETE", headers: buildHeaders(),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler beim Löschen"));
+}
+
+export async function updateAvisEntry(id: number, payload: { matched?: string; match_note?: string }): Promise<AvisEntryRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/entries/${id}`, {
+    method: "PATCH", headers: buildHeaders(), body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler beim Aktualisieren"));
+  return response.json();
+}
+
+export async function getMahnwesenStats(): Promise<MahnwesenStats> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mahnwesen/stats`, { headers: buildHeaders() });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler beim Laden"));
+  return response.json();
+}
+
+export async function searchAvisEntries(invoiceNo: string): Promise<(AvisEntryRecord & { document: AvisDocumentRecord | null })[]> {
+  const url = new URL(`${API_BASE_URL}/admin/mahnwesen/search`);
+  url.searchParams.set("invoice_no", invoiceNo);
+  const response = await fetchWithRefresh(url.toString(), { headers: buildHeaders() });
+  if (!response.ok) throw new Error(await parseError(response, "Fehler bei der Suche"));
+  return response.json();
+}

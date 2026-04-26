@@ -20,6 +20,7 @@ from app.api.pflegehilfsmittel import admin_router as pflegehm_admin_router
 from app.api.pflegehilfsmittel import mobile_router as pflegehm_mobile_router
 from app.api.public_sign import router as public_sign_router
 from app.api.applicants import router as applicants_router
+from app.api.mahnwesen import router as mahnwesen_router
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import RequestContextMiddleware
 from app.core.rate_limit import limiter
@@ -89,6 +90,7 @@ app.include_router(pflegehm_admin_router, prefix="/admin", tags=["admin-pflegehi
 app.include_router(pflegehm_mobile_router, prefix="/mobile", tags=["mobile-pflegehilfsmittel"])
 app.include_router(public_sign_router, prefix="/public", tags=["public-sign"])
 app.include_router(applicants_router, prefix="/admin", tags=["admin-applicants"])
+app.include_router(mahnwesen_router, prefix="/admin", tags=["admin-mahnwesen"])
 
 
 @app.get("/health")
