@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, CheckCircleIcon } from "@/components/icons";
 
@@ -83,8 +82,7 @@ const defaultConfig: Config = {
 };
 
 export default function EinstellungenPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [cfg, setCfg] = useState<Config>(defaultConfig);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
@@ -107,22 +105,8 @@ export default function EinstellungenPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   function update<K extends keyof Config>(key: K, value: Config[K]) {
     setCfg((prev) => ({ ...prev, [key]: value }));
@@ -163,7 +147,7 @@ export default function EinstellungenPage() {
   const labelCls = "mb-1 block text-xs font-medium text-slate-600";
   const hintCls = "mt-0.5 text-[11px] text-slate-400";
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

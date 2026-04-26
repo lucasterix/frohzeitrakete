@@ -1,8 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/1cnudUmnU2XWuO1emlUiEWpNv7mdIGiySmWsG0mEzXhU/edit?usp=sharing";
@@ -11,29 +9,9 @@ const EMBED_URL =
   "https://docs.google.com/spreadsheets/d/1cnudUmnU2XWuO1emlUiEWpNv7mdIGiySmWsG0mEzXhU/edit?usp=sharing&widget=true&rm=minimal";
 
 export default function VertretungenPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized, isLoading } = useRequireOffice();
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [router]);
-
-  useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
-
-  if (booting) {
+  if (isLoading || !authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   fetchWithRefresh,
   buildHeaders,
@@ -96,8 +95,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function ItTicketsPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized } = useRequireAdmin();
   const [refreshing, setRefreshing] = useState(false);
   const [items, setItems] = useState<ItTicket[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -120,29 +118,9 @@ export default function ItTicketsPage() {
     }
   }, [statusFilter]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
-
-  useEffect(() => {
-    if (!booting) void loadData();
-  }, [statusFilter, booting, loadData]);
+    if (authorized) loadData();
+  }, [authorized, statusFilter, loadData]);
 
   function openEdit(ticket: ItTicket) {
     if (expandedId === ticket.id) {
@@ -172,7 +150,7 @@ export default function ItTicketsPage() {
     }
   }
 
-  if (booting) {
+  if (!authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 

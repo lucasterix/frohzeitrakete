@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ActivityFeedItem,
   CreateTestSignaturePayload,
   SignatureEvent,
-  User,
   createTestSignature,
   getActivityFeed,
-  getMe,
   getSignatures,
 } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   ActivityIcon,
   AlertCircleIcon,
@@ -53,8 +51,7 @@ function formatDate(value: string): string {
 }
 
 export default function AdminSignaturesPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized } = useRequireAdmin();
   const [refreshing, setRefreshing] = useState(false);
 
   const [signatures, setSignatures] = useState<SignatureEvent[]>([]);
@@ -118,25 +115,9 @@ export default function AdminSignaturesPage() {
     }
   }, [selectedSignatureId]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (authorized) loadData();
+  }, [authorized, loadData]);
 
   async function handleCreateSignature(event: React.FormEvent) {
     event.preventDefault();
@@ -167,7 +148,7 @@ export default function AdminSignaturesPage() {
     }
   }
 
-  if (booting) {
+  if (!authorized) {
     return (
       <div className="space-y-6">
         <div className="h-32 animate-pulse rounded-3xl bg-white/60" />

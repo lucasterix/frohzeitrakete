@@ -1,16 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   SheetsPreviewRow,
   User,
-  getMe,
   getUsers,
   getSheetsPreview,
   linkUserToSheet,
   runSheetsSync,
 } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -18,8 +17,7 @@ import {
 } from "@/components/icons";
 
 export default function SheetsMatchingPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized } = useRequireAdmin();
   const [rows, setRows] = useState<SheetsPreviewRow[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState("");
@@ -45,24 +43,9 @@ export default function SheetsMatchingPage() {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (authorized) loadData();
+  }, [authorized, loadData]);
 
   async function handleLink(sheetName: string, userId: number) {
     setError("");
@@ -93,7 +76,7 @@ export default function SheetsMatchingPage() {
     }
   }
 
-  if (booting) {
+  if (!authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 

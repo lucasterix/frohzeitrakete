@@ -1,12 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   DashboardStats,
-  User,
   getDashboardStats,
-  getMe,
 } from "@/lib/api";
 import Link from "next/link";
 import { getDailyQuote } from "@/lib/daily-quotes";
@@ -18,6 +15,7 @@ import {
   SparkleIcon,
   UsersIcon,
 } from "@/components/icons";
+import { useRequireAdmin } from "@/lib/use-require-role";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://api.froehlichdienste.de";
@@ -35,11 +33,10 @@ function formatDate(value: string): string {
 type HealthState = "loading" | "ready" | "down";
 
 export default function AdminDashboardPage() {
-  const router = useRouter();
+  const { user: currentUser, isLoading: authLoading, authorized } = useRequireAdmin();
 
   const [booting, setBooting] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [pageError, setPageError] = useState("");
@@ -77,27 +74,9 @@ export default function AdminDashboardPage() {
     }
   }, [checkHealth]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me = await getMe();
-
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-
-      setCurrentUser(me);
-      await loadDashboard();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadDashboard, router]);
-
   useEffect(() => {
-    bootstrap();
+    if (!authorized) return;
+    loadDashboard().finally(() => setBooting(false));
   }, [bootstrap]);
 
   if (booting) {

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import SignatureCanvas from "@/components/signature-canvas";
+import dynamic from "next/dynamic";
+const SignatureCanvas = dynamic(() => import("@/components/signature-canvas"), { ssr: false });
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.froehlichdienste.de";

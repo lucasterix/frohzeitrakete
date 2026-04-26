@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -21,8 +20,7 @@ function formatEuro(cent: number): string {
 }
 
 export default function VersandPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [monat, setMonat] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -63,26 +61,12 @@ export default function VersandPage() {
   }, [monat]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   useEffect(() => {
-    if (!booting) void loadData();
-  }, [monat, booting, loadData]);
+    if (authorized) void loadData();
+  }, [monat, authorized, loadData]);
 
   async function handleSendOne(id: number) {
     setBusyId(id);
@@ -126,7 +110,7 @@ export default function VersandPage() {
     }
   }
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

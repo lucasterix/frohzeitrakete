@@ -1,24 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AdminAnnouncement,
   HrRequestRecord,
   SickLeave,
-  User,
   VacationRequest,
   acknowledgeSickLeave,
   createAnnouncement,
   deleteAnnouncement,
   getAnnouncements,
   getHrRequests,
-  getMe,
   getSickLeaves,
   getVacationRequests,
   resolveHrRequest,
   resolveVacationRequest,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -61,9 +59,8 @@ function formatDateTime(iso: string | null): string {
 }
 
 export default function OfficeInboxPage() {
-  const router = useRouter();
+  const { user: me, isLoading: authLoading, authorized } = useRequireOffice();
   const [booting, setBooting] = useState(true);
-  const [me, setMe] = useState<User | null>(null);
   const [tab, setTab] = useState<Tab>("vacation");
 
   const [vacations, setVacations] = useState<VacationRequest[]>([]);
@@ -94,30 +91,14 @@ export default function OfficeInboxPage() {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const user = await getMe();
-      if (user.role !== "admin" && user.role !== "buero" && user.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-      setMe(user);
-      // Voller Vorname als Default — der Betreuer soll im Mobile genau sehen
-      // wer im Büro bearbeitet hat, nicht nur ein zwei-Buchstaben-Kürzel.
-      const firstName = user.full_name.split(" ")[0] ?? "";
-      setKuerzel(firstName);
-      await loadAll();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadAll, router]);
+  useEffect(() => {
+    if (me) setKuerzel(me.full_name.split(" ")[0] ?? "");
+  }, [me]);
 
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (!authorized) return;
+    loadAll().finally(() => setBooting(false));
+  }, [authorized, loadAll]);
 
   async function handleVacationResolve(
     row: VacationRequest,

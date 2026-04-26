@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -47,8 +46,7 @@ const NAV_LINKS = [
 ];
 
 export default function PflegehilfsmittelDashboard() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [stats, setStats] = useState<Stats>({ offen: 0, gesendet: 0, storniert: 0, umsatz_cent: 0 });
   const [recent, setRecent] = useState<Abrechnung[]>([]);
   const [error, setError] = useState("");
@@ -72,24 +70,10 @@ export default function PflegehilfsmittelDashboard() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

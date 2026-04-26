@@ -1,29 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import ChangePasswordForm from "@/components/change-password-form";
 import MySessionList from "@/components/my-session-list";
 import { ShieldIcon, UserCircleIcon } from "@/components/icons";
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const [me, setMe] = useState<User | null>(null);
-  const [booting, setBooting] = useState(true);
+  const { user: me, isLoading } = useAuth();
 
-  useEffect(() => {
-    getMe()
-      .then((user) => {
-        setMe(user);
-        setBooting(false);
-      })
-      .catch(() => {
-        router.replace("/");
-      });
-  }, [router]);
-
-  if (booting) {
+  if (isLoading || !me) {
     return (
       <div className="space-y-6">
         <div className="h-32 animate-pulse rounded-3xl bg-white/60" />

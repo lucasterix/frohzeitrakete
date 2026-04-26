@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
+import { useRequireOffice } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -35,7 +34,7 @@ type UserOption = {
 };
 
 export default function BudgetInquiriesPage() {
-  const router = useRouter();
+  const { authorized, isLoading } = useRequireOffice();
   const [booting, setBooting] = useState(true);
   const [inquiries, setInquiries] = useState<BudgetInquiry[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -97,26 +96,15 @@ export default function BudgetInquiriesPage() {
   }, []);
 
   useEffect(() => {
+    if (!authorized) return;
     (async () => {
       try {
-        const me: User = await getMe();
-        if (
-          me.role !== "admin" &&
-          me.role !== "buero" &&
-          me.role !== "standortleiter"
-        ) {
-          router.replace("/user");
-          return;
-        }
         await Promise.all([loadInquiries(), loadUsers()]);
-      } catch {
-        router.replace("/");
-        return;
       } finally {
         setBooting(false);
       }
     })();
-  }, [loadInquiries, loadUsers, router]);
+  }, [authorized, loadInquiries, loadUsers]);
 
   async function handleGenerate() {
     if (!genPatientId || !genUserId) return;
@@ -348,7 +336,7 @@ export default function BudgetInquiriesPage() {
     );
   }
 
-  if (booting)
+  if (isLoading || !authorized || booting)
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (

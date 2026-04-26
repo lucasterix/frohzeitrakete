@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -19,8 +18,7 @@ function formatEuro(cent: number): string {
 }
 
 export default function KatalogPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [items, setItems] = useState<Hilfsmittel[]>([]);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
@@ -44,22 +42,8 @@ export default function KatalogPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   function startEdit(item: Hilfsmittel) {
     setEditId(item.id);
@@ -94,7 +78,7 @@ export default function KatalogPage() {
     }
   }
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

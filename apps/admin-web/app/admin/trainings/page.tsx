@@ -1,15 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AdminTraining,
-  User,
   createAdminTraining,
   deleteAdminTraining,
   getAdminTrainings,
-  getMe,
 } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -30,8 +28,7 @@ function formatDate(value: string | null): string {
 }
 
 export default function AdminTrainingsPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized } = useRequireAdmin();
   const [refreshing, setRefreshing] = useState(false);
   const [items, setItems] = useState<AdminTraining[]>([]);
   const [pageError, setPageError] = useState("");
@@ -44,7 +41,6 @@ export default function AdminTrainingsPage() {
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
   const [saving, setSaving] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadData = useCallback(async () => {
     setRefreshing(true);
@@ -61,26 +57,9 @@ export default function AdminTrainingsPage() {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-      setIsAdmin(true);
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (authorized) loadData();
+  }, [authorized, loadData]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -126,7 +105,7 @@ export default function AdminTrainingsPage() {
     }
   }
 
-  if (booting) {
+  if (!authorized) {
     return (
       <div className="space-y-6">
         <div className="h-32 animate-pulse rounded-3xl bg-white/60" />
@@ -152,7 +131,7 @@ export default function AdminTrainingsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isAdmin && (
+            {authorized && (
               <button
                 onClick={() => setShowForm((v) => !v)}
                 className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700"
@@ -282,7 +261,7 @@ export default function AdminTrainingsPage() {
                     </p>
                   )}
                 </div>
-                {isAdmin && (
+                {authorized && (
                   <button
                     onClick={() => handleDelete(t)}
                     className="inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 sm:ml-auto"

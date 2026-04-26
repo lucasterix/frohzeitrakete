@@ -1,19 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import UserForm from "@/components/user-form";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import UserEditForm from "@/components/user-edit-form";
-import UserSessionList from "@/components/user-session-list";
-import UserDangerZone from "@/components/user-danger-zone";
-import { User, getMe, getUsers, runSheetsSync } from "@/lib/api";
+import { getUsers, runSheetsSync } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import { AlertCircleIcon, RefreshIcon, UsersIcon } from "@/components/icons";
 
-export default function AdminUsersPage() {
-  const router = useRouter();
+const UserForm = dynamic(() => import("@/components/user-form"), { ssr: false });
+const UserEditForm = dynamic(() => import("@/components/user-edit-form"), { ssr: false });
+const UserSessionList = dynamic(() => import("@/components/user-session-list"), { ssr: false });
+const UserDangerZone = dynamic(() => import("@/components/user-danger-zone"), { ssr: false });
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+export default function AdminUsersPage() {
+  const { user: currentUser, isLoading: authLoading, authorized } = useRequireAdmin();
+
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState("");
@@ -46,28 +47,10 @@ export default function AdminUsersPage() {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me = await getMe();
-
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-
-      setCurrentUser(me);
-      await loadUsers();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadUsers, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (!authorized) return;
+    loadUsers().finally(() => setBooting(false));
+  }, [authorized, loadUsers]);
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();

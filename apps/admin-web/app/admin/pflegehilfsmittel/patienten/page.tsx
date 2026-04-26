@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -24,8 +23,7 @@ type Patient = {
 };
 
 export default function PatientenPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [kassen, setKassen] = useState<Kostentraeger[]>([]);
   const [error, setError] = useState("");
@@ -75,22 +73,8 @@ export default function PatientenPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -268,7 +252,7 @@ export default function PatientenPage() {
     }
   }
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

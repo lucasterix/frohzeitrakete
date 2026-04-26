@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   MailEntryRecord,
   MailIntakeStats,
@@ -10,11 +9,11 @@ import {
   createMailEntry,
   getMailEntries,
   getMailScanUrl,
-  getMe,
   getUsers,
   updateMailEntry,
   uploadMailScan,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import { RefreshIcon } from "@/components/icons";
 
 // ── Label maps ──────────────────────────────────────────────────────────
@@ -112,9 +111,8 @@ function openSinceColor(days: number): string {
 }
 
 export default function PosteingangPage() {
-  const router = useRouter();
+  const { user: me, authorized, isLoading } = useRequireOffice();
   const [booting, setBooting] = useState(true);
-  const [me, setMe] = useState<User | null>(null);
   const [entries, setEntries] = useState<MailEntryRecord[]>([]);
   const [stats, setStats] = useState<MailIntakeStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -164,8 +162,7 @@ export default function PosteingangPage() {
     setLoading(true);
     setError("");
     try {
-      const [meData, data, usersData] = await Promise.all([
-        getMe(),
+      const [data, usersData] = await Promise.all([
         getMailEntries({
           department: departmentFilter || undefined,
           status: statusFilter || undefined,
@@ -174,7 +171,6 @@ export default function PosteingangPage() {
         }),
         getUsers(),
       ]);
-      setMe(meData);
       if (data && typeof data === "object" && "items" in data) {
         setEntries(data.items);
         setStats(data.stats);
@@ -192,8 +188,8 @@ export default function PosteingangPage() {
   }, [departmentFilter, statusFilter, priorityFilter]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (authorized) load();
+  }, [authorized, load]);
 
   // ── Create Step 1: Create entry + upload scan ──────────────────────
 
@@ -367,7 +363,7 @@ export default function PosteingangPage() {
 
   // ── Render ──────────────────────────────────────────────────────────
 
-  if (booting) {
+  if (isLoading || !authorized || booting) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-700" />

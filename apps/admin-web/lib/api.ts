@@ -58,7 +58,8 @@ export type SheetsPreviewRow = {
 export async function getSheetsPreview(): Promise<SheetsPreviewRow[]> {
   const res = await fetchWithRefresh(`${API_BASE_URL}/admin/sheets-preview`, {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!res.ok) throw new Error(await parseError(res, "Sheets-Preview fehlgeschlagen"));
   return res.json();
@@ -183,7 +184,8 @@ export async function getVacationRequests(
   if (status) url.searchParams.set("status", status);
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -239,7 +241,8 @@ export async function getSickLeaves(
   if (onlyOpen) url.searchParams.set("only_open", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -290,7 +293,8 @@ export async function getHrRequests(
   if (onlyOpen) url.searchParams.set("only_open", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -341,7 +345,8 @@ export async function getAnnouncements(
   if (activeOnly) url.searchParams.set("active_only", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -441,7 +446,8 @@ export async function getLeistungsnachweisPatients(
   url.searchParams.set("month", String(month));
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -498,7 +504,8 @@ export async function getSyncErrors(
   url.searchParams.set("only_open", onlyOpen ? "true" : "false");
   const res = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!res.ok) {
     throw new Error(await parseError(res, "Fehler beim Laden"));
@@ -552,7 +559,8 @@ export async function getVpAntraege(
   if (onlyOpen) url.searchParams.set("only_open", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -841,7 +849,8 @@ export async function getMe(): Promise<User> {
     `${API_BASE_URL}/auth/me`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -868,7 +877,8 @@ export async function getMySessions(): Promise<
     `${API_BASE_URL}/auth/sessions`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -916,7 +926,8 @@ export async function getUsers(): Promise<User[]> {
     `${API_BASE_URL}/admin/users`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1055,7 +1066,8 @@ export async function getUserSessions(
     `${API_BASE_URL}/admin/users/${userId}/sessions`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1106,7 +1118,8 @@ export async function getMyPatients(): Promise<
     `${API_BASE_URL}/mobile/patients`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1133,7 +1146,8 @@ export async function getSignatures(): Promise<
     `${API_BASE_URL}/admin/signatures`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1156,7 +1170,8 @@ export async function getSignature(
     `${API_BASE_URL}/admin/signatures/${signatureId}`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1179,7 +1194,8 @@ export async function getActivityFeed(): Promise<
     `${API_BASE_URL}/admin/activity-feed`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1252,7 +1268,8 @@ export async function getMyMobileSignatures(): Promise<SignatureEvent[]> {
     `${API_BASE_URL}/mobile/signatures`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1275,7 +1292,8 @@ export async function getMyMobileSignature(
     `${API_BASE_URL}/mobile/signatures/${signatureId}`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1356,7 +1374,8 @@ export async function getUserWorkReport(
     `${API_BASE_URL}/admin/users/${userId}/work-report?year=${year}&month=${month}`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
 
@@ -1410,7 +1429,8 @@ export async function getAdminCallTasks(): Promise<AdminCallTask[]> {
     `${API_BASE_URL}/admin/call-tasks`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
   if (!response.ok) {
@@ -1446,7 +1466,8 @@ export async function getAdminPatientIntakes(
   if (status) url.searchParams.set("status", status);
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -1495,7 +1516,8 @@ export async function getAdminTrainings(
   if (upcomingOnly) url.searchParams.set("upcoming_only", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -1608,7 +1630,8 @@ export async function getAdminCallRequests(): Promise<AdminCallRequest[]> {
     `${API_BASE_URL}/admin/call-requests`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
   if (!response.ok) {
@@ -1639,7 +1662,8 @@ export async function getAdminContracts(
   if (search && search.trim()) url.searchParams.set("q", search.trim());
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -1654,7 +1678,8 @@ export async function getAdminContract(id: number): Promise<SignatureEvent> {
     `${API_BASE_URL}/admin/contracts/${id}`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
   if (!response.ok) {
@@ -1708,7 +1733,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     `${API_BASE_URL}/admin/dashboard-stats`,
     {
       headers: buildHeaders(),
-      cache: "no-store",
+  
+
     }
   );
   if (!response.ok) {
@@ -1754,7 +1780,8 @@ export async function getPayrollEntries(filters?: {
   if (filters?.category) url.searchParams.set("category", filters.category);
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(
@@ -1876,7 +1903,8 @@ export async function getMailEntries(filters?: {
   if (filters?.stats) url.searchParams.set("stats", "true");
   const response = await fetchWithRefresh(url.toString(), {
     headers: buildHeaders(),
-    cache: "no-store",
+
+
   });
   if (!response.ok) {
     throw new Error(await parseError(response, "Fehler beim Laden des Posteingangs"));
@@ -1956,6 +1984,142 @@ export async function classifyMailEntry(id: number): Promise<MailEntryRecord> {
   );
   if (!response.ok) {
     throw new Error(await parseError(response, "AI-Klassifizierung fehlgeschlagen"));
+  }
+  return response.json();
+}
+
+// ==========================================================================
+// Bewerbertool (Applicant Tracking)
+// ==========================================================================
+
+export type ApplicantRecord = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  position: string;
+  source: string | null;
+  status: string;
+  note: string | null;
+  handler_user_id: number | null;
+  interview_date: string | null;
+  rejection_reason: string | null;
+  resume_path: string | null;
+  created_by_user_id: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getApplicants(
+  status?: string,
+  position?: string
+): Promise<ApplicantRecord[]> {
+  const url = new URL(`${API_BASE_URL}/admin/applicants`);
+  if (status) url.searchParams.set("status", status);
+  if (position) url.searchParams.set("position", position);
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Fehler beim Laden der Bewerber"));
+  }
+  return response.json();
+}
+
+export async function createApplicant(payload: {
+  name: string;
+  email: string;
+  phone?: string | null;
+  position: string;
+  source?: string | null;
+  note?: string | null;
+  send_confirmation?: boolean;
+}): Promise<ApplicantRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/applicants`, {
+    method: "POST",
+    headers: buildHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Bewerber konnte nicht angelegt werden"));
+  }
+  return response.json();
+}
+
+export async function updateApplicant(
+  id: number,
+  payload: Partial<{
+    name: string;
+    email: string;
+    phone: string | null;
+    position: string;
+    source: string | null;
+    status: string;
+    note: string | null;
+    handler_user_id: number | null;
+    interview_date: string | null;
+    rejection_reason: string | null;
+  }>
+): Promise<ApplicantRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/applicants/${id}`,
+    {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Bewerber konnte nicht aktualisiert werden"));
+  }
+  return response.json();
+}
+
+export async function deleteApplicant(id: number): Promise<void> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/applicants/${id}`,
+    { method: "DELETE", headers: buildHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Bewerber konnte nicht gelöscht werden"));
+  }
+}
+
+export async function uploadApplicantResume(
+  id: number,
+  file: File
+): Promise<ApplicantRecord> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/applicants/${id}/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Upload fehlgeschlagen"));
+  }
+  return response.json();
+}
+
+export function getApplicantResumeUrl(id: number): string {
+  return `${API_BASE_URL}/admin/applicants/${id}/resume`;
+}
+
+export async function sendApplicantEmail(
+  id: number,
+  template: "confirmation" | "invitation" | "rejection" | "offer",
+  payload?: { interview_date?: string; note?: string }
+): Promise<ApplicantRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/applicants/${id}/email/${template}`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload ?? {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "E-Mail konnte nicht gesendet werden"));
   }
   return response.json();
 }

@@ -1,15 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AdminContract,
   SignatureEvent,
-  User,
   getAdminContract,
   getAdminContracts,
-  getMe,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   RefreshIcon,
@@ -29,8 +27,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export default function AdminContractsPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized, isLoading } = useRequireOffice();
   const [refreshing, setRefreshing] = useState(false);
   const [contracts, setContracts] = useState<AdminContract[]>([]);
   const [search, setSearch] = useState("");
@@ -57,25 +54,9 @@ export default function AdminContractsPage() {
     }
   }, [selectedId]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   useEffect(() => {
     if (selectedId == null) {
@@ -118,7 +99,7 @@ export default function AdminContractsPage() {
     window.open(`/admin/contracts/${id}/print`, "_blank");
   }
 
-  if (booting) {
+  if (isLoading || !authorized) {
     return (
       <div className="space-y-6">
         <div className="h-32 animate-pulse rounded-3xl bg-white/60" />

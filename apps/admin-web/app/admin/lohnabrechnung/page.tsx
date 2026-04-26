@@ -1,18 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import {
   PayrollEntryRecord,
   User,
   createPayrollEntry,
-  getMe,
   getPayrollAttachmentUrl,
   getPayrollEntries,
   getUsers,
   updatePayrollEntry,
   uploadPayrollAttachment,
 } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -58,9 +57,7 @@ function formatDateTime(value: string | null): string {
 }
 
 export default function LohnabrechnungPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
-  const [me, setMe] = useState<User | null>(null);
+  const { user: me, isLoading: authLoading, authorized } = useRequireAdmin();
   const [entries, setEntries] = useState<PayrollEntryRecord[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -113,26 +110,8 @@ export default function LohnabrechnungPage() {
   }, [statusFilter, categoryFilter]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const meData = await getMe();
-        if (meData.role !== "admin") {
-          router.replace("/user");
-          return;
-        }
-        setMe(meData);
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [router]);
-
-  useEffect(() => {
-    if (!booting && me) load();
-  }, [booting, me, load]);
+    if (authorized) load();
+  }, [authorized, load]);
 
   const handleEdit = (entry: PayrollEntryRecord) => {
     setEditingId(entry.id);
@@ -195,7 +174,7 @@ export default function LohnabrechnungPage() {
     }
   };
 
-  if (booting) {
+  if (!authorized) {
     return (
       <div className="space-y-6">
         <div className="h-20 animate-pulse rounded-3xl bg-white/60" />

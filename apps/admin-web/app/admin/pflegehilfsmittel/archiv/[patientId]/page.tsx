@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -53,11 +53,10 @@ function statusBadge(status: string) {
 }
 
 export default function ArchivDetailPage() {
-  const router = useRouter();
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const params = useParams();
   const patientId = params.patientId as string;
 
-  const [booting, setBooting] = useState(true);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [abrechnungen, setAbrechnungen] = useState<Abrechnung[]>([]);
   const [error, setError] = useState("");
@@ -81,22 +80,8 @@ export default function ArchivDetailPage() {
   }, [patientId]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   async function handleLeistungsnachweisUpload(abrId: number, file: File) {
     setBusyId(abrId);
@@ -119,7 +104,7 @@ export default function ArchivDetailPage() {
     }
   }
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

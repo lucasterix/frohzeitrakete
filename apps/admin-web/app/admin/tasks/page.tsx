@@ -1,16 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AdminCallTask,
   AdminCallTaskKind,
-  User,
   getAdminCallTasks,
-  getMe,
   markCallRequestDone,
   markOfficeCallDone,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -58,7 +56,7 @@ function formatDate(value: string | null): string {
 }
 
 export default function AdminTasksPage() {
-  const router = useRouter();
+  const { user, isLoading: authLoading, authorized } = useRequireOffice();
   const [booting, setBooting] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tasks, setTasks] = useState<AdminCallTask[]>([]);
@@ -82,25 +80,10 @@ export default function AdminTasksPage() {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (!authorized) return;
+    loadData().finally(() => setBooting(false));
+  }, [authorized, loadData]);
 
   const filteredTasks = useMemo(() => {
     if (filter === "all") return tasks;

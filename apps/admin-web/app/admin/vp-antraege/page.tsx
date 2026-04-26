@@ -1,15 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   AdminVpAntrag,
-  User,
-  getMe,
   getVpAntraege,
   setOfficeProcessed,
   vpAntragPdfUrl,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -29,8 +27,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 export default function VpAntraegePage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized, isLoading } = useRequireOffice();
   const [refreshing, setRefreshing] = useState(false);
   const [items, setItems] = useState<AdminVpAntrag[]>([]);
   const [filter, setFilter] = useState<"open" | "all">("open");
@@ -51,29 +48,9 @@ export default function VpAntraegePage() {
     }
   }, [filter]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
-
-  useEffect(() => {
-    if (!booting) void loadData();
-  }, [filter, booting, loadData]);
+    if (authorized) void loadData();
+  }, [authorized, filter, loadData]);
 
   async function toggleProcessed(item: AdminVpAntrag) {
     setBusyId(item.id);
@@ -95,7 +72,7 @@ export default function VpAntraegePage() {
     }
   }
 
-  if (booting) {
+  if (isLoading || !authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 

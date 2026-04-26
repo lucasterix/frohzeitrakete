@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   SyncError,
-  User,
-  getMe,
   getSyncErrors,
   resolveSyncError,
 } from "@/lib/api";
+import { useRequireAdmin } from "@/lib/use-require-role";
 import {
   AlertCircleIcon,
   CheckCircleIcon,
@@ -28,8 +26,7 @@ function formatDateTime(iso: string | null): string {
 }
 
 export default function SyncErrorsPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { authorized } = useRequireAdmin();
   const [refreshing, setRefreshing] = useState(false);
   const [items, setItems] = useState<SyncError[]>([]);
   const [onlyOpen, setOnlyOpen] = useState(true);
@@ -48,29 +45,9 @@ export default function SyncErrorsPage() {
     }
   }, [onlyOpen]);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me: User = await getMe();
-      if (me.role !== "admin") {
-        router.replace("/user");
-        return;
-      }
-      await loadData();
-    } catch {
-      router.replace("/");
-      return;
-    } finally {
-      setBooting(false);
-    }
-  }, [loadData, router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
-
-  useEffect(() => {
-    if (!booting) void loadData();
-  }, [onlyOpen, booting, loadData]);
+    if (authorized) loadData();
+  }, [authorized, onlyOpen, loadData]);
 
   async function handleResolve(id: number) {
     setError("");
@@ -84,7 +61,7 @@ export default function SyncErrorsPage() {
     }
   }
 
-  if (booting) {
+  if (!authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 

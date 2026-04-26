@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
-import SignatureCanvas from "@/components/signature-canvas";
+import dynamic from "next/dynamic";
+const SignatureCanvas = dynamic(() => import("@/components/signature-canvas"), { ssr: false });
 import { AlertCircleIcon, CheckCircleIcon } from "@/components/icons";
 
 type Patient = { patient_id: number; display_name: string };

@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { User, getMe } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 import { fetchWithRefresh, buildHeaders, API_BASE_URL } from "@/lib/api-helpers";
 import { AlertCircleIcon, RefreshIcon } from "@/components/icons";
 
@@ -31,8 +30,7 @@ function statusBadge(status: string) {
 }
 
 export default function AbrechnungenPage() {
-  const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "pflegehilfsmittel"]);
   const [items, setItems] = useState<Abrechnung[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("alle");
   const [monatFilter, setMonatFilter] = useState<string>("");
@@ -57,26 +55,12 @@ export default function AbrechnungenPage() {
   }, [statusFilter, monatFilter]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
-        await loadData();
-      } catch {
-        router.replace("/");
-        return;
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, [loadData, router]);
+    if (authorized) void loadData();
+  }, [authorized, loadData]);
 
   useEffect(() => {
-    if (!booting) void loadData();
-  }, [statusFilter, monatFilter, booting, loadData]);
+    if (authorized) void loadData();
+  }, [statusFilter, monatFilter, authorized, loadData]);
 
   async function handleAction(id: number, action: "pdf" | "edifact" | "senden" | "storno") {
     setBusyId(id);
@@ -109,7 +93,7 @@ export default function AbrechnungenPage() {
     }
   }
 
-  if (booting) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
+  if (authLoading || !authorized) return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
 
   return (
     <div className="space-y-6">

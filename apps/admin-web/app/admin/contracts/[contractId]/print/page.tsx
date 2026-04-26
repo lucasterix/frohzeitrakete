@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import {
   AdminContract,
   SignatureEvent,
-  User,
   getAdminContract,
   getAdminContracts,
-  getMe,
 } from "@/lib/api";
+import { useRequireRole } from "@/lib/use-require-role";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -25,7 +24,7 @@ function formatDate(value: string | null | undefined): string {
 
 export default function ContractPrintPage() {
   const params = useParams<{ contractId: string }>();
-  const router = useRouter();
+  const { isLoading: authLoading, authorized } = useRequireRole(["admin", "buero", "standortleiter"]);
   const contractId = Number(params?.contractId);
 
   const [event, setEvent] = useState<SignatureEvent | null>(null);
@@ -33,14 +32,10 @@ export default function ContractPrintPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!authorized) return;
     let cancelled = false;
     async function load() {
       try {
-        const me: User = await getMe();
-        if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-          router.replace("/user");
-          return;
-        }
         const [ev, rows] = await Promise.all([
           getAdminContract(contractId),
           getAdminContracts(),
@@ -60,7 +55,7 @@ export default function ContractPrintPage() {
     return () => {
       cancelled = true;
     };
-  }, [contractId, router]);
+  }, [contractId, authorized]);
 
   useEffect(() => {
     if (event) {
@@ -69,6 +64,9 @@ export default function ContractPrintPage() {
     }
   }, [event]);
 
+  if (authLoading || !authorized) {
+    return <p className="p-8 text-sm text-slate-500">Lade …</p>;
+  }
   if (error) {
     return <p className="p-8 text-sm text-red-700">{error}</p>;
   }

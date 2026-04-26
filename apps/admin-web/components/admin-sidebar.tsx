@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { User, getMe, logout } from "@/lib/api";
+import { useMemo } from "react";
+import { logout } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import {
   AlertCircleIcon,
   CalculatorIcon,
@@ -43,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/bewerbertool", label: "Bewerbertool", Icon: UsersIcon, access: "Alle" },
   { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"], access: "Admin, Buchhaltung" },
   { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon, adminOnly: true, access: "Admin" },
   { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon, access: "Alle" },
@@ -51,11 +53,17 @@ const NAV_ITEMS: NavItem[] = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [me, setMe] = useState<User | null>(null);
+  const { user: me } = useAuth();
 
-  useEffect(() => {
-    getMe().then(setMe).catch(() => setMe(null));
-  }, []);
+  const visibleItems = useMemo(
+    () =>
+      NAV_ITEMS.filter((item) => {
+        if (item.roles) return me?.role ? item.roles.includes(me.role) : false;
+        if (item.adminOnly) return me?.role === "admin";
+        return true;
+      }),
+    [me?.role]
+  );
 
   async function handleLogout() {
     await logout();
@@ -79,11 +87,7 @@ export default function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV_ITEMS.filter((item) => {
-          if (item.roles) return me?.role ? item.roles.includes(me.role) : false;
-          if (item.adminOnly) return me?.role === "admin";
-          return true;
-        }).map(({ href, label, Icon, access }) => {
+        {visibleItems.map(({ href, label, Icon, access }) => {
           const isActive =
             pathname === href ||
             (href !== "/admin" && pathname?.startsWith(href));

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
-import { getMe, User } from "@/lib/api";
+import { usePathname } from "next/navigation";
+import { ReactNode } from "react";
+import { useRequireRole } from "@/lib/use-require-role";
 
 const TABS = [
   { href: "/admin/buchhaltung/bank-transaktionen", label: "Bank-Transaktionen" },
@@ -13,33 +13,11 @@ const TABS = [
   { href: "/admin/buchhaltung/monatsabschluss", label: "Monatsabschluss" },
 ];
 
-const ALLOWED_ROLES = new Set(["admin", "buchhaltung"]);
-
 export default function BuchhaltungLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const { authorized } = useRequireRole(["admin", "buchhaltung"]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getMe()
-      .then((me: User) => {
-        if (cancelled) return;
-        if (ALLOWED_ROLES.has(me.role)) {
-          setAuthorized(true);
-        } else {
-          router.replace("/user");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) router.replace("/");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
-
-  if (authorized !== true) {
+  if (!authorized) {
     return (
       <div className="space-y-6">
         <div className="h-10 animate-pulse rounded-2xl bg-white/60" />

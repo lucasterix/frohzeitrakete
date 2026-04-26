@@ -1,18 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LeistungsnachweisPatient,
   User,
   getLeistungsnachweisPatients,
-  getMe,
   getUsers,
   leistungsnachweisPdfUrl,
   leistungsnachweiseAllZipUrl,
   leistungsnachweiseZipUrl,
   setLeistungsnachweisOfficeProcessed,
 } from "@/lib/api";
+import { useRequireOffice } from "@/lib/use-require-role";
 import { AlertCircleIcon, SparkleIcon } from "@/components/icons";
 
 const MONTH_NAMES = [
@@ -38,41 +37,38 @@ type UserRow = {
 };
 
 export default function LeistungsnachweisePage() {
-  const router = useRouter();
+  const { authorized, isLoading } = useRequireOffice();
   const now = new Date();
-  const [booting, setBooting] = useState(true);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rows, setRows] = useState<UserRow[]>([]);
   const [error, setError] = useState("");
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const me = await getMe();
-      if (me.role !== "admin" && me.role !== "buero" && me.role !== "standortleiter") {
-        router.replace("/user");
-        return;
-      }
-      const users = await getUsers();
-      const caretakers = users.filter((u) => u.role === "caretaker");
-      setRows(
-        caretakers.map((u) => ({
-          user: u,
-          patients: null,
-          loading: false,
-          error: null,
-        }))
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Fehler beim Laden");
-    } finally {
-      setBooting(false);
-    }
-  }, [router]);
-
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    if (!authorized) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const users = await getUsers();
+        const caretakers = users.filter((u) => u.role === "caretaker");
+        if (!cancelled) {
+          setRows(
+            caretakers.map((u) => ({
+              user: u,
+              patients: null,
+              loading: false,
+              error: null,
+            }))
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Fehler beim Laden");
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authorized]);
 
   async function loadPatientsFor(userId: number) {
     setRows((rows) =>
@@ -171,7 +167,7 @@ export default function LeistungsnachweisePage() {
     );
   }
 
-  if (booting) {
+  if (isLoading || !authorized) {
     return <div className="h-64 animate-pulse rounded-3xl bg-white/60" />;
   }
 
