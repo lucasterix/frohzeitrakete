@@ -77,7 +77,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!authorized) return;
     loadDashboard().finally(() => setBooting(false));
-  }, [bootstrap]);
+  }, [authorized, loadDashboard]);
 
   if (booting) {
     return <DashboardSkeleton />;
