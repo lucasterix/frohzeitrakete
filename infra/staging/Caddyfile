@@ -32,16 +32,19 @@
 
 admin.froehlichdienste.de {
     import security-headers
+    encode zstd gzip
     reverse_proxy admin-web:3000
 }
 
 api.froehlichdienste.de {
     import security-headers
+    encode zstd gzip
     reverse_proxy backend:8000
 }
 
 rakete.froehlichdienste.de {
     import security-headers
+    encode zstd gzip
     reverse_proxy mobile-web:80
 }
 
