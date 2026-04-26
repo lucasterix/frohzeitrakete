@@ -21,16 +21,18 @@ jobs:
             git pull
             cd infra/staging
 
-            # Alle Container + orphans stoppen und entfernen
-            docker compose down --remove-orphans || true
-            docker container prune -f || true
+            # Alles komplett stoppen + aufräumen
+            docker compose down --remove-orphans --volumes=false || true
+            docker rm -f fzr_postgres fzr_backend fzr_admin fzr_caddy fzr_mobile_web 2>/dev/null || true
+            docker container prune -f 2>/dev/null || true
 
-            # Nur backend + admin-web bauen (mobile-web wird selten
-            # geändert und das Flutter-Base-Image hat Rate-Limits)
+            # Nur backend + admin-web bauen
             docker compose build backend admin-web
 
-            # Migrations
+            # Migrations (one-shot Container)
             docker compose run --rm backend alembic upgrade head
 
-            # Stack starten (mobile-web nutzt cached image)
-            docker compose up -d --wait
+            # Stack starten
+            docker compose up -d
+            sleep 10
+            docker compose ps
