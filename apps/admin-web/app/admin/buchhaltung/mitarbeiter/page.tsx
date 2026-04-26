@@ -202,18 +202,28 @@ export default function MitarbeiterPage() {
 
   const loadAll = useCallback(async () => {
     setError("");
+    // Independent loads: a slow/failing health check (e.g. bridge offline)
+    // must not hide the employee list, which comes from the local DB and
+    // works regardless of bridge state.
+    const empPromise = api<Employee[]>(
+      `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
+    );
+    const healthPromise = api<SyncHealth>("/datev/sync/health");
+
     try {
-      const [h, e] = await Promise.all([
-        api<SyncHealth>("/datev/sync/health"),
-        api<Employee[]>(
-          `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
-        ),
-      ]);
-      setHealth(h);
-      setEmployees(e);
+      const employees = await empPromise;
+      setEmployees(employees);
       setAuthExpired(false);
     } catch (e) {
       handleApiError(e);
+    }
+
+    try {
+      const h = await healthPromise;
+      setHealth(h);
+    } catch {
+      // Health failure is non-fatal — keep last-known state, don't mask
+      // the rest of the UI.
     }
   }, [includeInactive, handleApiError]);
 
@@ -226,17 +236,14 @@ export default function MitarbeiterPage() {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
-      Promise.all([
-        api<SyncHealth>("/datev/sync/health"),
-        api<Employee[]>(
-          `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
-        ),
-      ])
-        .then(([h, e]) => {
-          setHealth(h);
-          setEmployees(e);
-        })
+      // Same defensive split as in loadAll — a stalled health call
+      // must not block the employee refresh.
+      api<Employee[]>(
+        `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
+      )
+        .then(setEmployees)
         .catch(() => {});
+      api<SyncHealth>("/datev/sync/health").then(setHealth).catch(() => {});
     }, 30000);
     // When the tab becomes visible again, refresh once immediately
     // so the user doesn't see stale data after switching back.
