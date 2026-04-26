@@ -240,78 +240,71 @@ export default function BewerbertoolPage() {
 
       {/* ═══ KANBAN BOARD ═══ */}
       {view === "board" && (
-        <div className="-mx-4 overflow-x-auto px-4 lg:-mx-8 lg:px-8">
-          <div className="inline-flex gap-3 pb-6" style={{ minWidth: "100%" }}>
-            {COLS.map((col) => {
-              const items = colMap[col.id] ?? [];
-              const isOver = dragOverCol === col.id;
-              return (
-                <div
-                  key={col.id}
-                  onDragOver={(e) => onDragOver(e, col.id)}
-                  onDragLeave={() => { if (dragOverCol === col.id) setDragOverCol(null); }}
-                  onDrop={(e) => onDrop(e, col)}
-                  className={`flex w-[200px] shrink-0 flex-col rounded-2xl transition-all duration-150 xl:w-[220px] ${
-                    isOver ? `ring-2 ${col.dropCls}` : "bg-slate-50"
-                  }`}
-                  style={{ minHeight: 320 }}
-                >
-                  {/* Col header */}
-                  <div className={`flex items-center gap-2 rounded-t-2xl px-3 py-2.5 ${col.headerCls}`}>
-                    <span className="text-base">{col.emoji}</span>
-                    <span className="flex-1 text-xs font-bold uppercase tracking-wider">{col.label}</span>
-                    <span className={`grid h-5 min-w-[20px] place-items-center rounded-full px-1 text-[10px] font-bold ${col.countCls}`}>{items.length}</span>
-                  </div>
-
-                  {/* Cards */}
-                  <div className="flex flex-1 flex-col gap-2 p-2">
-                    {items.map((a) => (
-                      <div
-                        key={a.id}
-                        draggable
-                        onDragStart={(e) => onDragStart(e, a.id)}
-                        onDragEnd={onDragEnd}
-                        onClick={() => { setSelectedId(a.id); setView("detail"); }}
-                        className={`group cursor-grab select-none rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-slate-300 hover:shadow-md active:cursor-grabbing active:shadow-lg ${
-                          busyId === a.id ? "opacity-50 pointer-events-none" : ""
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-[11px] font-bold text-white shadow-sm">
-                            {initials(a.name)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold leading-tight text-slate-900">{a.name}</div>
-                            <div className="truncate text-[11px] leading-tight text-slate-500">{a.position}</div>
-                          </div>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {a.desired_hours != null && (
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{a.desired_hours}h</span>
-                          )}
-                          {a.source && (
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{SOURCES[a.source] ?? a.source}</span>
-                          )}
-                          {a.has_drivers_license && (
-                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px]">🚗</span>
-                          )}
-                        </div>
-                        <div className="mt-1.5 text-[10px] text-slate-400">{fmtDate(a.created_at)}</div>
-                      </div>
-                    ))}
-
-                    {items.length === 0 && (
-                      <div className={`flex flex-1 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-[11px] transition-colors ${
-                        isOver ? "border-slate-400 text-slate-500" : "border-slate-200 text-slate-300"
-                      }`}>
-                        {isOver ? "Loslassen!" : "Hierher ziehen"}
-                      </div>
-                    )}
-                  </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8">
+          {COLS.map((col) => {
+            const items = colMap[col.id] ?? [];
+            const isOver = dragOverCol === col.id;
+            return (
+              <div
+                key={col.id}
+                onDragOver={(e) => onDragOver(e, col.id)}
+                onDragLeave={() => { if (dragOverCol === col.id) setDragOverCol(null); }}
+                onDrop={(e) => onDrop(e, col)}
+                className={`flex flex-col rounded-2xl transition-all duration-150 ${
+                  isOver ? `ring-2 ${col.dropCls}` : "bg-slate-50/80"
+                }`}
+              >
+                {/* Col header */}
+                <div className={`flex items-center gap-2 rounded-t-2xl px-3 py-2.5 ${col.headerCls}`}>
+                  <span>{col.emoji}</span>
+                  <span className="flex-1 truncate text-xs font-bold uppercase tracking-wider">{col.label}</span>
+                  <span className={`grid h-5 min-w-[20px] place-items-center rounded-full px-1 text-[10px] font-bold ${col.countCls}`}>{items.length}</span>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Cards — scrollable wenn viele */}
+                <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2" style={{ maxHeight: "calc(100vh - 260px)", minHeight: 120 }}>
+                  {items.map((a) => (
+                    <div
+                      key={a.id}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, a.id)}
+                      onDragEnd={onDragEnd}
+                      onClick={() => { setSelectedId(a.id); setView("detail"); }}
+                      className={`group cursor-grab select-none rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm transition-all hover:border-slate-300 hover:shadow-md active:cursor-grabbing active:shadow-lg ${
+                        busyId === a.id ? "pointer-events-none opacity-50" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-[10px] font-bold text-white">
+                          {initials(a.name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-semibold leading-tight text-slate-900">{a.name}</div>
+                          <div className="truncate text-[11px] leading-tight text-slate-500">{a.position}</div>
+                        </div>
+                      </div>
+                      {(a.desired_hours != null || a.source || a.has_drivers_license) && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {a.desired_hours != null && <span className="rounded bg-slate-100 px-1 py-0.5 text-[9px] font-medium text-slate-600">{a.desired_hours}h</span>}
+                          {a.source && <span className="rounded bg-slate-100 px-1 py-0.5 text-[9px] text-slate-500">{SOURCES[a.source] ?? a.source}</span>}
+                          {a.has_drivers_license && <span className="text-[9px]">🚗</span>}
+                        </div>
+                      )}
+                      <div className="mt-1 text-[9px] text-slate-400">{fmtDate(a.created_at)}</div>
+                    </div>
+                  ))}
+
+                  {items.length === 0 && (
+                    <div className={`flex flex-1 items-center justify-center rounded-xl border-2 border-dashed p-3 text-center text-[10px] transition-colors ${
+                      isOver ? "border-slate-400 text-slate-500" : "border-slate-200 text-slate-300"
+                    }`}>
+                      {isOver ? "Loslassen!" : "Hierher ziehen"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
