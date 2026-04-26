@@ -181,10 +181,20 @@ export default function MitarbeiterPage() {
 
   useEffect(() => {
     loadAll();
-    // Poll health every 30s so the indicator stays current.
+    // Soft-poll every 20s so co-workers' edits show up automatically:
+    // health (cheap) + employee list. Sync triggers from another user
+    // become visible without a manual refresh.
     const t = setInterval(() => {
-      api<SyncHealth>("/datev/sync/health").then(setHealth).catch(() => {});
-    }, 30000);
+      Promise.all([
+        api<SyncHealth>("/datev/sync/health"),
+        api<Employee[]>("/datev/employees"),
+      ])
+        .then(([h, e]) => {
+          setHealth(h);
+          setEmployees(e);
+        })
+        .catch(() => {});
+    }, 20000);
     return () => clearInterval(t);
   }, [loadAll]);
 
@@ -480,7 +490,14 @@ function ProfileDrawer({
 
   useEffect(() => {
     reload();
-  }, [reload]);
+    // Re-poll the open profile so queue status + concurrent edits stay live.
+    const t = setInterval(() => {
+      api<Profile>(`/datev/employees/${personnelNumber}/profile`)
+        .then(setProfile)
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(t);
+  }, [reload, personnelNumber]);
 
   if (!profile) {
     return (
