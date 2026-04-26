@@ -148,12 +148,21 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 
 // --- main page -------------------------------------------------------------
 
+type SyncResult = {
+  datev?: { ok?: boolean; created?: number; updated?: number; listed?: number; error?: string };
+  auto_link?: { linked?: number; still_unmatched?: number };
+  patti?: { refreshed?: number; failed?: number };
+};
+
+type DrainResult = { done: number; retry: number; error: number; total: number };
+
 export default function MitarbeiterPage() {
   const [health, setHealth] = useState<SyncHealth | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState("");
+  const [busyAction, setBusyAction] = useState<null | "sync" | "drain">(null);
   const [search, setSearch] = useState("");
 
   const loadAll = useCallback(async () => {
@@ -180,34 +189,59 @@ export default function MitarbeiterPage() {
   }, [loadAll]);
 
   const fullSync = async () => {
-    setBusy(true);
+    setBusyAction("sync");
     setError("");
+    setInfo("");
     try {
-      await api(`/datev/sync/full`, { method: "POST" });
+      const r = await api<SyncResult>(`/datev/sync/full`, { method: "POST" });
       await loadAll();
+      const parts: string[] = [];
+      if (r.datev) {
+        if (r.datev.ok) {
+          parts.push(
+            `DATEV: ${r.datev.listed ?? 0} Mitarbeiter (${r.datev.created ?? 0} neu, ${
+              r.datev.updated ?? 0
+            } aktualisiert)`
+          );
+        } else {
+          parts.push(`DATEV-Fehler: ${r.datev.error ?? "siehe Server-Log"}`);
+        }
+      }
+      if (r.auto_link) {
+        parts.push(
+          `Patti-Auto-Link: ${r.auto_link.linked ?? 0} verknüpft, ${
+            r.auto_link.still_unmatched ?? 0
+          } unverknüpft`
+        );
+      }
+      if (r.patti) {
+        parts.push(`Patti-Refresh: ${r.patti.refreshed ?? 0} aktualisiert`);
+      }
+      setInfo(parts.join(" · "));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sync-Fehler");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
   const drainQueue = async () => {
-    setBusy(true);
+    setBusyAction("drain");
     setError("");
+    setInfo("");
     try {
-      const r = await api<{ done: number; retry: number; error: number; total: number }>(
-        `/datev/sync/drain-queue`,
-        { method: "POST" }
-      );
+      const r = await api<DrainResult>(`/datev/sync/drain-queue`, { method: "POST" });
       await loadAll();
+      setInfo(
+        `${r.done} fertig, ${r.retry} später wiederholen, ${r.error} Fehler — von ${r.total} insgesamt`
+      );
       if (r.error > 0) {
         setError(`${r.error} Operation(en) sind dauerhaft fehlgeschlagen — siehe Profile.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Queue-Fehler");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -233,7 +267,12 @@ export default function MitarbeiterPage() {
         </p>
       </div>
 
-      <SyncStatusBar health={health} onFullSync={fullSync} onDrain={drainQueue} busy={busy} />
+      <SyncStatusBar
+        health={health}
+        onFullSync={fullSync}
+        onDrain={drainQueue}
+        busyAction={busyAction}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input
@@ -244,6 +283,12 @@ export default function MitarbeiterPage() {
           className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
       </div>
+
+      {info ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {info}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -315,19 +360,29 @@ export default function MitarbeiterPage() {
 
 // --- sync status bar ------------------------------------------------------
 
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+      aria-hidden
+    />
+  );
+}
+
 function SyncStatusBar({
   health,
   onFullSync,
   onDrain,
-  busy,
+  busyAction,
 }: {
   health: SyncHealth | null;
   onFullSync: () => void;
   onDrain: () => void;
-  busy: boolean;
+  busyAction: null | "sync" | "drain";
 }) {
   const bridgeOk = health?.bridge_reachable;
   const queue = health?.queue ?? { pending: 0, in_progress: 0, done: 0, error: 0 };
+  const anyBusy = busyAction !== null;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -367,17 +422,29 @@ function SyncStatusBar({
         <div className="flex gap-2">
           <button
             onClick={onDrain}
-            disabled={busy}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
+            disabled={anyBusy}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
           >
-            Queue jetzt abarbeiten
+            {busyAction === "drain" ? (
+              <>
+                <Spinner /> Verarbeite Queue …
+              </>
+            ) : (
+              "Queue jetzt abarbeiten"
+            )}
           </button>
           <button
             onClick={onFullSync}
-            disabled={busy || !bridgeOk}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
+            disabled={anyBusy || !bridgeOk}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
           >
-            Aus DATEV/Patti synchronisieren
+            {busyAction === "sync" ? (
+              <>
+                <Spinner /> Synchronisiere — kann ~30s dauern …
+              </>
+            ) : (
+              "Aus DATEV/Patti synchronisieren"
+            )}
           </button>
         </div>
       </div>
