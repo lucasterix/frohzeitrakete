@@ -79,6 +79,16 @@ type PendingOp = {
   last_attempt_at: string | null;
 };
 
+type AbsenceRecord = {
+  id: string | null;
+  date_of_emergence: string | null;
+  reason_for_absence_id: string | null;
+  salary_type_id: number | null;
+  hours: number | null;
+  days: number | null;
+  accounting_month: string | null;
+};
+
 type Profile = {
   personnel_number: number;
   full_name: string;
@@ -131,6 +141,7 @@ type Profile = {
     bic?: string | null;
     updated_at?: string | null;
   };
+  absences: AbsenceRecord[];
   last_datev_synced_at: string | null;
   last_patti_synced_at: string | null;
   pending_operations: PendingOp[];
@@ -564,7 +575,7 @@ function SyncStatusBar({
 
 // --- profile drawer -------------------------------------------------------
 
-type Tab = "kontakt" | "bank" | "bezuege" | "patti" | "queue";
+type Tab = "kontakt" | "bank" | "bezuege" | "abwesenheit" | "patti" | "queue";
 
 function ProfileDrawer({
   personnelNumber,
@@ -640,6 +651,7 @@ function ProfileDrawer({
             ["kontakt", "Kontakt"],
             ["bank", "Bank"],
             ["bezuege", "Bezüge"],
+            ["abwesenheit", `Abwesenheit${profile.absences.length > 0 ? ` (${profile.absences.length})` : ""}`],
             ["patti", profile.patti.linked ? "Patti ✓" : "Patti"],
             ["queue", `Aufträge${queueCount + errorCount > 0 ? ` (${queueCount + errorCount})` : ""}`],
           ] as Array<[Tab, string]>
@@ -672,6 +684,9 @@ function ProfileDrawer({
       ) : null}
       {tab === "bezuege" ? (
         <BezuegeTab profile={profile} onSaved={async () => { await reload(); await onChanged(); }} setError={setError} />
+      ) : null}
+      {tab === "abwesenheit" ? (
+        <AbwesenheitTab profile={profile} onSaved={async () => { await reload(); await onChanged(); }} setError={setError} />
       ) : null}
       {tab === "patti" ? (
         <PattiTab profile={profile} onChanged={async () => { await reload(); await onChanged(); }} setError={setError} />
@@ -951,12 +966,261 @@ function BezuegeTab({
         )}
       </Section>
 
-      <Section title="Stundenlöhne 1–5">
-        <p className="mb-3 text-xs text-slate-500">
-          Pro Mitarbeiter sind in DATEV bis zu fünf verschiedene Stundensätze hinterlegbar
-          (z.B. Grundlohn, Nachtdienst, Wochenende). Leerlassen wenn nicht genutzt.
-        </p>
+      <Section title="Stundenlohn">
         <HourlyWagesEditor profile={profile} onSaved={onSaved} setError={setError} />
+      </Section>
+    </div>
+  );
+}
+
+// Common DATEV reasons-for-absence; displayed with German labels in
+// the absence list. "K" = Krank is the standard.
+const ABSENCE_REASONS: Record<string, string> = {
+  K: "Krank",
+  KK: "Krank Kind",
+  U: "Urlaub",
+  SU: "Sonderurlaub",
+  M: "Mutterschutz",
+  E: "Elternzeit",
+  UN: "Unbezahlter Urlaub",
+};
+
+function describeReason(id: string | null): string {
+  if (!id) return "—";
+  return ABSENCE_REASONS[id] ?? id;
+}
+
+function groupAbsencesByPeriod(records: AbsenceRecord[]): Array<{
+  reason: string | null;
+  start: string;
+  end: string;
+  days: number;
+  hours: number;
+  ids: string[];
+}> {
+  // Sort ascending by date so consecutive runs collapse cleanly.
+  const sorted = [...records]
+    .filter((r) => r.date_of_emergence)
+    .sort((a, b) => (a.date_of_emergence ?? "").localeCompare(b.date_of_emergence ?? ""));
+
+  const groups: Array<{
+    reason: string | null;
+    start: string;
+    end: string;
+    days: number;
+    hours: number;
+    ids: string[];
+  }> = [];
+
+  for (const r of sorted) {
+    const date = r.date_of_emergence!;
+    const last = groups[groups.length - 1];
+    const isNextDay =
+      last && last.reason === r.reason_for_absence_id && nextIsoDay(last.end) === date;
+    if (isNextDay) {
+      last.end = date;
+      last.days += r.days ?? 0;
+      last.hours += r.hours ?? 0;
+      if (r.id) last.ids.push(r.id);
+    } else {
+      groups.push({
+        reason: r.reason_for_absence_id,
+        start: date,
+        end: date,
+        days: r.days ?? 0,
+        hours: r.hours ?? 0,
+        ids: r.id ? [r.id] : [],
+      });
+    }
+  }
+  // Newest periods first
+  return groups.reverse();
+}
+
+function nextIsoDay(iso: string): string {
+  const d = new Date(iso);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function AbwesenheitTab({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const [start, setStart] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [end, setEnd] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [reason, setReason] = useState<string>("K");
+  const [hoursPerDay, setHoursPerDay] = useState<string>("8");
+  const [salaryType, setSalaryType] = useState<string>("1650");
+  const [saving, setSaving] = useState(false);
+  const [info, setInfo] = useState("");
+
+  const periods = useMemo(() => groupAbsencesByPeriod(profile.absences), [profile.absences]);
+  const sickDaysCurrentMonth = useMemo(() => {
+    const cur = new Date().toISOString().slice(0, 7);
+    return profile.absences
+      .filter((a) => a.reason_for_absence_id === "K" && (a.date_of_emergence ?? "").startsWith(cur))
+      .reduce((sum, a) => sum + (a.days ?? 0), 0);
+  }, [profile.absences]);
+
+  const submit = async () => {
+    setSaving(true);
+    setError("");
+    setInfo("");
+    try {
+      const result = await api<{ days: number; queued_operation_ids: number[] }>(
+        `/datev/employees/${profile.personnel_number}/absences`,
+        {
+          method: "POST",
+          json: {
+            start_date: start,
+            end_date: end,
+            reason_for_absence_id: reason,
+            hours_per_day: Number(hoursPerDay) || 8,
+            days_per_day: 1.0,
+            salary_type_id: Number(salaryType) || 1650,
+          },
+        }
+      );
+      setInfo(`${result.days} Tag(e) eingereiht — wird automatisch an DATEV übertragen.`);
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Konnte nicht erfassen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 px-6 py-5">
+      <Section title={`Krankheitstage ${new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`}>
+        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+          <span className="font-mono text-2xl font-semibold tabular-nums text-slate-900">
+            {sickDaysCurrentMonth.toLocaleString("de-DE")}
+          </span>{" "}
+          <span className="text-slate-600">
+            {sickDaysCurrentMonth === 1 ? "Krankheitstag" : "Krankheitstage"} im laufenden Monat
+          </span>
+        </div>
+      </Section>
+
+      <Section title="Letzte Abwesenheiten">
+        {periods.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Keine Abwesenheiten in den letzten Monaten erfasst.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {periods.map((p, i) => (
+              <div
+                key={`${p.start}-${i}`}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
+              >
+                <div>
+                  <div className="font-medium text-slate-900">{describeReason(p.reason)}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {p.start === p.end
+                      ? formatDate(p.start)
+                      : `${formatDate(p.start)} – ${formatDate(p.end)}`}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono tabular-nums text-slate-900">
+                    {p.days.toLocaleString("de-DE", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    Tag{p.days === 1 ? "" : "e"}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {p.hours.toLocaleString("de-DE", {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    Std
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="AU / Krankmeldung erfassen">
+        <p className="mb-3 text-xs text-slate-500">
+          Ein Eintrag pro Tag wird an DATEV gesendet. Bei mehrtägiger AU bitte den
+          gesamten Zeitraum eingeben — Wochenenden landen ebenfalls in der Erfassung,
+          DATEV ignoriert dort die Lohnfortzahlung.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Von">
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => {
+                setStart(e.target.value);
+                if (end < e.target.value) setEnd(e.target.value);
+              }}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Bis">
+            <input
+              type="date"
+              value={end}
+              min={start}
+              onChange={(e) => setEnd(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Grund">
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className={inputCls}
+            >
+              {Object.entries(ABSENCE_REASONS).map(([id, label]) => (
+                <option key={id} value={id}>
+                  {id} – {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Stunden / Tag">
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              max="24"
+              value={hoursPerDay}
+              onChange={(e) => setHoursPerDay(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Lohnart">
+            <input
+              type="number"
+              value={salaryType}
+              onChange={(e) => setSalaryType(e.target.value)}
+              className={`${inputCls} font-mono`}
+            />
+          </Field>
+        </div>
+        {info ? (
+          <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            {info}
+          </div>
+        ) : null}
+        <div className="mt-4 flex justify-end">
+          <button onClick={submit} disabled={saving || !start || !end} className={btnPrimary}>
+            {saving ? "Erfasse …" : "Krankmeldung erfassen"}
+          </button>
+        </div>
       </Section>
     </div>
   );
@@ -1296,71 +1560,58 @@ function HourlyWagesEditor({
   setError: (s: string) => void;
 }) {
   const wages = profile.bezuege.hourly_wages ?? [];
+  const HOURLY_WAGE_ID = 1; // Daniel: only the primary hourly rate is used.
 
-  // Map current values + drafts. Draft = string in input; null = no change.
-  const initial: Record<number, string> = {};
-  for (const w of wages) {
-    const id = Number(w.id);
-    if (id >= 1 && id <= 5) initial[id] = String(w.amount ?? "");
-  }
-  const [drafts, setDrafts] = useState<Record<number, string>>(initial);
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const original = String(
+    wages.find((w) => Number(w.id) === HOURLY_WAGE_ID)?.amount ?? ""
+  );
+  const [draft, setDraft] = useState<string>(original);
+  const [saving, setSaving] = useState(false);
+  const dirty = draft !== original;
 
-  const save = async (id: number) => {
-    setSavingId(id);
+  const save = async () => {
+    setSaving(true);
     setError("");
     try {
       await api(`/datev/employees/${profile.personnel_number}/bezuege/hourly-wage`, {
         method: "PUT",
-        json: { hourly_wage_id: id, amount: Number(drafts[id] ?? 0) },
+        json: { hourly_wage_id: HOURLY_WAGE_ID, amount: Number(draft || 0) },
       });
       await onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-2">
-      {[1, 2, 3, 4, 5].map((id) => {
-        const original = initial[id] ?? "";
-        const current = drafts[id] ?? "";
-        const dirty = current !== original;
-        return (
-          <div
-            key={id}
-            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2"
-          >
-            <span className="w-20 text-sm font-medium text-slate-700">Lohn {id}</span>
-            <div className="relative flex-1">
-              <input
-                type="number"
-                step="0.01"
-                value={current}
-                onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
-                placeholder="—"
-                className={`${inputCls} pr-8 font-mono text-right`}
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                €/h
-              </span>
-            </div>
-            <button
-              onClick={() => save(id)}
-              disabled={!dirty || savingId !== null}
-              className={`min-w-[90px] rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                dirty
-                  ? "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
-                  : "border border-slate-200 bg-slate-50 text-slate-400"
-              }`}
-            >
-              {savingId === id ? "…" : dirty ? "Speichern" : "Gespeichert"}
-            </button>
-          </div>
-        );
-      })}
+    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <span className="text-sm font-medium text-slate-700">Stundenlohn</span>
+      <div className="relative flex-1 max-w-xs">
+        <input
+          type="number"
+          step="0.01"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="—"
+          className={`${inputCls} pr-12 font-mono text-right`}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+          €/h
+        </span>
+      </div>
+      <button
+        onClick={save}
+        disabled={!dirty || saving}
+        className={`min-w-[110px] rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+          dirty
+            ? "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+            : "border border-slate-200 bg-slate-50 text-slate-400"
+        }`}
+      >
+        {saving ? "…" : dirty ? "Speichern" : "Gespeichert"}
+      </button>
     </div>
   );
 }
