@@ -434,6 +434,52 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
+function TaskCard({
+  href,
+  label,
+  sublabel,
+  count,
+}: {
+  href: string;
+  label: string;
+  sublabel: string;
+  count: number;
+}) {
+  const hasOpen = count > 0;
+  return (
+    <Link
+      href={href}
+      className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            {label}
+          </p>
+          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
+            {count}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">{sublabel}</p>
+        </div>
+        <div
+          className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl shadow-lg ring-4 ${
+            hasOpen
+              ? "bg-gradient-to-br from-amber-400 to-amber-600 text-white ring-amber-200"
+              : "bg-gradient-to-br from-emerald-500 to-emerald-700 text-white ring-emerald-200"
+          }`}
+        >
+          <InboxIcon className="h-5 w-5" />
+        </div>
+      </div>
+      {!hasOpen && (
+        <p className="mt-2 text-xs font-medium text-emerald-600">
+          Alles erledigt
+        </p>
+      )}
+    </Link>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
