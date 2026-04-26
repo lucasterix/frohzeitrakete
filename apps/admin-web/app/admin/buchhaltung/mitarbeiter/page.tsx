@@ -6,41 +6,7 @@ const DATEV_API_BASE_URL =
   process.env.NEXT_PUBLIC_DATEV_API_BASE_URL ||
   "https://buchhaltung-api.froehlichdienste.de";
 
-type DatevStatus = {
-  connected: boolean;
-  environment: string;
-  scope?: string;
-  access_token_expires_in_seconds?: number;
-  has_refresh_token?: boolean;
-  connected_by_email?: string | null;
-  id_token_claims?: Record<string, unknown> | null;
-};
-
-type Employee = {
-  id: number;
-  personnel_number: number;
-  company_personnel_number: string | null;
-  first_name: string | null;
-  surname: string | null;
-  full_name: string;
-  date_of_birth: string | null;
-  date_of_joining: string | null;
-  date_of_leaving: string | null;
-  job_title: string | null;
-  weekly_working_hours: number | null;
-  type_of_contract: string | null;
-  source_system: string | null;
-  is_active: boolean;
-  has_pending_changes: boolean;
-  pending_since: string | null;
-  last_synced_at: string | null;
-  last_sync_status: string | null;
-};
-
-type EmployeeDetail = Employee & {
-  raw_masterdata: Record<string, unknown> | null;
-  pending_changes: Record<string, unknown> | null;
-};
+// --- API client wrapper ----------------------------------------------------
 
 async function api<T>(
   path: string,
@@ -63,6 +29,116 @@ async function api<T>(
   return response.json() as Promise<T>;
 }
 
+// --- types -----------------------------------------------------------------
+
+type SyncHealth = {
+  bridge_reachable: boolean;
+  queue: { pending: number; in_progress: number; done: number; error: number };
+};
+
+type Employee = {
+  id: number;
+  personnel_number: number;
+  company_personnel_number: string | null;
+  first_name: string | null;
+  surname: string | null;
+  full_name: string;
+  date_of_birth: string | null;
+  date_of_joining: string | null;
+  date_of_leaving: string | null;
+  job_title: string | null;
+  weekly_working_hours: number | null;
+  type_of_contract: string | null;
+  is_active: boolean;
+  has_pending_changes: boolean;
+  last_synced_at: string | null;
+  last_sync_status: string | null;
+};
+
+type PendingOp = {
+  id: number;
+  op: string;
+  payload: unknown;
+  status: "pending" | "in_progress" | "done" | "error";
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  last_attempt_at: string | null;
+};
+
+type Profile = {
+  personnel_number: number;
+  full_name: string;
+  is_active: boolean;
+  date_of_birth: string | null;
+  date_of_joining: string | null;
+  date_of_leaving: string | null;
+  contact: {
+    first_name?: string | null;
+    surname?: string | null;
+    street?: string | null;
+    house_number?: string | null;
+    postal_code?: string | null;
+    city?: string | null;
+    country?: string | null;
+    address_affix?: string | null;
+  };
+  bank: {
+    iban?: string | null;
+    bic?: string | null;
+    differing_account_holder?: string | null;
+  };
+  bezuege: {
+    gross_payments?: Array<{
+      id?: string | number;
+      salary_type_id?: number;
+      amount?: number;
+      reference_date?: string;
+      payment_interval?: string;
+    }>;
+    hourly_wages?: Array<{
+      id?: string | number;
+      amount?: number;
+    }>;
+  };
+  patti: {
+    linked: boolean;
+    person_id?: number;
+    first_name?: string | null;
+    last_name?: string | null;
+    born_at?: string | null;
+    address?: { id?: number; address_line?: string; city?: string; zip_code?: string };
+    communication?: {
+      id?: number;
+      mobile_number?: string | null;
+      phone_number?: string | null;
+      email?: string | null;
+    };
+    iban?: string | null;
+    bic?: string | null;
+    updated_at?: string | null;
+  };
+  last_datev_synced_at: string | null;
+  last_patti_synced_at: string | null;
+  pending_operations: PendingOp[];
+};
+
+// --- formatting helpers ----------------------------------------------------
+
+function formatDate(s: string | null | undefined): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("de-DE");
+}
+
+function formatDateTime(s: string | null | undefined): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+}
+
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
   "1": "Unbefristet Vollzeit",
   "2": "Unbefristet Teilzeit",
@@ -70,28 +146,24 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
   "4": "Befristet Teilzeit",
 };
 
-function formatDate(s: string | null): string {
-  if (!s) return "—";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleDateString("de-DE");
-}
+// --- main page -------------------------------------------------------------
 
 export default function MitarbeiterPage() {
-  const [status, setStatus] = useState<DatevStatus | null>(null);
+  const [health, setHealth] = useState<SyncHealth | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selected, setSelected] = useState<EmployeeDetail | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
 
   const loadAll = useCallback(async () => {
+    setError("");
     try {
-      const [s, e] = await Promise.all([
-        api<DatevStatus>("/datev/status"),
+      const [h, e] = await Promise.all([
+        api<SyncHealth>("/datev/sync/health"),
         api<Employee[]>("/datev/employees"),
       ]);
-      setStatus(s);
+      setHealth(h);
       setEmployees(e);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Laden");
@@ -100,76 +172,42 @@ export default function MitarbeiterPage() {
 
   useEffect(() => {
     loadAll();
+    // Poll health every 30s so the indicator stays current.
+    const t = setInterval(() => {
+      api<SyncHealth>("/datev/sync/health").then(setHealth).catch(() => {});
+    }, 30000);
+    return () => clearInterval(t);
   }, [loadAll]);
 
-  const connect = async () => {
+  const fullSync = async () => {
     setBusy(true);
     setError("");
     try {
-      const r = await api<{ authorize_url: string }>(
-        `/datev/oauth/authorize?return_to=${encodeURIComponent(window.location.href)}`
-      );
-      window.location.href = r.authorize_url;
-    } catch (e) {
-      setBusy(false);
-      setError(e instanceof Error ? e.message : "Verbindungsfehler");
-    }
-  };
-
-  const disconnect = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      await api(`/datev/disconnect`, { method: "POST" });
+      await api(`/datev/sync/full`, { method: "POST" });
       await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Trennen");
+      setError(e instanceof Error ? e.message : "Sync-Fehler");
     } finally {
       setBusy(false);
     }
   };
 
-  const syncFromDatev = async () => {
+  const drainQueue = async () => {
     setBusy(true);
     setError("");
     try {
-      const result = await api<{ ok: boolean; count?: number; status?: number; body?: unknown }>(
-        `/datev/employees/sync`,
-        { method: "POST", json: {} }
+      const r = await api<{ done: number; retry: number; error: number; total: number }>(
+        `/datev/sync/drain-queue`,
+        { method: "POST" }
       );
-      if (!result.ok) {
-        setError(
-          `DATEV-Sync nicht möglich (HTTP ${result.status}): ${JSON.stringify(result.body).slice(0, 200)}`
-        );
+      await loadAll();
+      if (r.error > 0) {
+        setError(`${r.error} Operation(en) sind dauerhaft fehlgeschlagen — siehe Profile.`);
       }
-      await loadAll();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Sync");
+      setError(e instanceof Error ? e.message : "Queue-Fehler");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const loadFixture = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      await api(`/datev/employees/sync-fixture`, { method: "POST" });
-      await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Fixture-Load");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openDetail = async (pnr: number) => {
-    setError("");
-    try {
-      const d = await api<EmployeeDetail>(`/datev/employees/${pnr}`);
-      setSelected(d);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Öffnen");
     }
   };
 
@@ -184,99 +222,27 @@ export default function MitarbeiterPage() {
     );
   }, [employees, search]);
 
-  const connectedClaims = status?.id_token_claims as
-    | { name?: string; preferred_username?: string }
-    | null
-    | undefined;
-
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-slate-900">Mitarbeiter &amp; Lohn</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Mitarbeiter & Lohn</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Stammdaten aus DATEV Lohn und Gehalt. Änderungen werden lokal gesammelt und
-          anschließend via DATEV-API oder ASCII-Import in den Bestand übertragen.
+          Stammdaten aus DATEV Lohn und Gehalt sowie Patti — Änderungen
+          werden in eine Queue gestellt und automatisch im Hintergrund auf
+          beide Systeme angewendet.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900">
-              DATEV-Verbindung ({status?.environment ?? "…"})
-            </div>
-            {status === null && !error ? (
-              <div className="mt-1 text-sm text-slate-500">wird geladen …</div>
-            ) : status?.connected ? (
-              <div className="mt-1 space-y-1 text-sm text-slate-700">
-                <div>
-                  <span className="font-medium">Angemeldet:</span>{" "}
-                  {connectedClaims?.name ?? status.connected_by_email}
-                </div>
-                <div className="truncate">
-                  <span className="font-medium">Scope:</span>{" "}
-                  <code className="rounded bg-white px-1.5 py-0.5 text-xs">
-                    {status.scope || "—"}
-                  </code>
-                </div>
-                <div>
-                  <span className="font-medium">Access-Token TTL:</span>{" "}
-                  {status.access_token_expires_in_seconds}s
-                  {status.has_refresh_token ? " (Refresh OK)" : " (⚠️ ohne Refresh)"}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-1 text-sm text-slate-500">Noch nicht verbunden.</div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            {status?.connected ? (
-              <button
-                onClick={disconnect}
-                disabled={busy}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
-              >
-                Verbindung lösen
-              </button>
-            ) : (
-              <button
-                onClick={connect}
-                disabled={busy}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
-              >
-                Mit DATEV verbinden
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <SyncStatusBar health={health} onFullSync={fullSync} onDrain={drainQueue} busy={busy} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input
           type="search"
-          placeholder="Suche: Name, Personalnummer, Position …"
+          placeholder="Suche: Name, Personalnummer, Tätigkeit …"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
-        <div className="flex gap-2">
-          <button
-            onClick={syncFromDatev}
-            disabled={busy || !status?.connected}
-            title={!status?.connected ? "Erst DATEV verbinden" : "Pullt Stammdaten aus DATEV"}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            Aus DATEV aktualisieren
-          </button>
-          <button
-            onClick={loadFixture}
-            disabled={busy}
-            title="Testdaten laden, solange die DATEV-Sandbox nicht antwortet"
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
-          >
-            Testdaten laden
-          </button>
-        </div>
       </div>
 
       {error ? (
@@ -288,8 +254,7 @@ export default function MitarbeiterPage() {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">
-            Noch keine Mitarbeiter geladen. „Aus DATEV aktualisieren" (wenn freigeschaltet)
-            oder „Testdaten laden" klicken.
+            Noch keine Mitarbeiter geladen. „Aus DATEV/Patti synchronisieren" klicken.
           </div>
         ) : (
           <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -298,7 +263,6 @@ export default function MitarbeiterPage() {
                 <th className="px-4 py-3 text-left">PersNr</th>
                 <th className="px-4 py-3 text-left">Name</th>
                 <th className="px-4 py-3 text-left">Tätigkeit</th>
-                <th className="px-4 py-3 text-left">Vertrag</th>
                 <th className="px-4 py-3 text-right">Std./Woche</th>
                 <th className="px-4 py-3 text-left">Eintritt</th>
                 <th className="px-4 py-3 text-left">Status</th>
@@ -308,26 +272,14 @@ export default function MitarbeiterPage() {
               {filtered.map((e) => (
                 <tr
                   key={e.id}
-                  onClick={() => openDetail(e.personnel_number)}
+                  onClick={() => setSelected(e.personnel_number)}
                   className="cursor-pointer transition hover:bg-slate-50"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-slate-600">
                     {e.personnel_number}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {e.full_name}
-                    {e.has_pending_changes ? (
-                      <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800">
-                        Änderung offen
-                      </span>
-                    ) : null}
-                  </td>
+                  <td className="px-4 py-3 font-medium text-slate-900">{e.full_name}</td>
                   <td className="px-4 py-3 text-slate-700">{e.job_title ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {e.type_of_contract
-                      ? CONTRACT_TYPE_LABELS[e.type_of_contract] ?? e.type_of_contract
-                      : "—"}
-                  </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-700">
                     {e.weekly_working_hours ?? "—"}
                   </td>
@@ -350,221 +302,703 @@ export default function MitarbeiterPage() {
         )}
       </div>
 
-      {selected ? (
-        <EmployeeDrawer
-          employee={selected}
+      {selected !== null ? (
+        <ProfileDrawer
+          personnelNumber={selected}
           onClose={() => setSelected(null)}
-          onSaved={async () => {
-            await loadAll();
-            const fresh = await api<EmployeeDetail>(
-              `/datev/employees/${selected.personnel_number}`
-            );
-            setSelected(fresh);
-          }}
+          onChanged={loadAll}
         />
       ) : null}
     </div>
   );
 }
 
-function EmployeeDrawer({
-  employee,
-  onClose,
-  onSaved,
+// --- sync status bar ------------------------------------------------------
+
+function SyncStatusBar({
+  health,
+  onFullSync,
+  onDrain,
+  busy,
 }: {
-  employee: EmployeeDetail;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
+  health: SyncHealth | null;
+  onFullSync: () => void;
+  onDrain: () => void;
+  busy: boolean;
 }) {
-  const pending = (employee.pending_changes ?? {}) as Record<string, unknown>;
-  const [weeklyHours, setWeeklyHours] = useState<string>(
-    String(
-      (pending.weekly_working_hours as number | undefined) ??
-        employee.weekly_working_hours ??
-        ""
-    )
+  const bridgeOk = health?.bridge_reachable;
+  const queue = health?.queue ?? { pending: 0, in_progress: 0, done: 0, error: 0 };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block h-3 w-3 rounded-full ${
+                bridgeOk === undefined
+                  ? "bg-slate-300"
+                  : bridgeOk
+                  ? "bg-emerald-500"
+                  : "bg-red-500"
+              }`}
+              aria-label={bridgeOk ? "Bridge erreichbar" : "Bridge nicht erreichbar"}
+            />
+            <span className="text-sm font-medium text-slate-800">
+              DATEV-Bridge {bridgeOk === undefined ? "…" : bridgeOk ? "erreichbar" : "OFFLINE"}
+            </span>
+          </div>
+          <div className="text-sm text-slate-700">
+            <span className="font-medium">Queue:</span>{" "}
+            {queue.pending > 0 ? (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                {queue.pending} pending
+              </span>
+            ) : (
+              <span className="text-slate-500">leer</span>
+            )}
+            {queue.error > 0 ? (
+              <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">
+                {queue.error} Fehler
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onDrain}
+            disabled={busy}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            Queue jetzt abarbeiten
+          </button>
+          <button
+            onClick={onFullSync}
+            disabled={busy || !bridgeOk}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            Aus DATEV/Patti synchronisieren
+          </button>
+        </div>
+      </div>
+    </div>
   );
-  const [grossSalary, setGrossSalary] = useState<string>(
-    String((pending.monthly_gross_salary_eur as number | undefined) ?? "")
+}
+
+// --- profile drawer -------------------------------------------------------
+
+type Tab = "kontakt" | "bank" | "bezuege" | "patti" | "queue";
+
+function ProfileDrawer({
+  personnelNumber,
+  onClose,
+  onChanged,
+}: {
+  personnelNumber: number;
+  onClose: () => void;
+  onChanged: () => Promise<void> | void;
+}) {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [tab, setTab] = useState<Tab>("kontakt");
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    try {
+      const p = await api<Profile>(`/datev/employees/${personnelNumber}/profile`);
+      setProfile(p);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+    }
+  }, [personnelNumber]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  if (!profile) {
+    return (
+      <Drawer onClose={onClose} title="Lade …" subtitle="">
+        {error ? <p className="px-6 py-5 text-sm text-red-700">{error}</p> : null}
+      </Drawer>
+    );
+  }
+
+  const queueCount = profile.pending_operations.filter(
+    (o) => o.status === "pending" || o.status === "in_progress"
+  ).length;
+  const errorCount = profile.pending_operations.filter((o) => o.status === "error").length;
+
+  return (
+    <Drawer
+      onClose={onClose}
+      title={profile.full_name}
+      subtitle={`PersNr ${profile.personnel_number}${
+        profile.is_active ? "" : " · ausgeschieden"
+      }`}
+    >
+      <nav className="flex border-b border-slate-200">
+        {(
+          [
+            ["kontakt", "Kontakt"],
+            ["bank", "Bank"],
+            ["bezuege", "Bezüge"],
+            ["patti", profile.patti.linked ? "Patti ✓" : "Patti"],
+            ["queue", `Aufträge${queueCount + errorCount > 0 ? ` (${queueCount + errorCount})` : ""}`],
+          ] as Array<[Tab, string]>
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition ${
+              tab === id
+                ? "border-b-2 border-slate-900 text-slate-900"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {error ? (
+        <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          {error}
+        </div>
+      ) : null}
+
+      {tab === "kontakt" ? (
+        <ContactTab profile={profile} onSaved={async () => { await reload(); await onChanged(); }} setError={setError} />
+      ) : null}
+      {tab === "bank" ? (
+        <BankTab profile={profile} onSaved={async () => { await reload(); await onChanged(); }} setError={setError} />
+      ) : null}
+      {tab === "bezuege" ? (
+        <BezuegeTab profile={profile} onSaved={async () => { await reload(); await onChanged(); }} setError={setError} />
+      ) : null}
+      {tab === "patti" ? (
+        <PattiTab profile={profile} onChanged={async () => { await reload(); await onChanged(); }} setError={setError} />
+      ) : null}
+      {tab === "queue" ? <QueueTab profile={profile} /> : null}
+    </Drawer>
   );
-  const [note, setNote] = useState<string>((pending.note as string | undefined) ?? "");
+}
+
+function Drawer({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} aria-label="Schließen" />
+      <aside className="relative flex h-full w-full max-w-2xl flex-col overflow-y-auto bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <div className="text-xs text-slate-500">{subtitle}</div>
+            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </aside>
+    </div>
+  );
+}
+
+// --- tabs -----------------------------------------------------------------
+
+function ContactTab({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const c = profile.contact;
+  const comm = profile.patti.communication;
+  const [street, setStreet] = useState(c.street ?? "");
+  const [houseNr, setHouseNr] = useState(c.house_number ?? "");
+  const [zip, setZip] = useState(c.postal_code ?? "");
+  const [city, setCity] = useState(c.city ?? "");
+  const [mobile, setMobile] = useState(comm?.mobile_number ?? "");
+  const [phone, setPhone] = useState(comm?.phone_number ?? "");
+  const [email, setEmail] = useState(comm?.email ?? "");
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
 
   const save = async () => {
     setSaving(true);
-    setErr("");
+    setError("");
     try {
-      const payload: Record<string, unknown> = {};
-      if (weeklyHours !== "") payload.weekly_working_hours = Number(weeklyHours);
-      if (grossSalary !== "") payload.monthly_gross_salary_eur = Number(grossSalary);
-      if (note !== "") payload.note = note;
-      await api(`/datev/employees/${employee.personnel_number}/pending`, {
+      const delta: Record<string, unknown> = {};
+      if (street !== (c.street ?? "")) delta.street = street;
+      if (houseNr !== (c.house_number ?? "")) delta.house_number = houseNr;
+      if (zip !== (c.postal_code ?? "")) delta.postal_code = zip;
+      if (city !== (c.city ?? "")) delta.city = city;
+      if (mobile !== (comm?.mobile_number ?? "")) delta.mobile_number = mobile;
+      if (phone !== (comm?.phone_number ?? "")) delta.phone_number = phone;
+      if (email !== (comm?.email ?? "")) delta.email = email;
+      if (Object.keys(delta).length === 0) return;
+      await api(`/datev/employees/${profile.personnel_number}/contact`, {
         method: "PATCH",
-        json: payload,
+        json: delta,
       });
       await onSaved();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Fehler beim Speichern");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const clearPending = async () => {
-    setSaving(true);
-    setErr("");
-    try {
-      await api(`/datev/employees/${employee.personnel_number}/pending`, {
-        method: "PATCH",
-        json: {},
-      });
-      await onSaved();
-      setWeeklyHours(String(employee.weekly_working_hours ?? ""));
-      setGrossSalary("");
-      setNote("");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Fehler beim Zurücksetzen");
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div
-        className="absolute inset-0 bg-slate-900/30"
-        onClick={onClose}
-        aria-label="Schließen"
-      />
-      <aside className="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <div className="text-xs text-slate-500">PersNr {employee.personnel_number}</div>
-            <h3 className="text-lg font-semibold text-slate-900">{employee.full_name}</h3>
-            <div className="text-sm text-slate-600">
-              {employee.job_title ?? "—"}
-              {employee.type_of_contract
-                ? ` · ${
-                    CONTRACT_TYPE_LABELS[employee.type_of_contract] ?? employee.type_of_contract
-                  }`
-                : ""}
+    <div className="space-y-5 px-6 py-5">
+      <Section title="Adresse (DATEV)">
+        <Field label="Straße">
+          <input value={street} onChange={(e) => setStreet(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Hausnummer">
+          <input value={houseNr} onChange={(e) => setHouseNr(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="PLZ">
+          <input value={zip} onChange={(e) => setZip(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Ort">
+          <input value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} />
+        </Field>
+      </Section>
+
+      <Section title={profile.patti.linked ? "Telefon / E-Mail (Patti)" : "Telefon / E-Mail"}>
+        {!profile.patti.linked ? (
+          <p className="text-xs text-amber-700">
+            Nicht mit Patti verknüpft — Telefon und E-Mail können erst nach Verknüpfung
+            gepflegt werden (Tab „Patti").
+          </p>
+        ) : (
+          <>
+            <Field label="Mobil">
+              <input value={mobile} onChange={(e) => setMobile(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Telefon">
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="E-Mail">
+              <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} type="email" />
+            </Field>
+          </>
+        )}
+      </Section>
+
+      <SaveBar onSave={save} disabled={saving} />
+    </div>
+  );
+}
+
+function BankTab({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const b = profile.bank;
+  const [iban, setIban] = useState(b.iban ?? "");
+  const [bic, setBic] = useState(b.bic ?? "");
+  const [holder, setHolder] = useState(b.differing_account_holder ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const delta: Record<string, unknown> = {};
+      if (iban !== (b.iban ?? "")) delta.iban = iban;
+      if (bic !== (b.bic ?? "")) delta.bic = bic;
+      if (holder !== (b.differing_account_holder ?? "")) delta.differing_account_holder = holder;
+      if (Object.keys(delta).length === 0) return;
+      await api(`/datev/employees/${profile.personnel_number}/bank`, {
+        method: "PATCH",
+        json: delta,
+      });
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 px-6 py-5">
+      <Section title="Bankverbindung (DATEV)">
+        <Field label="IBAN">
+          <input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} className={`${inputCls} font-mono`} />
+        </Field>
+        <Field label="BIC">
+          <input value={bic} onChange={(e) => setBic(e.target.value.toUpperCase())} className={`${inputCls} font-mono`} />
+        </Field>
+        <Field label="Abweichender Kontoinhaber">
+          <input value={holder} onChange={(e) => setHolder(e.target.value)} className={inputCls} />
+        </Field>
+      </Section>
+
+      <SaveBar onSave={save} disabled={saving} />
+    </div>
+  );
+}
+
+function BezuegeTab({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  return (
+    <div className="space-y-5 px-6 py-5">
+      <Section title="Festbezüge (DATEV)">
+        {(profile.bezuege.gross_payments ?? []).length === 0 ? (
+          <p className="text-xs text-slate-500">Keine Festbezüge erfasst.</p>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr>
+                <th className="text-left">Lohnart</th>
+                <th className="text-right">Betrag</th>
+                <th className="text-left">Intervall</th>
+                <th className="text-left">Gültig ab</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(profile.bezuege.gross_payments ?? []).map((p, i) => (
+                <tr key={String(p.id ?? i)} className="border-t border-slate-100">
+                  <td className="py-2 font-mono text-xs">{p.salary_type_id}</td>
+                  <td className="py-2 text-right tabular-nums">
+                    {p.amount?.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 text-slate-700">{p.payment_interval ?? "monthly"}</td>
+                  <td className="py-2 text-slate-700">{p.reference_date ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <GrossPaymentForm profile={profile} onSaved={onSaved} setError={setError} />
+      </Section>
+
+      <Section title="Stundenlöhne 1–5 (DATEV)">
+        <HourlyWageEditor profile={profile} onSaved={onSaved} setError={setError} />
+      </Section>
+    </div>
+  );
+}
+
+function GrossPaymentForm({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const [salaryType, setSalaryType] = useState<string>("2000");
+  const [amount, setAmount] = useState<string>("");
+  const [refDate, setRefDate] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [interval, setInterval] = useState<string>("monthly");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/datev/employees/${profile.personnel_number}/bezuege/gross-payment`, {
+        method: "PUT",
+        json: {
+          salary_type_id: Number(salaryType),
+          amount: Number(amount),
+          reference_date: refDate,
+          payment_interval: interval,
+        },
+      });
+      setAmount("");
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Konnte nicht hinzufügen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <Field label="Lohnart-Nr.">
+        <input value={salaryType} onChange={(e) => setSalaryType(e.target.value)} className={inputCls} />
+      </Field>
+      <Field label="Betrag (EUR)">
+        <input
+          type="number"
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={inputCls}
+        />
+      </Field>
+      <Field label="Gültig ab (YYYY-MM)">
+        <input value={refDate} onChange={(e) => setRefDate(e.target.value)} className={inputCls} />
+      </Field>
+      <Field label="Intervall">
+        <select value={interval} onChange={(e) => setInterval(e.target.value)} className={inputCls}>
+          <option value="monthly">Monatlich</option>
+          <option value="quarterly">Quartalsweise</option>
+          <option value="semiannually">Halbjährlich</option>
+          <option value="annually">Jährlich</option>
+        </select>
+      </Field>
+      <div className="col-span-2 text-right">
+        <button onClick={submit} disabled={saving || !amount} className={btnPrimary}>
+          Bezug hinzufügen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HourlyWageEditor({
+  profile,
+  onSaved,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const wages = profile.bezuege.hourly_wages ?? [];
+  const [drafts, setDrafts] = useState<Record<number, string>>(() => {
+    const o: Record<number, string> = {};
+    for (const w of wages) {
+      const id = Number(w.id);
+      if (id >= 1 && id <= 5) o[id] = String(w.amount ?? "");
+    }
+    return o;
+  });
+
+  const save = async (id: number) => {
+    setError("");
+    try {
+      await api(`/datev/employees/${profile.personnel_number}/bezuege/hourly-wage`, {
+        method: "PUT",
+        json: { hourly_wage_id: id, amount: Number(drafts[id] ?? 0) },
+      });
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-5 gap-3">
+      {[1, 2, 3, 4, 5].map((id) => (
+        <Field key={id} label={`Lohn ${id}`}>
+          <div className="flex gap-1">
+            <input
+              type="number"
+              step="0.01"
+              value={drafts[id] ?? ""}
+              onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
+              className={inputCls}
+            />
+            <button onClick={() => save(id)} className="rounded-lg border border-slate-300 bg-white px-2 text-xs hover:bg-slate-100">
+              ↑
+            </button>
+          </div>
+        </Field>
+      ))}
+    </div>
+  );
+}
+
+function PattiTab({
+  profile,
+  onChanged,
+  setError,
+}: {
+  profile: Profile;
+  onChanged: () => Promise<void> | void;
+  setError: (s: string) => void;
+}) {
+  const [pattiId, setPattiId] = useState<string>(String(profile.patti.person_id ?? ""));
+  const [busy, setBusy] = useState(false);
+
+  const link = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/datev/employees/${profile.personnel_number}/link-patti`, {
+        method: "POST",
+        json: { patti_person_id: Number(pattiId) },
+      });
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Verknüpfung fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unlink = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/datev/employees/${profile.personnel_number}/link-patti`, {
+        method: "DELETE",
+      });
+      setPattiId("");
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Trennen fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 px-6 py-5">
+      <Section title="Patti-Verknüpfung">
+        {profile.patti.linked ? (
+          <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <div className="font-semibold">
+              {profile.patti.first_name} {profile.patti.last_name} (Patti-ID {profile.patti.person_id})
+            </div>
+            <div className="mt-1 text-xs">
+              Geboren {formatDate(profile.patti.born_at)} · {profile.patti.address?.address_line ?? "—"},{" "}
+              {profile.patti.address?.zip_code} {profile.patti.address?.city}
+            </div>
+            <div className="mt-1 text-xs">
+              Letzter Patti-Sync: {formatDateTime(profile.last_patti_synced_at)}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Schließen"
-          >
-            ✕
-          </button>
-        </div>
+        ) : (
+          <p className="text-sm text-slate-600">
+            Dieser Mitarbeiter ist nicht mit einem Patti-Eintrag verknüpft. Telefon und E-Mail
+            können nur über Patti gepflegt werden — bitte verknüpfen, sofern in Patti vorhanden.
+          </p>
+        )}
 
-        <div className="space-y-6 px-6 py-5">
-          <section>
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-              Stammdaten (DATEV)
-            </h4>
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt className="text-slate-500">Geburtsdatum</dt>
-              <dd>{formatDate(employee.date_of_birth)}</dd>
-              <dt className="text-slate-500">Eintritt</dt>
-              <dd>{formatDate(employee.date_of_joining)}</dd>
-              <dt className="text-slate-500">Austritt</dt>
-              <dd>{formatDate(employee.date_of_leaving)}</dd>
-              <dt className="text-slate-500">Wochenstunden (DATEV)</dt>
-              <dd>{employee.weekly_working_hours ?? "—"}</dd>
-              <dt className="text-slate-500">Vertrag</dt>
-              <dd>
-                {employee.type_of_contract
-                  ? CONTRACT_TYPE_LABELS[employee.type_of_contract] ?? employee.type_of_contract
-                  : "—"}
-              </dd>
-              <dt className="text-slate-500">Quelle</dt>
-              <dd>
-                {employee.source_system ?? "—"}
-                {employee.last_synced_at ? ` · zuletzt ${formatDate(employee.last_synced_at)}` : ""}
-              </dd>
-            </dl>
-          </section>
-
-          <section>
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-              Änderung (lokal, noch nicht in DATEV)
-            </h4>
-            <div className="mt-2 space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-600">
-                  Wochenstunden neu
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={99}
-                  step="0.5"
-                  value={weeklyHours}
-                  onChange={(e) => setWeeklyHours(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-600">
-                  Monats-Bruttogehalt (EUR) neu — optional
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={grossSalary}
-                  onChange={(e) => setGrossSalary(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-slate-600">
-                  Notiz (intern)
-                </span>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={3}
-                  maxLength={500}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                />
-              </label>
-              {employee.has_pending_changes ? (
-                <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Änderung wartet im lokalen Stapel —{" "}
-                  {employee.pending_since ? formatDate(employee.pending_since) : "jetzt"}. Wird beim
-                  nächsten Monatsabschluss an DATEV übertragen.
-                </div>
-              ) : null}
-              {err ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-                  {err}
-                </div>
-              ) : null}
-            </div>
-          </section>
+        <div className="mt-3 flex gap-2">
+          <Field label="Patti-Person-ID">
+            <input
+              type="number"
+              value={pattiId}
+              onChange={(e) => setPattiId(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
+          <div className="flex items-end gap-2">
+            <button onClick={link} disabled={busy || !pattiId} className={btnPrimary}>
+              Verknüpfen
+            </button>
+            {profile.patti.linked ? (
+              <button onClick={unlink} disabled={busy} className={btnSecondary}>
+                Trennen
+              </button>
+            ) : null}
+          </div>
         </div>
+      </Section>
+    </div>
+  );
+}
 
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-200 px-6 py-4">
-          <button
-            onClick={clearPending}
-            disabled={saving || !employee.has_pending_changes}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50"
-          >
-            Änderung zurücksetzen
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {saving ? "Speichern …" : "Lokal speichern"}
-          </button>
+function QueueTab({ profile }: { profile: Profile }) {
+  if (profile.pending_operations.length === 0) {
+    return (
+      <div className="px-6 py-5 text-sm text-slate-500">
+        Keine offenen Aufträge — alle Änderungen sind synchronisiert.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3 px-6 py-5">
+      {profile.pending_operations.map((o) => (
+        <div
+          key={o.id}
+          className={`rounded-xl border px-4 py-3 ${
+            o.status === "error"
+              ? "border-red-200 bg-red-50"
+              : o.status === "in_progress"
+              ? "border-blue-200 bg-blue-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          <div className="flex items-baseline justify-between">
+            <code className="text-xs">{o.op}</code>
+            <span className="text-xs text-slate-600">
+              {o.status} · {o.attempts} Versuch{o.attempts === 1 ? "" : "e"}
+            </span>
+          </div>
+          {o.last_error ? (
+            <div className="mt-1 text-xs text-red-800">{o.last_error}</div>
+          ) : null}
+          <div className="mt-1 text-xs text-slate-500">
+            erstellt {formatDateTime(o.created_at)}
+            {o.last_attempt_at ? ` · letzter Versuch ${formatDateTime(o.last_attempt_at)}` : ""}
+          </div>
         </div>
-      </aside>
+      ))}
+    </div>
+  );
+}
+
+// --- shared form bits -----------------------------------------------------
+
+const inputCls =
+  "w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none";
+const btnPrimary =
+  "rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-slate-800 disabled:opacity-50";
+const btnSecondary =
+  "rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-50";
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
+      <div className="mt-2 space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SaveBar({ onSave, disabled }: { onSave: () => void; disabled: boolean }) {
+  return (
+    <div className="flex justify-end border-t border-slate-200 pt-4">
+      <button onClick={onSave} disabled={disabled} className={btnPrimary}>
+        Änderungen einreihen
+      </button>
     </div>
   );
 }
