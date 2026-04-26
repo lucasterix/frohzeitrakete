@@ -46,7 +46,7 @@ export function useSickLeaves(status?: string) {
 export function useHrRequests(status?: string) {
   const url = new URL(`${API_BASE_URL}/admin/hr-requests`);
   if (status) url.searchParams.set("status", status);
-  return useSWR<import("@/lib/api").HrRequest[]>(
+  return useSWR<import("@/lib/api").HrRequestRecord[]>(
     url.toString(),
     apiFetcher,
     defaultOpts
@@ -54,19 +54,8 @@ export function useHrRequests(status?: string) {
 }
 
 export function useAnnouncements() {
-  return useSWR<import("@/lib/api").Announcement[]>(
+  return useSWR<import("@/lib/api").AdminAnnouncement[]>(
     `${API_BASE_URL}/admin/announcements`,
-    apiFetcher,
-    defaultOpts
-  );
-}
-
-export function useBudgetInquiries(userId?: string, taskStatus?: string) {
-  const url = new URL(`${API_BASE_URL}/admin/budget-inquiries`);
-  if (userId) url.searchParams.set("user_id", userId);
-  if (taskStatus) url.searchParams.set("task_status", taskStatus);
-  return useSWR<import("@/lib/api").BudgetInquiryRecord[]>(
-    url.toString(),
     apiFetcher,
     defaultOpts
   );
