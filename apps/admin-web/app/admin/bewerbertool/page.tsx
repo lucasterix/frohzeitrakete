@@ -341,7 +341,7 @@ export default function BewerbertoolPage() {
         {(["pipeline", "create"] as const).map((t) => (
           <button
             key={t}
-            onClick={() => { setTab(t); if (t !== "detail") setSelectedId(null); }}
+            onClick={() => { setTab(t); setSelectedId(null); }}
             className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
               tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
