@@ -181,10 +181,13 @@ export default function MitarbeiterPage() {
 
   useEffect(() => {
     loadAll();
-    // Soft-poll every 20s so co-workers' edits show up automatically:
-    // health (cheap) + employee list. Sync triggers from another user
-    // become visible without a manual refresh.
+    // Soft-poll every 30s so co-workers' edits show up — but only
+    // when the tab is actually visible. Hidden tabs don't make
+    // any background calls (idle apps shouldn't pull traffic).
     const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       Promise.all([
         api<SyncHealth>("/datev/sync/health"),
         api<Employee[]>("/datev/employees"),
@@ -194,8 +197,21 @@ export default function MitarbeiterPage() {
           setEmployees(e);
         })
         .catch(() => {});
-    }, 20000);
-    return () => clearInterval(t);
+    }, 30000);
+    // When the tab becomes visible again, refresh once immediately
+    // so the user doesn't see stale data after switching back.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadAll();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisible);
+    }
+    return () => {
+      clearInterval(t);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+    };
   }, [loadAll]);
 
   const fullSync = async () => {
@@ -488,16 +504,26 @@ function ProfileDrawer({
     }
   }, [personnelNumber]);
 
+  // Poll the open profile only when there's something worth watching:
+  // pending/in-progress operations need fast updates, an idle profile
+  // doesn't need any background traffic.
+  const hasActiveOps = !!profile?.pending_operations.some(
+    (o) => o.status === "pending" || o.status === "in_progress"
+  );
+  const profilePollMs = hasActiveOps ? 8000 : 60000;
+
   useEffect(() => {
     reload();
-    // Re-poll the open profile so queue status + concurrent edits stay live.
     const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       api<Profile>(`/datev/employees/${personnelNumber}/profile`)
         .then(setProfile)
         .catch(() => {});
-    }, 15000);
+    }, profilePollMs);
     return () => clearInterval(t);
-  }, [reload, personnelNumber]);
+  }, [reload, personnelNumber, profilePollMs]);
 
   if (!profile) {
     return (
