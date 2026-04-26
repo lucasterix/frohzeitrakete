@@ -48,6 +48,169 @@ from app.services.work_report_service import build_work_report
 router = APIRouter()
 
 
+@router.get("/dashboard-stats")
+def admin_dashboard_stats(
+    admin_user: User = Depends(require_office_user),
+    db: Session = Depends(get_db),
+):
+    """Aggregated dashboard stats: hours, vacation, sick leave."""
+    from calendar import monthrange
+    from datetime import date as _date, timedelta
+
+    from sqlalchemy import func
+
+    from app.models.entry import Entry
+    from app.models.payroll_entry import PayrollEntry
+    from app.models.sick_leave import SickLeave
+
+    today = _date.today()
+
+    # --- Hours ---
+    today_total = (
+        db.query(func.coalesce(func.sum(Entry.hours), 0.0))
+        .filter(Entry.entry_date == today)
+        .scalar()
+    )
+    month_start = _date(today.year, today.month, 1)
+    _, month_days = monthrange(today.year, today.month)
+    month_end = _date(today.year, today.month, month_days)
+
+    month_total = (
+        db.query(func.coalesce(func.sum(Entry.hours), 0.0))
+        .filter(Entry.entry_date >= month_start, Entry.entry_date <= month_end)
+        .scalar()
+    )
+
+    # Workdays elapsed + total
+    def _count_workdays(start: _date, end: _date) -> int:
+        count = 0
+        d = start
+        while d <= end:
+            if d.weekday() < 5:
+                count += 1
+            d += timedelta(days=1)
+        return count
+
+    workdays_elapsed = _count_workdays(month_start, today)
+    workdays_total = _count_workdays(month_start, month_end)
+
+    # Projection: avg per day * 5 * 4.33
+    if workdays_elapsed > 0:
+        avg_per_day = float(month_total) / workdays_elapsed
+        month_projection = round(avg_per_day * 5 * 4.33, 1)
+    else:
+        month_projection = 0.0
+
+    # --- Vacation from Google Sheets ---
+    today_vacation = []
+    week_vacation = []
+    try:
+        from app.services.vacation_sheet_service import _get_cached
+
+        all_vac = _get_cached()
+
+        # This week (Mon-Fri)
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=4)
+
+        for emp in all_vac:
+            # Today
+            if today in emp.vacation_dates:
+                today_vacation.append({
+                    "name": emp.sheet_name,
+                    "sheet_name": emp.sheet_name,
+                })
+            # This week
+            week_dates = [
+                d.isoformat()
+                for d in emp.vacation_dates
+                if week_start <= d <= week_end
+            ]
+            if week_dates:
+                week_vacation.append({
+                    "name": emp.sheet_name,
+                    "dates": week_dates,
+                    "sheet_name": emp.sheet_name,
+                })
+    except Exception:
+        pass  # Google Sheets not available — return empty lists
+
+    # --- Currently sick (from SickLeave + payroll_entries) ---
+    sick_rows = (
+        db.query(SickLeave)
+        .filter(SickLeave.from_date <= today, SickLeave.to_date >= today)
+        .all()
+    )
+    sick_user_ids = {s.user_id for s in sick_rows}
+
+    # Also from payroll_entries with category krankmeldung/kindkrankmeldung
+    payroll_sick = (
+        db.query(PayrollEntry)
+        .filter(
+            PayrollEntry.category.in_(["krankmeldung", "kindkrankmeldung"]),
+            PayrollEntry.from_date <= today,
+            PayrollEntry.to_date >= today,
+        )
+        .all()
+    )
+
+    # Collect user ids from payroll sick entries that are not already in sick_rows
+    for ps in payroll_sick:
+        if ps.user_id and ps.user_id not in sick_user_ids:
+            sick_user_ids.add(ps.user_id)
+
+    # Fetch user names
+    all_sick_user_ids = {s.user_id for s in sick_rows} | {
+        ps.user_id for ps in payroll_sick if ps.user_id
+    }
+    sick_users = (
+        db.query(User).filter(User.id.in_(all_sick_user_ids)).all()
+        if all_sick_user_ids
+        else []
+    )
+    name_by_id = {u.id: u.full_name for u in sick_users}
+
+    currently_sick = []
+    seen_user_ids: set[int] = set()
+    for s in sick_rows:
+        if s.user_id not in seen_user_ids:
+            seen_user_ids.add(s.user_id)
+            currently_sick.append({
+                "user_id": s.user_id,
+                "name": name_by_id.get(s.user_id, f"User {s.user_id}"),
+                "from_date": s.from_date.isoformat(),
+                "to_date": s.to_date.isoformat(),
+            })
+    for ps in payroll_sick:
+        uid = ps.user_id
+        if uid and uid not in seen_user_ids:
+            seen_user_ids.add(uid)
+            currently_sick.append({
+                "user_id": uid,
+                "name": name_by_id.get(uid, ps.employee_name or f"User {uid}"),
+                "from_date": ps.from_date.isoformat() if ps.from_date else None,
+                "to_date": ps.to_date.isoformat() if ps.to_date else None,
+            })
+        elif not uid and ps.employee_name:
+            currently_sick.append({
+                "user_id": None,
+                "name": ps.employee_name,
+                "from_date": ps.from_date.isoformat() if ps.from_date else None,
+                "to_date": ps.to_date.isoformat() if ps.to_date else None,
+            })
+
+    return {
+        "today_total_hours": round(float(today_total), 2),
+        "month_total_hours": round(float(month_total), 2),
+        "month_workdays_elapsed": workdays_elapsed,
+        "month_workdays_total": workdays_total,
+        "month_projection": month_projection,
+        "today_vacation": today_vacation,
+        "week_vacation": week_vacation,
+        "currently_sick": currently_sick,
+    }
+
+
 @router.get("/call-tasks")
 def admin_list_call_tasks(
     admin_user: User = Depends(require_office_user),

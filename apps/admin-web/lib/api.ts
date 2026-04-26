@@ -1679,3 +1679,145 @@ export async function markCallRequestDone(
   }
   return response.json();
 }
+
+/* =========================
+   DASHBOARD STATS
+========================= */
+
+export type DashboardStats = {
+  today_total_hours: number;
+  month_total_hours: number;
+  month_workdays_elapsed: number;
+  month_workdays_total: number;
+  month_projection: number;
+  today_vacation: { name: string; sheet_name: string }[];
+  week_vacation: { name: string; dates: string[]; sheet_name: string }[];
+  currently_sick: { user_id: number | null; name: string; from_date: string | null; to_date: string | null }[];
+};
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/dashboard-stats`,
+    {
+      headers: buildHeaders(),
+      cache: "no-store",
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Dashboard-Stats")
+    );
+  }
+  return response.json();
+}
+
+/* =========================
+   PAYROLL (Lohnabrechnung)
+========================= */
+
+export type PayrollEntryRecord = {
+  id: number;
+  user_id: number | null;
+  user_name: string | null;
+  employee_name: string | null;
+  category: string;
+  title: string;
+  description: string | null;
+  from_date: string | null;
+  to_date: string | null;
+  attachment_path: string | null;
+  source: string;
+  status: string;
+  handler_user_id: number | null;
+  handler_name: string | null;
+  handled_at: string | null;
+  handler_note: string | null;
+  created_by_user_id: number;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getPayrollEntries(filters?: {
+  status?: string;
+  category?: string;
+}): Promise<PayrollEntryRecord[]> {
+  const url = new URL(`${API_BASE_URL}/admin/payroll`);
+  if (filters?.status) url.searchParams.set("status", filters.status);
+  if (filters?.category) url.searchParams.set("category", filters.category);
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Fehler beim Laden der Lohnabrechnung")
+    );
+  }
+  return response.json();
+}
+
+export async function createPayrollEntry(payload: {
+  user_id?: number | null;
+  employee_name?: string | null;
+  category: string;
+  title: string;
+  description?: string | null;
+  from_date?: string | null;
+  to_date?: string | null;
+}): Promise<PayrollEntryRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/payroll`, {
+    method: "POST",
+    headers: buildHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Eintrag konnte nicht erstellt werden")
+    );
+  }
+  return response.json();
+}
+
+export async function updatePayrollEntry(
+  id: number,
+  payload: { status?: string; handler_note?: string }
+): Promise<PayrollEntryRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/payroll/${id}`,
+    {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Eintrag konnte nicht aktualisiert werden")
+    );
+  }
+  return response.json();
+}
+
+export async function uploadPayrollAttachment(
+  id: number,
+  file: File
+): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/payroll/${id}/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await parseError(response, "Upload fehlgeschlagen")
+    );
+  }
+}
+
+export function getPayrollAttachmentUrl(id: number): string {
+  return `${API_BASE_URL}/admin/payroll/${id}/attachment`;
+}

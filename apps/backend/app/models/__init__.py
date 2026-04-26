@@ -7,6 +7,7 @@ from app.models.hr_request import HrRequest
 from app.models.kostentraeger import Kostentraeger
 from app.models.leistungsnachweis_office_state import LeistungsnachweisOfficeState
 from app.models.notification import Notification
+from app.models.payroll_entry import PayrollEntry
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient_extras import PatientExtras
 from app.models.patient_intake import PatientIntakeRequest
@@ -36,6 +37,7 @@ __all__ = [
     "Kostentraeger",
     "LeistungsnachweisOfficeState",
     "Notification",
+    "PayrollEntry",
     "PasswordResetToken",
     "PatientExtras",
     "PatientIntakeRequest",

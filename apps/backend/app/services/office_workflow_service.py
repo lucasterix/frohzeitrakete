@@ -237,6 +237,21 @@ def create_sick_leave(
                 d += _td(days=1)
             db.commit()
 
+    # Dual-write: payroll_entry for krankmeldung
+    try:
+        from app.api.payroll import create_payroll_from_sick_leave
+
+        create_payroll_from_sick_leave(
+            db,
+            user_id=user_id,
+            from_date=from_date,
+            to_date=to_date,
+            note=note,
+            sick_leave_id=row.id,
+        )
+    except Exception:
+        pass  # payroll dual-write is best-effort
+
     # Admins + Standortleiter benachrichtigen
     notify_all_admins(
         db,
@@ -333,6 +348,21 @@ def create_hr_request(
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    # Dual-write: payroll_entry for payroll-relevant HR requests
+    try:
+        from app.api.payroll import create_payroll_from_hr_request
+
+        create_payroll_from_hr_request(
+            db,
+            user_id=user_id,
+            category=category,
+            subject=subject,
+            body=body,
+            hr_request_id=row.id,
+        )
+    except Exception:
+        pass  # payroll dual-write is best-effort
 
     notify_all_admins(
         db,

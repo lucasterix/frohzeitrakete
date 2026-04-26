@@ -13,6 +13,8 @@ from app.api.mobile import router as mobile_router
 from app.api.office_workflow import admin_router as office_admin_router
 from app.api.office_workflow import mobile_router as office_mobile_router
 from app.api.budget_inquiries import router as budget_inquiries_router
+from app.api.payroll import admin_router as payroll_admin_router
+from app.api.payroll import mobile_router as payroll_mobile_router
 from app.api.pflegehilfsmittel import admin_router as pflegehm_admin_router
 from app.api.pflegehilfsmittel import mobile_router as pflegehm_mobile_router
 from app.core.logging import configure_logging, get_logger
@@ -77,6 +79,8 @@ app.include_router(admin_signatures_router, prefix="/admin", tags=["admin-signat
 app.include_router(admin_tasks_router, prefix="/admin", tags=["admin-tasks"])
 app.include_router(office_admin_router, prefix="/admin", tags=["admin-office-workflow"])
 app.include_router(budget_inquiries_router, prefix="/admin", tags=["admin-budget-inquiries"])
+app.include_router(payroll_admin_router, prefix="/admin", tags=["admin-payroll"])
+app.include_router(payroll_mobile_router, prefix="/mobile", tags=["mobile-payroll"])
 app.include_router(pflegehm_admin_router, prefix="/admin", tags=["admin-pflegehilfsmittel"])
 app.include_router(pflegehm_mobile_router, prefix="/mobile", tags=["mobile-pflegehilfsmittel"])
 

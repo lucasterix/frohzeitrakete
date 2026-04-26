@@ -40,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
   { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon },
   { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon },
+  { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon },
   { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
   { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true },
   { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"] },
