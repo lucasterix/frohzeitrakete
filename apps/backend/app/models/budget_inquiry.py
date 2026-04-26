@@ -26,6 +26,14 @@ class BudgetInquiry(Base):
     task_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending", server_default="pending"
     )
+
+    # Bearbeitungsvermerk
+    handler_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    handler_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

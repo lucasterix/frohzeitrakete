@@ -33,6 +33,10 @@ class BudgetInquiryResponse(BaseModel):
     user_id: int
     signature_event_id: int | None = None
     task_status: str = "pending"
+    handler_user_id: int | None = None
+    handled_at: datetime | None = None
+    handler_note: str | None = None
+    handler_name: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -54,6 +58,11 @@ class GenerateSelectedRequest(BaseModel):
     user_id: int
 
 
+class PatchBudgetInquiryRequest(BaseModel):
+    task_status: str | None = None
+    handler_note: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -68,7 +77,19 @@ def list_budget_inquiries(
 ):
     """Liste aller Budgetanfragen, optional gefiltert nach Betreuer, Patient oder task_status."""
     rows = svc.list_inquiries(db, user_id=user_id, patient_id=patient_id, task_status=task_status)
-    return rows
+    # Resolve handler names
+    handler_ids = {r.handler_user_id for r in rows if r.handler_user_id}
+    handler_map: dict[int, str] = {}
+    if handler_ids:
+        handler_users = db.query(User).filter(User.id.in_(handler_ids)).all()
+        handler_map = {u.id: u.full_name for u in handler_users}
+    results = []
+    for r in rows:
+        resp = BudgetInquiryResponse.model_validate(r)
+        if r.handler_user_id and r.handler_user_id in handler_map:
+            resp.handler_name = handler_map[r.handler_user_id]
+        results.append(resp)
+    return results
 
 
 @router.post("/budget-inquiries/generate")
@@ -121,13 +142,42 @@ def generate_selected(
     return {"generated": count}
 
 
+@router.patch("/budget-inquiries/{inquiry_id}")
+def patch_budget_inquiry(
+    inquiry_id: int,
+    payload: PatchBudgetInquiryRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_office_user),
+):
+    """Bearbeitungsvermerk setzen: Notiz, Status, handler_user_id und handled_at."""
+    if payload.task_status == "done":
+        if not payload.handler_note or len(payload.handler_note.strip()) < 5:
+            raise HTTPException(
+                status_code=422,
+                detail="Beim Erledigt-Setzen ist eine Notiz mit mind. 5 Zeichen Pflicht.",
+            )
+    inquiry = svc.patch_inquiry(
+        db,
+        inquiry_id,
+        handler_user_id=user.id,
+        handler_note=payload.handler_note,
+        task_status=payload.task_status,
+    )
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Budgetanfrage nicht gefunden")
+    handler_name = user.full_name if user else None
+    resp = BudgetInquiryResponse.model_validate(inquiry)
+    resp.handler_name = handler_name
+    return resp
+
+
 @router.patch("/budget-inquiries/{inquiry_id}/done")
 def mark_budget_inquiry_done(
     inquiry_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_office_user),
 ):
-    """Setzt task_status auf 'done'."""
+    """Setzt task_status auf 'done' (Legacy-Endpoint)."""
     inquiry = svc.mark_inquiry_done(db, inquiry_id)
     if not inquiry:
         raise HTTPException(status_code=404, detail="Budgetanfrage nicht gefunden")

@@ -199,6 +199,34 @@ def admin_dashboard_stats(
                 "to_date": ps.to_date.isoformat() if ps.to_date else None,
             })
 
+    # --- Pending Tasks ---
+    from app.models.signature_event import SignatureEvent
+    from app.models.budget_inquiry import BudgetInquiry
+
+    contracts_pending = (
+        db.query(func.count(SignatureEvent.id))
+        .filter(
+            SignatureEvent.document_type == "betreuungsvertrag",
+            SignatureEvent.office_processed_at.is_(None),
+        )
+        .scalar()
+    ) or 0
+
+    vp_antraege_pending = (
+        db.query(func.count(SignatureEvent.id))
+        .filter(
+            SignatureEvent.document_type == "vp_antrag",
+            SignatureEvent.office_processed_at.is_(None),
+        )
+        .scalar()
+    ) or 0
+
+    budget_inquiries_pending = (
+        db.query(func.count(BudgetInquiry.id))
+        .filter(BudgetInquiry.task_status == "pending")
+        .scalar()
+    ) or 0
+
     return {
         "today_total_hours": round(float(today_total), 2),
         "month_total_hours": round(float(month_total), 2),
@@ -208,6 +236,11 @@ def admin_dashboard_stats(
         "today_vacation": today_vacation,
         "week_vacation": week_vacation,
         "currently_sick": currently_sick,
+        "pending_tasks": {
+            "contracts_pending": contracts_pending,
+            "vp_antraege_pending": vp_antraege_pending,
+            "budget_inquiries_pending": budget_inquiries_pending,
+        },
     }
 
 

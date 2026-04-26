@@ -23,29 +23,30 @@ type NavItem = {
   label: string;
   Icon: typeof DashboardIcon;
   adminOnly?: boolean;
-  roles?: string[]; // if set, only users whose role is in this list see the item
+  roles?: string[];
+  access?: string; // z.B. "Admin", "Alle", "Admin, Buchhaltung" — nur für Admins sichtbar
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/admin", label: "Dashboard", Icon: DashboardIcon, adminOnly: true },
-  { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon },
-  { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon },
-  { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon },
-  { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon },
-  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true },
-  { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true },
-  { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon },
-  { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon },
-  { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon },
-  { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon },
-  { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon },
-  { href: "/admin/posteingang", label: "Posteingang", Icon: InboxIcon },
-  { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon },
-  { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true },
-  { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true },
-  { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"] },
-  { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon, adminOnly: true },
-  { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon },
+  { href: "/admin", label: "Dashboard", Icon: DashboardIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/tasks", label: "Aufgaben", Icon: InboxIcon, access: "Alle" },
+  { href: "/admin/office-inbox", label: "Office Inbox", Icon: InboxIcon, access: "Alle" },
+  { href: "/admin/vertretungen", label: "Vertretungen", Icon: UsersIcon, access: "Alle" },
+  { href: "/admin/intakes", label: "Neuaufnahmen", Icon: UsersIcon, access: "Alle" },
+  { href: "/admin/trainings", label: "Fortbildungen", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/users", label: "User", Icon: UsersIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/leistungsnachweise", label: "Leistungsnachweise", Icon: SignatureIcon, access: "Alle" },
+  { href: "/admin/vp-antraege", label: "VP-Anträge", Icon: SignatureIcon, access: "Alle" },
+  { href: "/admin/contracts", label: "Verträge", Icon: ShieldIcon, access: "Alle" },
+  { href: "/admin/pflegehilfsmittel", label: "Pflegehilfsmittel", Icon: ShieldIcon, access: "Alle" },
+  { href: "/admin/budget-inquiries", label: "Budgetabfragen", Icon: ShieldIcon, access: "Alle" },
+  { href: "/admin/posteingang", label: "Posteingang", Icon: InboxIcon, access: "Alle" },
+  { href: "/admin/lohnabrechnung", label: "Lohnabrechnung", Icon: CalculatorIcon, access: "Alle" },
+  { href: "/admin/sheets-matching", label: "Stundenabgleich", Icon: SparkleIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/it-tickets", label: "IT-Tickets", Icon: AlertCircleIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/buchhaltung", label: "Buchhaltung", Icon: CalculatorIcon, roles: ["admin", "buchhaltung"], access: "Admin, Buchhaltung" },
+  { href: "/admin/sync-errors", label: "Sync-Fehler", Icon: ShieldIcon, adminOnly: true, access: "Admin" },
+  { href: "/admin/profile", label: "Profil", Icon: UserCircleIcon, access: "Alle" },
 ];
 
 export default function AdminSidebar() {
@@ -83,7 +84,7 @@ export default function AdminSidebar() {
           if (item.roles) return me?.role ? item.roles.includes(me.role) : false;
           if (item.adminOnly) return me?.role === "admin";
           return true;
-        }).map(({ href, label, Icon }) => {
+        }).map(({ href, label, Icon, access }) => {
           const isActive =
             pathname === href ||
             (href !== "/admin" && pathname?.startsWith(href));
@@ -107,7 +108,12 @@ export default function AdminSidebar() {
               >
                 <Icon className="h-4 w-4" />
               </span>
-              {label}
+              <span className="flex-1">{label}</span>
+              {me?.role === "admin" && access && access !== "Alle" && (
+                <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-slate-400">
+                  {access}
+                </span>
+              )}
             </Link>
           );
         })}

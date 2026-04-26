@@ -385,6 +385,30 @@ def get_inquiry(db: Session, inquiry_id: int) -> BudgetInquiry | None:
     return db.query(BudgetInquiry).filter(BudgetInquiry.id == inquiry_id).first()
 
 
+def patch_inquiry(
+    db: Session,
+    inquiry_id: int,
+    *,
+    handler_user_id: int | None = None,
+    handler_note: str | None = None,
+    task_status: str | None = None,
+) -> BudgetInquiry | None:
+    """Bearbeitungsvermerk und/oder Status aktualisieren."""
+    inquiry = db.query(BudgetInquiry).filter(BudgetInquiry.id == inquiry_id).first()
+    if inquiry is None:
+        return None
+    if task_status is not None:
+        inquiry.task_status = task_status
+    if handler_note is not None:
+        inquiry.handler_note = handler_note.strip()
+    if handler_user_id is not None:
+        inquiry.handler_user_id = handler_user_id
+    inquiry.handled_at = datetime.utcnow()
+    db.commit()
+    db.refresh(inquiry)
+    return inquiry
+
+
 def mark_inquiry_done(db: Session, inquiry_id: int) -> BudgetInquiry | None:
     """Setzt task_status auf 'done'."""
     inquiry = db.query(BudgetInquiry).filter(BudgetInquiry.id == inquiry_id).first()

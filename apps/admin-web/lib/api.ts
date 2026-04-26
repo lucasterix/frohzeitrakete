@@ -1696,6 +1696,11 @@ export type DashboardStats = {
   today_vacation: { name: string; sheet_name: string }[];
   week_vacation: { name: string; dates: string[]; sheet_name: string }[];
   currently_sick: { user_id: number | null; name: string; from_date: string | null; to_date: string | null }[];
+  pending_tasks?: {
+    contracts_pending: number;
+    vp_antraege_pending: number;
+    budget_inquiries_pending: number;
+  };
 };
 
 export async function getDashboardStats(): Promise<DashboardStats> {

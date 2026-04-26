@@ -8,8 +8,10 @@ import {
   getDashboardStats,
   getMe,
 } from "@/lib/api";
+import Link from "next/link";
 import {
   AlertCircleIcon,
+  InboxIcon,
   RefreshIcon,
   ShieldIcon,
   SparkleIcon,
@@ -178,6 +180,35 @@ export default function AdminDashboardPage() {
           stringValue
         />
       </div>
+
+      {/* Offene Aufgaben */}
+      {stats?.pending_tasks && (
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-slate-900">
+            Offene Aufgaben
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <TaskCard
+              href="/admin/contracts"
+              label="Vertraege"
+              sublabel="noch an KK zu senden"
+              count={stats.pending_tasks.contracts_pending}
+            />
+            <TaskCard
+              href="/admin/vp-antraege"
+              label="VP-Antraege"
+              sublabel="noch zu bearbeiten"
+              count={stats.pending_tasks.vp_antraege_pending}
+            />
+            <TaskCard
+              href="/admin/budget-inquiries"
+              label="Budgetabfragen"
+              sublabel="noch zu versenden"
+              count={stats.pending_tasks.budget_inquiries_pending}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Vacation + Sick */}
       <div className="grid gap-6 xl:grid-cols-3">

@@ -21,6 +21,10 @@ type BudgetInquiry = {
   user_id: number;
   signature_event_id: number | null;
   task_status: string;
+  handler_user_id: number | null;
+  handled_at: string | null;
+  handler_note: string | null;
+  handler_name: string | null;
   created_at: string | null;
 };
 
@@ -50,6 +54,12 @@ export default function BudgetInquiriesPage() {
 
   // Selection for batch-selected
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Inline edit state
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [editStatus, setEditStatus] = useState("pending");
+  const [editError, setEditError] = useState("");
 
   const loadInquiries = useCallback(
     async (userId?: string, taskStatus?: string) => {
@@ -257,6 +267,50 @@ export default function BudgetInquiriesPage() {
       await loadInquiries(filterUserId, filterTaskStatus);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler");
+    }
+  }
+
+  function startEditing(inq: BudgetInquiry) {
+    setEditingId(inq.id);
+    setEditNote(inq.handler_note || "");
+    setEditStatus(inq.task_status);
+    setEditError("");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditNote("");
+    setEditStatus("pending");
+    setEditError("");
+  }
+
+  async function handleSaveEdit(inquiryId: number) {
+    setEditError("");
+    if (editStatus === "done" && editNote.trim().length < 5) {
+      setEditError("Beim Erledigt-Setzen ist eine Notiz mit mind. 5 Zeichen Pflicht.");
+      return;
+    }
+    try {
+      const res = await fetchWithRefresh(
+        `${API_BASE_URL}/admin/budget-inquiries/${inquiryId}`,
+        {
+          method: "PATCH",
+          headers: { ...buildHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_status: editStatus,
+            handler_note: editNote,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Fehler beim Speichern");
+      }
+      setFlash("Bearbeitungsvermerk gespeichert.");
+      setEditingId(null);
+      await loadInquiries(filterUserId, filterTaskStatus);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Fehler");
     }
   }
 
@@ -481,6 +535,7 @@ export default function BudgetInquiriesPage() {
                   <th className="px-3 py-2">Kasse</th>
                   <th className="px-3 py-2">Betreuer</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Bearbeitet</th>
                   <th className="px-3 py-2">Erstellt</th>
                   <th className="px-3 py-2">Aktionen</th>
                 </tr>
@@ -488,6 +543,7 @@ export default function BudgetInquiriesPage() {
               <tbody>
                 {inquiries.map((inq) => {
                   const betreuer = users.find((u) => u.id === inq.user_id);
+                  const isEditing = editingId === inq.id;
                   return (
                     <tr
                       key={inq.id}
@@ -514,15 +570,62 @@ export default function BudgetInquiriesPage() {
                         {betreuer?.full_name || `User #${inq.user_id}`}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                            inq.task_status === "done"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {inq.task_status === "done" ? "Erledigt" : "Offen"}
-                        </span>
+                        {isEditing ? (
+                          <select
+                            value={editStatus}
+                            onChange={(e) => setEditStatus(e.target.value)}
+                            className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                          >
+                            <option value="pending">Offen</option>
+                            <option value="done">Erledigt</option>
+                          </select>
+                        ) : (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                              inq.task_status === "done"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {inq.task_status === "done" ? "Erledigt" : "Offen"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-500 text-xs">
+                        {isEditing ? (
+                          <div className="flex flex-col gap-1">
+                            <textarea
+                              value={editNote}
+                              onChange={(e) => setEditNote(e.target.value)}
+                              placeholder="Notiz eingeben..."
+                              rows={2}
+                              className="rounded-lg border border-slate-200 px-2 py-1 text-xs w-full min-w-[160px]"
+                            />
+                            {editError && (
+                              <span className="text-[10px] text-red-600">{editError}</span>
+                            )}
+                          </div>
+                        ) : inq.handled_at ? (
+                          <div>
+                            <span className="font-medium text-slate-700">
+                              {inq.handler_name || `User #${inq.handler_user_id}`}
+                            </span>
+                            <br />
+                            <span>
+                              {new Date(inq.handled_at).toLocaleDateString("de-DE")}
+                            </span>
+                            {inq.handler_note && (
+                              <>
+                                <br />
+                                <span className="italic text-slate-400">
+                                  {inq.handler_note}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          "--"
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-slate-500">
                         {inq.created_at
@@ -537,12 +640,27 @@ export default function BudgetInquiriesPage() {
                           >
                             PDF
                           </button>
-                          {inq.task_status === "pending" && (
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => handleSaveEdit(inq.id)}
+                                className="rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                              >
+                                Speichern
+                              </button>
+                              <button
+                                onClick={cancelEditing}
+                                className="rounded-lg bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                              >
+                                Abbrechen
+                              </button>
+                            </>
+                          ) : (
                             <button
-                              onClick={() => handleMarkDone(inq.id)}
-                              className="rounded-lg bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                              onClick={() => startEditing(inq)}
+                              className="rounded-lg bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
                             >
-                              Als erledigt markieren
+                              Bearbeiten
                             </button>
                           )}
                         </div>
