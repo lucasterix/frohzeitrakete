@@ -859,6 +859,38 @@ function BankTab({
   );
 }
 
+// Common DATEV salary types Daniel actually uses, with German labels.
+// Numeric range is wide (DATEV-LuG knows thousands) — list is suggestions
+// for the dropdown; Daniel can always type a custom number.
+const COMMON_SALARY_TYPES: Array<{ id: number; label: string }> = [
+  { id: 2000, label: "Gehalt" },
+  { id: 2002, label: "Geschäftsführergehalt" },
+  { id: 2030, label: "Leistungszulage" },
+  { id: 2350, label: "Firmenrad, stpfl." },
+  { id: 2370, label: "Firmenrad Gehaltsumwandlung" },
+  { id: 2410, label: "Privatfahrten (Firmenwagen)" },
+  { id: 2420, label: "Fahrten Wohnung/Arbeit" },
+  { id: 2480, label: "Sachbezug, st/sv-frei" },
+  { id: 2507, label: "Sonstiger Sachbezug" },
+  { id: 4310, label: "Abfindung o.Freib." },
+  { id: 8190, label: "Sonstiger Lohn" },
+];
+
+function describeSalaryType(id: number | undefined): string {
+  if (id === undefined || id === null) return "—";
+  const known = COMMON_SALARY_TYPES.find((s) => s.id === id);
+  return known ? `${id} – ${known.label}` : String(id);
+}
+
+function describeInterval(i: string | undefined): string {
+  return {
+    monthly: "monatlich",
+    quarterly: "quartalsweise",
+    semiannually: "halbjährlich",
+    annually: "jährlich",
+  }[i ?? "monthly"] ?? (i ?? "monatlich");
+}
+
 function BezuegeTab({
   profile,
   onSaved,
@@ -868,61 +900,269 @@ function BezuegeTab({
   onSaved: () => Promise<void> | void;
   setError: (s: string) => void;
 }) {
+  const [editingId, setEditingId] = useState<string | number | null | "new">(null);
+
+  const grossPayments = profile.bezuege.gross_payments ?? [];
+
   return (
-    <div className="space-y-5 px-6 py-5">
-      <Section title="Festbezüge (DATEV)">
-        {(profile.bezuege.gross_payments ?? []).length === 0 ? (
-          <p className="text-xs text-slate-500">Keine Festbezüge erfasst.</p>
+    <div className="space-y-6 px-6 py-5">
+      <Section title="Festbezüge (Monatsgehalt, Zulagen, Sachbezüge)">
+        {grossPayments.length === 0 && editingId === null ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+            <p className="text-sm text-slate-600">Keine Festbezüge erfasst.</p>
+          </div>
         ) : (
-          <table className="min-w-full text-sm">
-            <thead className="text-xs uppercase text-slate-500">
-              <tr>
-                <th className="text-left">Lohnart</th>
-                <th className="text-right">Betrag</th>
-                <th className="text-left">Intervall</th>
-                <th className="text-left">Gültig ab</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(profile.bezuege.gross_payments ?? []).map((p, i) => (
-                <tr key={String(p.id ?? i)} className="border-t border-slate-100">
-                  <td className="py-2 font-mono text-xs">{p.salary_type_id}</td>
-                  <td className="py-2 text-right tabular-nums">
-                    {p.amount?.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-2 text-slate-700">{p.payment_interval ?? "monthly"}</td>
-                  <td className="py-2 text-slate-700">{p.reference_date ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="space-y-2">
+            {grossPayments.map((p) => (
+              <GrossPaymentRow
+                key={String(p.id ?? Math.random())}
+                payment={p}
+                isEditing={editingId === p.id}
+                onEdit={() => setEditingId(p.id ?? null)}
+                onCancel={() => setEditingId(null)}
+                profile={profile}
+                onSaved={async () => {
+                  setEditingId(null);
+                  await onSaved();
+                }}
+                setError={setError}
+              />
+            ))}
+          </div>
         )}
-        <GrossPaymentForm profile={profile} onSaved={onSaved} setError={setError} />
+
+        {editingId === "new" ? (
+          <NewGrossPaymentForm
+            profile={profile}
+            onSaved={async () => {
+              setEditingId(null);
+              await onSaved();
+            }}
+            onCancel={() => setEditingId(null)}
+            setError={setError}
+          />
+        ) : (
+          <button
+            onClick={() => setEditingId("new")}
+            className="mt-3 inline-flex items-center gap-2 rounded-xl border border-dashed border-slate-400 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-600 hover:bg-slate-50"
+          >
+            + Neuer Festbezug
+          </button>
+        )}
       </Section>
 
-      <Section title="Stundenlöhne 1–5 (DATEV)">
-        <HourlyWageEditor profile={profile} onSaved={onSaved} setError={setError} />
+      <Section title="Stundenlöhne 1–5">
+        <p className="mb-3 text-xs text-slate-500">
+          Pro Mitarbeiter sind in DATEV bis zu fünf verschiedene Stundensätze hinterlegbar
+          (z.B. Grundlohn, Nachtdienst, Wochenende). Leerlassen wenn nicht genutzt.
+        </p>
+        <HourlyWagesEditor profile={profile} onSaved={onSaved} setError={setError} />
       </Section>
     </div>
   );
 }
 
-function GrossPaymentForm({
+function GrossPaymentRow({
+  payment,
+  isEditing,
+  onEdit,
+  onCancel,
   profile,
   onSaved,
   setError,
 }: {
+  payment: NonNullable<Profile["bezuege"]["gross_payments"]>[number];
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
   profile: Profile;
   onSaved: () => Promise<void> | void;
   setError: (s: string) => void;
 }) {
-  const [salaryType, setSalaryType] = useState<string>("2000");
-  const [amount, setAmount] = useState<string>("");
-  const [refDate, setRefDate] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [interval, setInterval] = useState<string>("monthly");
+  if (isEditing) {
+    return (
+      <GrossPaymentEditForm
+        profile={profile}
+        existing={payment}
+        onSaved={onSaved}
+        onCancel={onCancel}
+        setError={setError}
+      />
+    );
+  }
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <div>
+        <div className="font-medium text-slate-900">
+          {describeSalaryType(payment.salary_type_id)}
+        </div>
+        <div className="mt-0.5 text-xs text-slate-500">
+          {describeInterval(payment.payment_interval)}
+          {payment.reference_date ? ` · gültig ab ${payment.reference_date}` : ""}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="font-mono tabular-nums text-slate-900">
+          {(payment.amount ?? 0).toLocaleString("de-DE", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} €
+        </span>
+        <button
+          onClick={onEdit}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+        >
+          Bearbeiten
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GrossPaymentEditForm({
+  profile,
+  existing,
+  onSaved,
+  onCancel,
+  setError,
+}: {
+  profile: Profile;
+  existing: NonNullable<Profile["bezuege"]["gross_payments"]>[number];
+  onSaved: () => Promise<void> | void;
+  onCancel: () => void;
+  setError: (s: string) => void;
+}) {
+  const [salaryType, setSalaryType] = useState(String(existing.salary_type_id ?? "2000"));
+  const [amount, setAmount] = useState(String(existing.amount ?? ""));
+  const [refDate, setRefDate] = useState(
+    existing.reference_date ?? new Date().toISOString().slice(0, 7)
+  );
+  const [interval, setInterval] = useState(existing.payment_interval ?? "monthly");
   const [saving, setSaving] = useState(false);
 
-  const submit = async () => {
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const idNum = typeof existing.id === "string" ? Number(existing.id) : existing.id;
+      await api(`/datev/employees/${profile.personnel_number}/bezuege/gross-payment`, {
+        method: "PUT",
+        json: {
+          gross_payment_id: idNum,
+          salary_type_id: Number(salaryType),
+          amount: Number(amount),
+          reference_date: refDate,
+          payment_interval: interval,
+        },
+      });
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setToZero = async () => {
+    setAmount("0");
+    setSaving(true);
+    setError("");
+    try {
+      const idNum = typeof existing.id === "string" ? Number(existing.id) : existing.id;
+      await api(`/datev/employees/${profile.personnel_number}/bezuege/gross-payment`, {
+        method: "PUT",
+        json: {
+          gross_payment_id: idNum,
+          salary_type_id: Number(salaryType),
+          amount: 0,
+          reference_date: refDate,
+          payment_interval: interval,
+        },
+      });
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Konnte nicht deaktivieren");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border-2 border-slate-900 bg-white px-4 py-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Lohnart">
+          <SalaryTypeSelect value={salaryType} onChange={setSalaryType} />
+        </Field>
+        <Field label="Betrag (€)">
+          <input
+            type="number"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className={`${inputCls} font-mono text-right`}
+          />
+        </Field>
+        <Field label="Intervall">
+          <select
+            value={interval}
+            onChange={(e) => setInterval(e.target.value)}
+            className={inputCls}
+          >
+            <option value="monthly">Monatlich</option>
+            <option value="quarterly">Quartalsweise</option>
+            <option value="semiannually">Halbjährlich</option>
+            <option value="annually">Jährlich</option>
+          </select>
+        </Field>
+        <Field label="Gültig ab (YYYY-MM)">
+          <input
+            value={refDate}
+            onChange={(e) => setRefDate(e.target.value)}
+            placeholder="2026-04"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          onClick={setToZero}
+          disabled={saving}
+          className="text-xs text-red-700 underline-offset-2 hover:underline"
+          title="DATEV unterstützt kein Löschen, aber ein Festbezug auf 0 € wird ignoriert"
+        >
+          Auf 0 € setzen (deaktivieren)
+        </button>
+        <div className="flex gap-2">
+          <button onClick={onCancel} disabled={saving} className={btnSecondary}>
+            Abbrechen
+          </button>
+          <button onClick={save} disabled={saving || !amount} className={btnPrimary}>
+            {saving ? "Speichern …" : "Speichern"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewGrossPaymentForm({
+  profile,
+  onSaved,
+  onCancel,
+  setError,
+}: {
+  profile: Profile;
+  onSaved: () => Promise<void> | void;
+  onCancel: () => void;
+  setError: (s: string) => void;
+}) {
+  const [salaryType, setSalaryType] = useState("2000");
+  const [amount, setAmount] = useState("");
+  const [refDate, setRefDate] = useState(new Date().toISOString().slice(0, 7));
+  const [interval, setInterval] = useState("monthly");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
     setSaving(true);
     setError("");
     try {
@@ -935,7 +1175,6 @@ function GrossPaymentForm({
           payment_interval: interval,
         },
       });
-      setAmount("");
       await onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Konnte nicht hinzufügen");
@@ -945,40 +1184,109 @@ function GrossPaymentForm({
   };
 
   return (
-    <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <Field label="Lohnart-Nr.">
-        <input value={salaryType} onChange={(e) => setSalaryType(e.target.value)} className={inputCls} />
-      </Field>
-      <Field label="Betrag (EUR)">
-        <input
-          type="number"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className={inputCls}
-        />
-      </Field>
-      <Field label="Gültig ab (YYYY-MM)">
-        <input value={refDate} onChange={(e) => setRefDate(e.target.value)} className={inputCls} />
-      </Field>
-      <Field label="Intervall">
-        <select value={interval} onChange={(e) => setInterval(e.target.value)} className={inputCls}>
-          <option value="monthly">Monatlich</option>
-          <option value="quarterly">Quartalsweise</option>
-          <option value="semiannually">Halbjährlich</option>
-          <option value="annually">Jährlich</option>
-        </select>
-      </Field>
-      <div className="col-span-2 text-right">
-        <button onClick={submit} disabled={saving || !amount} className={btnPrimary}>
-          Bezug hinzufügen
+    <div className="mt-3 rounded-xl border-2 border-slate-900 bg-white px-4 py-4">
+      <div className="mb-3 text-sm font-semibold text-slate-900">Neuen Festbezug anlegen</div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Lohnart">
+          <SalaryTypeSelect value={salaryType} onChange={setSalaryType} />
+        </Field>
+        <Field label="Betrag (€)">
+          <input
+            type="number"
+            step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0,00"
+            className={`${inputCls} font-mono text-right`}
+          />
+        </Field>
+        <Field label="Intervall">
+          <select
+            value={interval}
+            onChange={(e) => setInterval(e.target.value)}
+            className={inputCls}
+          >
+            <option value="monthly">Monatlich</option>
+            <option value="quarterly">Quartalsweise</option>
+            <option value="semiannually">Halbjährlich</option>
+            <option value="annually">Jährlich</option>
+          </select>
+        </Field>
+        <Field label="Gültig ab (YYYY-MM)">
+          <input
+            value={refDate}
+            onChange={(e) => setRefDate(e.target.value)}
+            placeholder="2026-04"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onCancel} disabled={saving} className={btnSecondary}>
+          Abbrechen
+        </button>
+        <button onClick={save} disabled={saving || !amount} className={btnPrimary}>
+          {saving ? "Anlegen …" : "Festbezug anlegen"}
         </button>
       </div>
     </div>
   );
 }
 
-function HourlyWageEditor({
+function SalaryTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const isCustom = !COMMON_SALARY_TYPES.some((s) => String(s.id) === value);
+  const [showCustom, setShowCustom] = useState(isCustom);
+
+  if (showCustom) {
+    return (
+      <div className="flex gap-1">
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="z.B. 1234"
+          className={`${inputCls} font-mono`}
+        />
+        <button
+          onClick={() => {
+            setShowCustom(false);
+            if (!COMMON_SALARY_TYPES.some((s) => String(s.id) === value)) onChange("2000");
+          }}
+          className="rounded-lg border border-slate-300 bg-white px-2 text-xs hover:bg-slate-100"
+          title="Liste"
+        >
+          ☰
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-1">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+        {COMMON_SALARY_TYPES.map((s) => (
+          <option key={s.id} value={String(s.id)}>
+            {s.id} – {s.label}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => setShowCustom(true)}
+        className="rounded-lg border border-slate-300 bg-white px-2 text-xs hover:bg-slate-100"
+        title="Eigene Nummer eingeben"
+      >
+        ✎
+      </button>
+    </div>
+  );
+}
+
+function HourlyWagesEditor({
   profile,
   onSaved,
   setError,
@@ -988,16 +1296,18 @@ function HourlyWageEditor({
   setError: (s: string) => void;
 }) {
   const wages = profile.bezuege.hourly_wages ?? [];
-  const [drafts, setDrafts] = useState<Record<number, string>>(() => {
-    const o: Record<number, string> = {};
-    for (const w of wages) {
-      const id = Number(w.id);
-      if (id >= 1 && id <= 5) o[id] = String(w.amount ?? "");
-    }
-    return o;
-  });
+
+  // Map current values + drafts. Draft = string in input; null = no change.
+  const initial: Record<number, string> = {};
+  for (const w of wages) {
+    const id = Number(w.id);
+    if (id >= 1 && id <= 5) initial[id] = String(w.amount ?? "");
+  }
+  const [drafts, setDrafts] = useState<Record<number, string>>(initial);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const save = async (id: number) => {
+    setSavingId(id);
     setError("");
     try {
       await api(`/datev/employees/${profile.personnel_number}/bezuege/hourly-wage`, {
@@ -1007,27 +1317,50 @@ function HourlyWageEditor({
       await onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
+    } finally {
+      setSavingId(null);
     }
   };
 
   return (
-    <div className="grid grid-cols-5 gap-3">
-      {[1, 2, 3, 4, 5].map((id) => (
-        <Field key={id} label={`Lohn ${id}`}>
-          <div className="flex gap-1">
-            <input
-              type="number"
-              step="0.01"
-              value={drafts[id] ?? ""}
-              onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
-              className={inputCls}
-            />
-            <button onClick={() => save(id)} className="rounded-lg border border-slate-300 bg-white px-2 text-xs hover:bg-slate-100">
-              ↑
+    <div className="space-y-2">
+      {[1, 2, 3, 4, 5].map((id) => {
+        const original = initial[id] ?? "";
+        const current = drafts[id] ?? "";
+        const dirty = current !== original;
+        return (
+          <div
+            key={id}
+            className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2"
+          >
+            <span className="w-20 text-sm font-medium text-slate-700">Lohn {id}</span>
+            <div className="relative flex-1">
+              <input
+                type="number"
+                step="0.01"
+                value={current}
+                onChange={(e) => setDrafts((d) => ({ ...d, [id]: e.target.value }))}
+                placeholder="—"
+                className={`${inputCls} pr-8 font-mono text-right`}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                €/h
+              </span>
+            </div>
+            <button
+              onClick={() => save(id)}
+              disabled={!dirty || savingId !== null}
+              className={`min-w-[90px] rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                dirty
+                  ? "bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+                  : "border border-slate-200 bg-slate-50 text-slate-400"
+              }`}
+            >
+              {savingId === id ? "…" : dirty ? "Speichern" : "Gespeichert"}
             </button>
           </div>
-        </Field>
-      ))}
+        );
+      })}
     </div>
   );
 }
