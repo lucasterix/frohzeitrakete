@@ -1043,6 +1043,18 @@ function nextIsoDay(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Defaults per absence kind: which DATEV reason + standard salary-type.
+// Krank: Lohnart 1650 (Lohnfortzahlung Std.) — adjust per Mandant if needed.
+// Urlaub: Lohnart leeren / 0 — DATEV nimmt sie aus dem Reason ab.
+const ABSENCE_KIND_DEFAULTS: Record<string, { reason: string; salaryType: string; label: string }> = {
+  krank: { reason: "K", salaryType: "1650", label: "Krank" },
+  urlaub: { reason: "U", salaryType: "1650", label: "Urlaub" },
+  krank_kind: { reason: "KK", salaryType: "1650", label: "Krank Kind" },
+  sonder: { reason: "SU", salaryType: "1650", label: "Sonderurlaub" },
+};
+
+type AbsenceKind = keyof typeof ABSENCE_KIND_DEFAULTS;
+
 function AbwesenheitTab({
   profile,
   onSaved,
@@ -1052,6 +1064,7 @@ function AbwesenheitTab({
   onSaved: () => Promise<void> | void;
   setError: (s: string) => void;
 }) {
+  const [kind, setKind] = useState<AbsenceKind>("krank");
   const [start, setStart] = useState<string>(new Date().toISOString().slice(0, 10));
   const [end, setEnd] = useState<string>(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState<string>("K");
@@ -1060,6 +1073,13 @@ function AbwesenheitTab({
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState("");
 
+  const switchKind = (k: AbsenceKind) => {
+    const d = ABSENCE_KIND_DEFAULTS[k];
+    setKind(k);
+    setReason(d.reason);
+    setSalaryType(d.salaryType);
+  };
+
   const periods = useMemo(() => groupAbsencesByPeriod(profile.absences), [profile.absences]);
   const sickDaysCurrentMonth = useMemo(() => {
     const cur = new Date().toISOString().slice(0, 7);
@@ -1067,6 +1087,20 @@ function AbwesenheitTab({
       .filter((a) => a.reason_for_absence_id === "K" && (a.date_of_emergence ?? "").startsWith(cur))
       .reduce((sum, a) => sum + (a.days ?? 0), 0);
   }, [profile.absences]);
+  const vacationDaysCurrentYear = useMemo(() => {
+    const yr = new Date().getFullYear().toString();
+    return profile.absences
+      .filter((a) => a.reason_for_absence_id === "U" && (a.date_of_emergence ?? "").startsWith(yr))
+      .reduce((sum, a) => sum + (a.days ?? 0), 0);
+  }, [profile.absences]);
+
+  const spanDays = (() => {
+    if (!start || !end) return 0;
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e) || e < s) return 0;
+    return Math.round((e - s) / 86400000) + 1;
+  })();
 
   const submit = async () => {
     setSaving(true);
@@ -1087,7 +1121,9 @@ function AbwesenheitTab({
           },
         }
       );
-      setInfo(`${result.days} Tag(e) eingereiht — wird automatisch an DATEV übertragen.`);
+      setInfo(
+        `${result.days} Tag(e) ${ABSENCE_KIND_DEFAULTS[kind].label.toLowerCase()} eingereiht — wird automatisch an DATEV übertragen.`
+      );
       await onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Konnte nicht erfassen");
@@ -1096,16 +1132,32 @@ function AbwesenheitTab({
     }
   };
 
+  const submitLabel =
+    kind === "krank" ? "Krankmeldung erfassen"
+      : kind === "urlaub" ? "Urlaub eintragen"
+      : kind === "krank_kind" ? "Krankheit Kind erfassen"
+      : "Sonderurlaub eintragen";
+
   return (
     <div className="space-y-6 px-6 py-5">
-      <Section title={`Krankheitstage ${new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`}>
-        <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
-          <span className="font-mono text-2xl font-semibold tabular-nums text-slate-900">
-            {sickDaysCurrentMonth.toLocaleString("de-DE")}
-          </span>{" "}
-          <span className="text-slate-600">
-            {sickDaysCurrentMonth === 1 ? "Krankheitstag" : "Krankheitstage"} im laufenden Monat
-          </span>
+      <Section title={`Übersicht ${new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`}>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-rose-50 px-4 py-3">
+            <div className="font-mono text-2xl font-semibold tabular-nums text-rose-900">
+              {sickDaysCurrentMonth.toLocaleString("de-DE")}
+            </div>
+            <div className="mt-0.5 text-xs text-rose-800">
+              {sickDaysCurrentMonth === 1 ? "Krankheitstag" : "Krankheitstage"} dieser Monat
+            </div>
+          </div>
+          <div className="rounded-xl bg-amber-50 px-4 py-3">
+            <div className="font-mono text-2xl font-semibold tabular-nums text-amber-900">
+              {vacationDaysCurrentYear.toLocaleString("de-DE")}
+            </div>
+            <div className="mt-0.5 text-xs text-amber-800">
+              Urlaubstage genommen ({new Date().getFullYear()})
+            </div>
+          </div>
         </div>
       </Section>
 
@@ -1151,12 +1203,28 @@ function AbwesenheitTab({
         )}
       </Section>
 
-      <Section title="AU / Krankmeldung erfassen">
+      <Section title="Abwesenheit eintragen">
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(Object.keys(ABSENCE_KIND_DEFAULTS) as AbsenceKind[]).map((k) => (
+            <button
+              key={k}
+              onClick={() => switchKind(k)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                kind === k
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {ABSENCE_KIND_DEFAULTS[k].label}
+            </button>
+          ))}
+        </div>
+
         <p className="mb-3 text-xs text-slate-500">
-          Ein Eintrag pro Tag wird an DATEV gesendet. Bei mehrtägiger AU bitte den
-          gesamten Zeitraum eingeben — Wochenenden landen ebenfalls in der Erfassung,
-          DATEV ignoriert dort die Lohnfortzahlung.
+          Ein Eintrag pro Tag wird an DATEV gesendet (auch Wochenenden — DATEV
+          ignoriert dort automatisch). {spanDays > 0 ? `Zeitraum: ${spanDays} Tag${spanDays === 1 ? "" : "e"}.` : ""}
         </p>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Von">
             <input
@@ -1178,19 +1246,6 @@ function AbwesenheitTab({
               className={inputCls}
             />
           </Field>
-          <Field label="Grund">
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className={inputCls}
-            >
-              {Object.entries(ABSENCE_REASONS).map(([id, label]) => (
-                <option key={id} value={id}>
-                  {id} – {label}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Stunden / Tag">
             <input
               type="number"
@@ -1211,6 +1266,28 @@ function AbwesenheitTab({
             />
           </Field>
         </div>
+
+        <details className="mt-3 text-xs text-slate-500">
+          <summary className="cursor-pointer hover:text-slate-700">
+            Anderer Grund (z.B. Mutterschutz, Elternzeit, Unbezahlt)
+          </summary>
+          <div className="mt-2">
+            <Field label="DATEV-Reason-Code">
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className={inputCls}
+              >
+                {Object.entries(ABSENCE_REASONS).map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {id} – {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </details>
+
         {info ? (
           <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
             {info}
@@ -1218,7 +1295,7 @@ function AbwesenheitTab({
         ) : null}
         <div className="mt-4 flex justify-end">
           <button onClick={submit} disabled={saving || !start || !end} className={btnPrimary}>
-            {saving ? "Erfasse …" : "Krankmeldung erfassen"}
+            {saving ? "Erfasse …" : submitLabel}
           </button>
         </div>
       </Section>
