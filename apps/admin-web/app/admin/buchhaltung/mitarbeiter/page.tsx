@@ -8,6 +8,13 @@ const DATEV_API_BASE_URL =
 
 // --- API client wrapper ----------------------------------------------------
 
+class AuthExpiredError extends Error {
+  constructor() {
+    super("Session abgelaufen");
+    this.name = "AuthExpiredError";
+  }
+}
+
 async function api<T>(
   path: string,
   init?: RequestInit & { json?: unknown }
@@ -22,6 +29,9 @@ async function api<T>(
     },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
+  if (response.status === 401) {
+    throw new AuthExpiredError();
+  }
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`HTTP ${response.status}: ${text.slice(0, 400)}`);
@@ -53,6 +63,9 @@ type Employee = {
   has_pending_changes: boolean;
   last_synced_at: string | null;
   last_sync_status: string | null;
+  patti_link_state: "unmatched" | "auto" | "manual";
+  patti_person_id: number | null;
+  pending_op_count: number;
 };
 
 type PendingOp = {
@@ -165,6 +178,16 @@ export default function MitarbeiterPage() {
   const [busyAction, setBusyAction] = useState<null | "sync" | "drain">(null);
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [pattiFilter, setPattiFilter] = useState<"alle" | "verknuepft" | "unverknuepft">("alle");
+  const [authExpired, setAuthExpired] = useState(false);
+
+  const handleApiError = useCallback((e: unknown) => {
+    if (e instanceof AuthExpiredError) {
+      setAuthExpired(true);
+      return;
+    }
+    setError(e instanceof Error ? e.message : "Fehler beim Laden");
+  }, []);
 
   const loadAll = useCallback(async () => {
     setError("");
@@ -177,10 +200,11 @@ export default function MitarbeiterPage() {
       ]);
       setHealth(h);
       setEmployees(e);
+      setAuthExpired(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      handleApiError(e);
     }
-  }, [includeInactive]);
+  }, [includeInactive, handleApiError]);
 
   useEffect(() => {
     loadAll();
@@ -250,7 +274,7 @@ export default function MitarbeiterPage() {
       }
       setInfo(parts.join(" · "));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync-Fehler");
+      handleApiError(e);
     } finally {
       setBusyAction(null);
     }
@@ -270,7 +294,7 @@ export default function MitarbeiterPage() {
         setError(`${r.error} Operation(en) sind dauerhaft fehlgeschlagen — siehe Profile.`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Queue-Fehler");
+      handleApiError(e);
     } finally {
       setBusyAction(null);
     }
@@ -278,14 +302,19 @@ export default function MitarbeiterPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return employees;
-    return employees.filter(
-      (e) =>
-        e.full_name.toLowerCase().includes(q) ||
-        e.job_title?.toLowerCase().includes(q) ||
-        String(e.personnel_number).includes(q)
-    );
-  }, [employees, search]);
+    return employees.filter((e) => {
+      if (q) {
+        const hit =
+          e.full_name.toLowerCase().includes(q) ||
+          (e.job_title?.toLowerCase().includes(q) ?? false) ||
+          String(e.personnel_number).includes(q);
+        if (!hit) return false;
+      }
+      if (pattiFilter === "verknuepft" && e.patti_link_state === "unmatched") return false;
+      if (pattiFilter === "unverknuepft" && e.patti_link_state !== "unmatched") return false;
+      return true;
+    });
+  }, [employees, search, pattiFilter]);
 
   return (
     <div className="space-y-6">
@@ -305,7 +334,20 @@ export default function MitarbeiterPage() {
         busyAction={busyAction}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {authExpired ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Sitzung abgelaufen.</strong> Bitte einmal die Seite neu laden, dann
+          wirst Du automatisch zum Login geleitet, falls nötig.
+          <button
+            onClick={() => window.location.reload()}
+            className="ml-3 rounded-lg bg-amber-700 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-800"
+          >
+            Seite neu laden
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
         <input
           type="search"
           placeholder="Suche: Name, Personalnummer, Tätigkeit …"
@@ -313,6 +355,15 @@ export default function MitarbeiterPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
+        <select
+          value={pattiFilter}
+          onChange={(e) => setPattiFilter(e.target.value as typeof pattiFilter)}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+        >
+          <option value="alle">Alle Patti-Stati</option>
+          <option value="verknuepft">Mit Patti verknüpft</option>
+          <option value="unverknuepft">Ohne Patti-Verknüpfung</option>
+        </select>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -322,6 +373,9 @@ export default function MitarbeiterPage() {
           />
           Auch ausgeschiedene anzeigen
         </label>
+        <span className="ml-auto text-xs text-slate-500">
+          {filtered.length} von {employees.length}
+        </span>
       </div>
 
       {info ? (
@@ -347,10 +401,11 @@ export default function MitarbeiterPage() {
               <tr>
                 <th className="px-4 py-3 text-left">PersNr</th>
                 <th className="px-4 py-3 text-left">Name</th>
-                <th className="px-4 py-3 text-left">Tätigkeit</th>
-                <th className="px-4 py-3 text-right">Std./Woche</th>
                 <th className="px-4 py-3 text-left">Eintritt</th>
+                <th className="px-4 py-3 text-left">Austritt</th>
+                <th className="px-4 py-3 text-left">Patti</th>
                 <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-right">Aufträge</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -364,11 +419,17 @@ export default function MitarbeiterPage() {
                     {e.personnel_number}
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">{e.full_name}</td>
-                  <td className="px-4 py-3 text-slate-700">{e.job_title ?? "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                    {e.weekly_working_hours ?? "—"}
-                  </td>
                   <td className="px-4 py-3 text-slate-700">{formatDate(e.date_of_joining)}</td>
+                  <td className="px-4 py-3 text-slate-700">{formatDate(e.date_of_leaving)}</td>
+                  <td className="px-4 py-3">
+                    {e.patti_link_state !== "unmatched" ? (
+                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                        verknüpft
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {e.is_active ? (
                       <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
@@ -378,6 +439,15 @@ export default function MitarbeiterPage() {
                       <span className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
                         ausgeschieden
                       </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {e.pending_op_count > 0 ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        {e.pending_op_count}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
                 </tr>
@@ -514,7 +584,11 @@ function ProfileDrawer({
       const p = await api<Profile>(`/datev/employees/${personnelNumber}/profile`);
       setProfile(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      if (e instanceof AuthExpiredError) {
+        setError("Sitzung abgelaufen — bitte Seite neu laden.");
+      } else {
+        setError(e instanceof Error ? e.message : "Fehler beim Laden");
+      }
     }
   }, [personnelNumber]);
 
