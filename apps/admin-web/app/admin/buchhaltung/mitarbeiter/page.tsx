@@ -164,20 +164,23 @@ export default function MitarbeiterPage() {
   const [info, setInfo] = useState("");
   const [busyAction, setBusyAction] = useState<null | "sync" | "drain">(null);
   const [search, setSearch] = useState("");
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   const loadAll = useCallback(async () => {
     setError("");
     try {
       const [h, e] = await Promise.all([
         api<SyncHealth>("/datev/sync/health"),
-        api<Employee[]>("/datev/employees"),
+        api<Employee[]>(
+          `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
+        ),
       ]);
       setHealth(h);
       setEmployees(e);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Laden");
     }
-  }, []);
+  }, [includeInactive]);
 
   useEffect(() => {
     loadAll();
@@ -190,7 +193,9 @@ export default function MitarbeiterPage() {
       }
       Promise.all([
         api<SyncHealth>("/datev/sync/health"),
-        api<Employee[]>("/datev/employees"),
+        api<Employee[]>(
+          `/datev/employees${includeInactive ? "?include_inactive=true" : ""}`
+        ),
       ])
         .then(([h, e]) => {
           setHealth(h);
@@ -308,6 +313,15 @@ export default function MitarbeiterPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-md rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(e) => setIncludeInactive(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          Auch ausgeschiedene anzeigen
+        </label>
       </div>
 
       {info ? (
