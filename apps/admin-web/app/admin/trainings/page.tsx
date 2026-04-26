@@ -167,7 +167,7 @@ export default function AdminTrainingsPage() {
         </div>
       )}
 
-      {showForm && isAdmin && (
+      {showForm && authorized && (
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <form onSubmit={handleCreate} className="grid gap-4 lg:grid-cols-2">
             <Field label="Titel *" full>
