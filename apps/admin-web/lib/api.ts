@@ -33,6 +33,7 @@ export type User = {
   overtime_balance_hours?: number | null;
   target_hours_per_week?: number | null;
   target_hours_per_day?: number | null;
+  department?: string | null;
   sheets_name_match?: string | null;
   sheets_last_synced_at?: string | null;
 };
@@ -95,6 +96,7 @@ export type CreateUserPayload = {
   patti_person_id?: number | null;
   has_company_car?: boolean;
   site_leader_id?: number | null;
+  department?: string | null;
 };
 
 export type UpdateUserPayload = {
@@ -106,6 +108,7 @@ export type UpdateUserPayload = {
   has_company_car?: boolean;
   password?: string | null;
   site_leader_id?: number | null;
+  department?: string | null;
 };
 
 export type TravelCostPayment = {
@@ -1820,4 +1823,125 @@ export async function uploadPayrollAttachment(
 
 export function getPayrollAttachmentUrl(id: number): string {
   return `${API_BASE_URL}/admin/payroll/${id}/attachment`;
+}
+
+// ==========================================================================
+// Mail Intake (Posteingang)
+// ==========================================================================
+
+export type MailEntryRecord = {
+  id: number;
+  title: string;
+  description: string | null;
+  sender: string | null;
+  received_date: string;
+  scan_path: string | null;
+  department: string;
+  priority: string;
+  ai_classification: string | null;
+  status: string;
+  assigned_to_user_id: number | null;
+  assigned_to_name: string | null;
+  handler_user_id: number | null;
+  handler_name: string | null;
+  handled_at: string | null;
+  handler_note: string | null;
+  created_by_user_id: number;
+  created_by_name: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getMailEntries(filters?: {
+  department?: string;
+  status?: string;
+  priority?: string;
+}): Promise<MailEntryRecord[]> {
+  const url = new URL(`${API_BASE_URL}/admin/mail-intake`);
+  if (filters?.department) url.searchParams.set("department", filters.department);
+  if (filters?.status) url.searchParams.set("status", filters.status);
+  if (filters?.priority) url.searchParams.set("priority", filters.priority);
+  const response = await fetchWithRefresh(url.toString(), {
+    headers: buildHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Fehler beim Laden des Posteingangs"));
+  }
+  return response.json();
+}
+
+export async function createMailEntry(payload: {
+  title: string;
+  sender?: string | null;
+  received_date: string;
+  department?: string;
+  priority?: string;
+}): Promise<MailEntryRecord> {
+  const response = await fetchWithRefresh(`${API_BASE_URL}/admin/mail-intake`, {
+    method: "POST",
+    headers: buildHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Brief konnte nicht erfasst werden"));
+  }
+  return response.json();
+}
+
+export async function updateMailEntry(
+  id: number,
+  payload: {
+    status?: string;
+    department?: string;
+    priority?: string;
+    assigned_to_user_id?: number | null;
+    handler_note?: string;
+  }
+): Promise<MailEntryRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/mail-intake/${id}`,
+    {
+      method: "PATCH",
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Brief konnte nicht aktualisiert werden"));
+  }
+  return response.json();
+}
+
+export async function uploadMailScan(id: number, file: File): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/mail-intake/${id}/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Scan-Upload fehlgeschlagen"));
+  }
+}
+
+export function getMailScanUrl(id: number): string {
+  return `${API_BASE_URL}/admin/mail-intake/${id}/scan`;
+}
+
+export async function classifyMailEntry(id: number): Promise<MailEntryRecord> {
+  const response = await fetchWithRefresh(
+    `${API_BASE_URL}/admin/mail-intake/${id}/classify`,
+    {
+      method: "POST",
+      headers: buildHeaders(),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "AI-Klassifizierung fehlgeschlagen"));
+  }
+  return response.json();
 }

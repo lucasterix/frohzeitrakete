@@ -1,4 +1,5 @@
 from app.models.announcement import Announcement
+from app.models.mail_entry import MailEntry
 from app.models.budget_inquiry import BudgetInquiry
 from app.models.call_request import CallRequest
 from app.models.it_ticket import ItTicket
@@ -9,6 +10,7 @@ from app.models.leistungsnachweis_office_state import LeistungsnachweisOfficeSta
 from app.models.notification import Notification
 from app.models.payroll_entry import PayrollEntry
 from app.models.password_reset_token import PasswordResetToken
+from app.models.remote_signature import RemoteSignature
 from app.models.patient_extras import PatientExtras
 from app.models.patient_intake import PatientIntakeRequest
 from app.models.pflegehilfsmittel import Pflegehilfsmittel
@@ -29,6 +31,7 @@ from app.models.vacation_request import VacationRequest
 
 __all__ = [
     "Announcement",
+    "MailEntry",
     "BudgetInquiry",
     "CallRequest",
     "Entry",
@@ -39,6 +42,7 @@ __all__ = [
     "Notification",
     "PayrollEntry",
     "PasswordResetToken",
+    "RemoteSignature",
     "PatientExtras",
     "PatientIntakeRequest",
     "Pflegehilfsmittel",

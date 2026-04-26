@@ -22,6 +22,9 @@ export default function UserEditForm({ user, onUpdated }: Props) {
   const [siteLeaderId, setSiteLeaderId] = useState<number | null>(
     user.site_leader_id ?? null
   );
+  const [department, setDepartment] = useState<string | null>(
+    user.department ?? null
+  );
   const [password, setPassword] = useState("");
 
   const [siteLeaders, setSiteLeaders] = useState<User[]>([]);
@@ -48,6 +51,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
       pattiPersonId !== user.patti_person_id ||
       hasCompanyCar !== (user.has_company_car ?? false) ||
       siteLeaderId !== (user.site_leader_id ?? null) ||
+      department !== (user.department ?? null) ||
       password.trim() !== ""
     );
   }, [
@@ -58,6 +62,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
     pattiPersonId,
     hasCompanyCar,
     siteLeaderId,
+    department,
     password,
     user,
   ]);
@@ -77,6 +82,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
         patti_person_id: pattiPersonId,
         has_company_car: hasCompanyCar,
         site_leader_id: siteLeaderId,
+        department,
         password: password.trim() === "" ? null : password,
       });
 
@@ -100,6 +106,7 @@ export default function UserEditForm({ user, onUpdated }: Props) {
     setPattiPersonId(user.patti_person_id);
     setHasCompanyCar(user.has_company_car ?? false);
     setSiteLeaderId(user.site_leader_id ?? null);
+    setDepartment(user.department ?? null);
     setPassword("");
     setSuccessMessage("");
     setErrorMessage("");
@@ -170,6 +177,27 @@ export default function UserEditForm({ user, onUpdated }: Props) {
                   <option value="standortleiter">standortleiter</option>
                   <option value="buchhaltung">buchhaltung</option>
                   <option value="admin">admin</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Abteilung
+                </span>
+                <select
+                  value={department ?? ""}
+                  onChange={(e) =>
+                    setDepartment(e.target.value === "" ? null : e.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none transition focus:border-slate-500"
+                >
+                  <option value="">— keine Zuordnung —</option>
+                  <option value="buero">Büro</option>
+                  <option value="tagesgeschaeft">Tagesgeschäft</option>
+                  <option value="assistenz_gf">Assistenz der Geschäftsführung</option>
+                  <option value="geschaeftsfuehrung">Geschäftsführung</option>
+                  <option value="abrechnung">Abrechnung</option>
+                  <option value="mahnwesen">Mahnwesen</option>
                 </select>
               </label>
 

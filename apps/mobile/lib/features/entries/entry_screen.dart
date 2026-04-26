@@ -46,6 +46,13 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   bool _isSaving = false;
   String? _lateEntryReason;
 
+  // Vertretungs-Suche im Einsatz-Erfassen
+  bool _showSubstitutionSearch = false;
+  final _substitutionSearchCtrl = TextEditingController();
+  Timer? _substitutionDebounce;
+  List<MobilePatient>? _substitutionResults;
+  bool _substitutionLoading = false;
+
   // Trip tracking state
   bool _isFirstEntryToday = false;
   // _tripInfoLoaded gibt es nicht mehr — die Trip-Sektion rendert sofort
@@ -68,7 +75,39 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
   @override
   void dispose() {
     _categoryLabelCtrl.dispose();
+    _substitutionSearchCtrl.dispose();
+    _substitutionDebounce?.cancel();
     super.dispose();
+  }
+
+  void _onSubstitutionSearch(String query) {
+    _substitutionDebounce?.cancel();
+    if (query.trim().length < 2) {
+      setState(() {
+        _substitutionResults = null;
+        _substitutionLoading = false;
+      });
+      return;
+    }
+    _substitutionDebounce = Timer(const Duration(milliseconds: 400), () {
+      _runSubstitutionSearch(query);
+    });
+  }
+
+  Future<void> _runSubstitutionSearch(String query) async {
+    setState(() => _substitutionLoading = true);
+    try {
+      final repo = ref.read(patientRepositoryProvider);
+      final results = await repo.searchPatients(query);
+      if (!mounted) return;
+      setState(() {
+        _substitutionResults = results;
+        _substitutionLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _substitutionLoading = false);
+    }
   }
 
   Future<void> _loadTripInfo() async {
@@ -510,6 +549,8 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
                     _label('Patient'),
                     const SizedBox(height: 8),
                     _buildPatientDropdown(),
+                    const SizedBox(height: 10),
+                    _buildSubstitutionSearch(),
                   ] else if (_entryType == EntryType.homeCommute) ...[
                     _label('Start-Adresse (Patient oder frei)'),
                     const SizedBox(height: 8),
@@ -1102,6 +1143,160 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
     );
   }
 
+  Widget _buildSubstitutionSearch() {
+    const green = Color(0xFF4F8A5B);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            setState(() {
+              _showSubstitutionSearch = !_showSubstitutionSearch;
+              if (!_showSubstitutionSearch) {
+                _substitutionSearchCtrl.clear();
+                _substitutionResults = null;
+                _substitutionLoading = false;
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _showSubstitutionSearch
+                  ? green.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _showSubstitutionSearch ? green : Colors.black26,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.swap_horiz,
+                  size: 18,
+                  color: _showSubstitutionSearch ? green : Colors.black54,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Vertretung: Anderen Patienten suchen',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _showSubstitutionSearch ? green : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_showSubstitutionSearch) ...[
+          const SizedBox(height: 10),
+          TextField(
+            controller: _substitutionSearchCtrl,
+            onChanged: _onSubstitutionSearch,
+            decoration: InputDecoration(
+              hintText: 'Name des Patienten eingeben…',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _substitutionSearchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () {
+                        _substitutionSearchCtrl.clear();
+                        setState(() {
+                          _substitutionResults = null;
+                          _substitutionLoading = false;
+                        });
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: Colors.black12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+            ),
+          ),
+          if (_substitutionLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (_substitutionResults != null &&
+              _substitutionResults!.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Keine Patienten gefunden.',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            )
+          else if (_substitutionResults != null)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _substitutionResults!.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 14, endIndent: 14),
+                itemBuilder: (context, index) {
+                  final p = _substitutionResults![index];
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      p.displayName,
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    subtitle: p.city != null
+                        ? Text(p.city!,
+                            style: const TextStyle(fontSize: 12))
+                        : null,
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: Colors.black38,
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedPatient = p;
+                        _showSubstitutionSearch = false;
+                        _substitutionSearchCtrl.clear();
+                        _substitutionResults = null;
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildPatientDropdown() {
     final patientsAsync = ref.watch(patientsProvider);
 
@@ -1120,7 +1315,7 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
         ),
       ),
       data: (patients) {
-        if (patients.isEmpty) {
+        if (patients.isEmpty && _selectedPatient == null) {
           return _selectBoxPlaceholder(
             const Text(
               'Keine Patienten verfügbar',
@@ -1129,13 +1324,30 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           );
         }
 
+        // Build combined list: own patients + substitution patient if not already in list
+        final allItems = List<MobilePatient>.from(patients);
+        final isSubstitution = _selectedPatient != null &&
+            !patients.any((p) => p.patientId == _selectedPatient!.patientId);
+        if (isSubstitution) {
+          allItems.insert(0, _selectedPatient!);
+        }
+
         // Fallback: wenn preselected patient nicht in Liste ist, ersten nehmen
         final selected = _selectedPatient != null &&
-                patients.any((p) => p.patientId == _selectedPatient!.patientId)
-            ? patients.firstWhere(
+                allItems.any((p) => p.patientId == _selectedPatient!.patientId)
+            ? allItems.firstWhere(
                 (p) => p.patientId == _selectedPatient!.patientId,
               )
-            : patients.first;
+            : allItems.isNotEmpty ? allItems.first : null;
+
+        if (selected == null) {
+          return _selectBoxPlaceholder(
+            const Text(
+              'Keine Patienten verfügbar',
+              style: TextStyle(color: Colors.black54),
+            ),
+          );
+        }
 
         // Einmalig synchronisieren
         if (_selectedPatient?.patientId != selected.patientId) {
@@ -1148,30 +1360,57 @@ class _EntryScreenState extends ConsumerState<EntryScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.black12),
+            border: Border.all(color: isSubstitution ? const Color(0xFF4F8A5B) : Colors.black12),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: DropdownButton<int>(
-            value: selected.patientId,
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            style: const TextStyle(fontSize: 17, color: Colors.black87),
-            items: patients
-                .map(
-                  (p) => DropdownMenuItem(
-                    value: p.patientId,
-                    child: Text(p.displayName),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButton<int>(
+                value: selected.patientId,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                style: const TextStyle(fontSize: 17, color: Colors.black87),
+                items: allItems
+                    .map(
+                      (p) => DropdownMenuItem(
+                        value: p.patientId,
+                        child: Text(
+                          isSubstitution && p.patientId == _selectedPatient!.patientId
+                              ? '${p.displayName} (Vertretung)'
+                              : p.displayName,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (id) {
+                  if (id != null) {
+                    setState(() {
+                      _selectedPatient =
+                          allItems.firstWhere((p) => p.patientId == id);
+                    });
+                  }
+                },
+              ),
+              if (isSubstitution)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_horiz, size: 14, color: const Color(0xFF4F8A5B)),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Vertretungs-Patient ausgewählt',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF4F8A5B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                )
-                .toList(),
-            onChanged: (id) {
-              if (id != null) {
-                setState(() {
-                  _selectedPatient =
-                      patients.firstWhere((p) => p.patientId == id);
-                });
-              }
-            },
+                ),
+            ],
           ),
         );
       },

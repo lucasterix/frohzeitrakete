@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/models/mobile_patient.dart';
@@ -38,6 +40,10 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   bool _isSaving = false;
   String? _error;
   final GlobalKey _canvasKey = GlobalKey();
+
+  // Remote signature link state
+  bool _isGeneratingLink = false;
+  String? _remoteSignUrl;
 
   bool get _isEmpty => _strokes.isEmpty && _currentStroke.isEmpty;
 
@@ -137,6 +143,57 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
         _isSaving = false;
         _error = 'Unerwarteter Fehler: $e';
       });
+    }
+  }
+
+  Future<void> _generateRemoteLink() async {
+    setState(() => _isGeneratingLink = true);
+    try {
+      final client = ref.read(apiClientProvider);
+      final response = await client.dio.post(
+        '/mobile/remote-signatures',
+        data: {
+          'patient_id': widget.patient.patientId,
+          'patient_name': widget.patient.displayName,
+          'document_type': widget.documentType.apiValue,
+          'description': widget.documentTitle,
+        },
+      );
+      if (!mounted) return;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final url = response.data['url'] as String;
+        setState(() {
+          _remoteSignUrl = url;
+          _isGeneratingLink = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Link konnte nicht erstellt werden.';
+          _isGeneratingLink = false;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Fehler beim Erstellen des Links: $e';
+        _isGeneratingLink = false;
+      });
+    }
+  }
+
+  Future<void> _shareViaWhatsApp(String url) async {
+    final text = 'Bitte unterschreiben Sie hier: $url';
+    final whatsappUrl = Uri.parse(
+      'whatsapp://send?text=${Uri.encodeComponent(text)}',
+    );
+    if (await canLaunchUrl(whatsappUrl)) {
+      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+    } else {
+      // Fallback: normaler Share-Intent
+      final fallbackUrl = Uri.parse(
+        'https://wa.me/?text=${Uri.encodeComponent(text)}',
+      );
+      await launchUrl(fallbackUrl, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -329,6 +386,134 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            // Remote Signature Link section
+            if (_remoteSignUrl == null)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _isGeneratingLink ? null : _generateRemoteLink,
+                  icon: _isGeneratingLink
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.link, size: 18),
+                  label: const Text(
+                    'Patient nicht vor Ort? Link generieren',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: green.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: green.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Color(0xFF4F8A5B), size: 18),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Signatur-Link erstellt!',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF4F8A5B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Schicken Sie diesen Link dem Patienten. '
+                      'Er kann bequem auf dem Handy unterschreiben. '
+                      'Der Link ist 7 Tage gültig.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Text(
+                        _remoteSignUrl!,
+                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(text: _remoteSignUrl!),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Link kopiert!'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy, size: 16),
+                            label: const Text('Kopieren'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _shareViaWhatsApp(_remoteSignUrl!),
+                            icon: const Icon(Icons.send, size: 16),
+                            label: const Text('WhatsApp'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF25D366),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(false);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Einsatz gespeichert. Signatur-Link wurde verschickt.',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Fertig — ohne Unterschrift fortfahren',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

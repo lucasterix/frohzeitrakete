@@ -898,3 +898,47 @@ def mobile_vacation_overview(
         "vacation_dates": [d.isoformat() for d in dates],
         "total_days": len(dates),
     }
+
+
+# ── Remote-Signatur-Link erstellen ──────────────────────────────────────
+
+@router.post("/remote-signatures", status_code=status.HTTP_201_CREATED)
+def mobile_create_remote_signature(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Betreuer erstellt einen Remote-Signatur-Link für einen Patienten."""
+    import secrets
+    from datetime import timedelta
+    from app.models.remote_signature import RemoteSignature
+
+    patient_id = payload.get("patient_id")
+    patient_name = payload.get("patient_name", "")
+    document_type = payload.get("document_type", "leistungsnachweis")
+    description = payload.get("description", "")
+    entry_id = payload.get("entry_id")
+
+    if not patient_id or not patient_name:
+        raise HTTPException(status_code=400, detail="patient_id und patient_name sind erforderlich.")
+
+    token = secrets.token_urlsafe(32)
+    now = datetime.utcnow()
+
+    rs = RemoteSignature(
+        token=token,
+        patient_id=patient_id,
+        patient_name=patient_name,
+        user_id=current_user.id,
+        entry_id=entry_id,
+        document_type=document_type,
+        description=description,
+        status="pending",
+        expires_at=now + timedelta(days=7),
+        created_at=now,
+    )
+    db.add(rs)
+    db.commit()
+
+    url = f"https://admin.froehlichdienste.de/sign/{token}"
+    return {"token": token, "url": url}

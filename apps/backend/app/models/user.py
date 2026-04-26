@@ -45,6 +45,9 @@ class User(Base):
     site_leader_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True
     )
+    # Abteilungs-Zuordnung: buero, tagesgeschaeft, assistenz_gf,
+    # geschaeftsfuehrung, abrechnung, mahnwesen
+    department: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     @property
     def target_hours_per_day(self) -> float | None:

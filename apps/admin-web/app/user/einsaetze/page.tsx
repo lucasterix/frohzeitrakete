@@ -42,6 +42,36 @@ export default function UserEinsaetzePage() {
   const [showSignature, setShowSignature] = useState(false);
   const [savedEntryPatient, setSavedEntryPatient] = useState<Patient | null>(null);
 
+  // Remote signature link
+  const [remoteSignUrl, setRemoteSignUrl] = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+
+  // Substitution search
+  const [showSubSearch, setShowSubSearch] = useState(false);
+  const [subQuery, setSubQuery] = useState("");
+  const [subResults, setSubResults] = useState<Patient[]>([]);
+  const [subLoading, setSubLoading] = useState(false);
+
+  // Debounced substitution search
+  useEffect(() => {
+    if (!showSubSearch || subQuery.trim().length < 2) {
+      setSubResults([]);
+      return;
+    }
+    setSubLoading(true);
+    const timeout = setTimeout(() => {
+      fetchWithRefresh(
+        `${API_BASE_URL}/mobile/patients/search?q=${encodeURIComponent(subQuery)}`,
+        { headers: buildHeaders() }
+      )
+        .then((r) => r.json())
+        .then((data: Patient[]) => setSubResults(data))
+        .catch(() => setSubResults([]))
+        .finally(() => setSubLoading(false));
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [subQuery, showSubSearch]);
+
   const isLate = entryDate < new Date().toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   const minDate = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
@@ -179,9 +209,71 @@ export default function UserEinsaetzePage() {
           <div className="mt-4">
             <SignatureCanvas onSignature={handleSignature} />
           </div>
+          {/* Remote signature link */}
+          {!remoteSignUrl ? (
+            <button
+              onClick={async () => {
+                if (!savedEntryPatient) return;
+                setGeneratingLink(true);
+                try {
+                  const dateStr = entryDate;
+                  const desc = `Einsatz vom ${dateStr}, ${hours}h`;
+                  const res = await fetchWithRefresh(`${API_BASE_URL}/mobile/remote-signatures`, {
+                    method: "POST",
+                    headers: { ...buildHeaders(), "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      patient_id: savedEntryPatient.patient_id,
+                      patient_name: savedEntryPatient.display_name,
+                      document_type: "leistungsnachweis",
+                      description: desc,
+                    }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setRemoteSignUrl(data.url);
+                  }
+                } catch (_) {}
+                setGeneratingLink(false);
+              }}
+              disabled={generatingLink}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {generatingLink ? "Erstelle Link…" : "Patient nicht vor Ort? Signatur-Link generieren"}
+            </button>
+          ) : (
+            <div className="mt-3 space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-xs font-semibold text-emerald-700">
+                Signatur-Link erstellt (7 Tage gueltig):
+              </p>
+              <div className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600 break-all">
+                {remoteSignUrl}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(remoteSignUrl);
+                    setFlash("Link kopiert!");
+                  }}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium hover:bg-slate-50"
+                >
+                  Link kopieren
+                </button>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent("Bitte unterschreiben Sie hier: " + remoteSignUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-lg bg-[#25D366] px-3 py-2 text-center text-xs font-medium text-white hover:bg-[#1DA851]"
+                >
+                  Per WhatsApp teilen
+                </a>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => {
               setShowSignature(false);
+              setRemoteSignUrl(null);
               setFlash("Einsatz gespeichert (ohne Unterschrift).");
               resetForm();
             }}
@@ -256,6 +348,64 @@ export default function UserEinsaetzePage() {
                 </option>
               ))}
             </select>
+            {/* Substitution search */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowSubSearch(!showSubSearch);
+                if (showSubSearch) {
+                  setSubQuery("");
+                  setSubResults([]);
+                }
+              }}
+              className={`mt-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                showSubSearch
+                  ? "border border-emerald-400 bg-emerald-50 text-emerald-700"
+                  : "border border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              <span className="text-sm">&#x21C4;</span> Vertretung: Anderen Patienten suchen
+            </button>
+            {showSubSearch && (
+              <div className="mt-2 space-y-2">
+                <input
+                  value={subQuery}
+                  onChange={(e) => setSubQuery(e.target.value)}
+                  placeholder="Name eingeben (mind. 2 Zeichen)…"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-400"
+                />
+                {subLoading && (
+                  <p className="text-xs text-slate-400">Suche…</p>
+                )}
+                {!subLoading && subQuery.trim().length >= 2 && subResults.length === 0 && (
+                  <p className="text-xs text-slate-400">Keine Patienten gefunden.</p>
+                )}
+                {subResults.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    {subResults.map((p) => (
+                      <li key={p.patient_id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPatientId(p.patient_id);
+                            // Add to patients list if not already there
+                            if (!patients.find((x) => x.patient_id === p.patient_id)) {
+                              setPatients((prev) => [p, ...prev]);
+                            }
+                            setShowSubSearch(false);
+                            setSubQuery("");
+                            setSubResults([]);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        >
+                          {p.display_name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
 
