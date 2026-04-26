@@ -973,16 +973,11 @@ function BezuegeTab({
   );
 }
 
-// Common DATEV reasons-for-absence; displayed with German labels in
-// the absence list. "K" = Krank is the standard.
+// DATEV reasons-for-absence used at Fröhlich Dienste.
 const ABSENCE_REASONS: Record<string, string> = {
   K: "Krank",
-  KK: "Krank Kind",
+  PK: "Kindkrank",
   U: "Urlaub",
-  SU: "Sonderurlaub",
-  M: "Mutterschutz",
-  E: "Elternzeit",
-  UN: "Unbezahlter Urlaub",
 };
 
 function describeReason(id: string | null): string {
@@ -1043,14 +1038,12 @@ function nextIsoDay(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Defaults per absence kind: which DATEV reason + standard salary-type.
-// Krank: Lohnart 1650 (Lohnfortzahlung Std.) — adjust per Mandant if needed.
-// Urlaub: Lohnart leeren / 0 — DATEV nimmt sie aus dem Reason ab.
-const ABSENCE_KIND_DEFAULTS: Record<string, { reason: string; salaryType: string; label: string }> = {
-  krank: { reason: "K", salaryType: "1650", label: "Krank" },
-  urlaub: { reason: "U", salaryType: "1650", label: "Urlaub" },
-  krank_kind: { reason: "KK", salaryType: "1650", label: "Krank Kind" },
-  sonder: { reason: "SU", salaryType: "1650", label: "Sonderurlaub" },
+// Three absence kinds Fröhlich Dienste uses. Daniel: Stunden + Lohnart
+// kommen aus dem DATEV-Mitarbeiterstamm; das UI braucht sie nicht abzufragen.
+const ABSENCE_KIND_DEFAULTS: Record<string, { reason: string; label: string }> = {
+  krank: { reason: "K", label: "Krank" },
+  kindkrank: { reason: "PK", label: "Kindkrank" },
+  urlaub: { reason: "U", label: "Urlaub" },
 };
 
 type AbsenceKind = keyof typeof ABSENCE_KIND_DEFAULTS;
@@ -1067,18 +1060,10 @@ function AbwesenheitTab({
   const [kind, setKind] = useState<AbsenceKind>("krank");
   const [start, setStart] = useState<string>(new Date().toISOString().slice(0, 10));
   const [end, setEnd] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [reason, setReason] = useState<string>("K");
-  const [hoursPerDay, setHoursPerDay] = useState<string>("8");
-  const [salaryType, setSalaryType] = useState<string>("1650");
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState("");
 
-  const switchKind = (k: AbsenceKind) => {
-    const d = ABSENCE_KIND_DEFAULTS[k];
-    setKind(k);
-    setReason(d.reason);
-    setSalaryType(d.salaryType);
-  };
+  const reason = ABSENCE_KIND_DEFAULTS[kind].reason;
 
   const periods = useMemo(() => groupAbsencesByPeriod(profile.absences), [profile.absences]);
   const sickDaysCurrentMonth = useMemo(() => {
@@ -1115,9 +1100,6 @@ function AbwesenheitTab({
             start_date: start,
             end_date: end,
             reason_for_absence_id: reason,
-            hours_per_day: Number(hoursPerDay) || 8,
-            days_per_day: 1.0,
-            salary_type_id: Number(salaryType) || 1650,
           },
         }
       );
@@ -1135,8 +1117,7 @@ function AbwesenheitTab({
   const submitLabel =
     kind === "krank" ? "Krankmeldung erfassen"
       : kind === "urlaub" ? "Urlaub eintragen"
-      : kind === "krank_kind" ? "Krankheit Kind erfassen"
-      : "Sonderurlaub eintragen";
+      : "Kindkrank erfassen";
 
   return (
     <div className="space-y-6 px-6 py-5">
@@ -1208,7 +1189,7 @@ function AbwesenheitTab({
           {(Object.keys(ABSENCE_KIND_DEFAULTS) as AbsenceKind[]).map((k) => (
             <button
               key={k}
-              onClick={() => switchKind(k)}
+              onClick={() => setKind(k)}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 kind === k
                   ? "bg-slate-900 text-white"
@@ -1221,8 +1202,9 @@ function AbwesenheitTab({
         </div>
 
         <p className="mb-3 text-xs text-slate-500">
-          Ein Eintrag pro Tag wird an DATEV gesendet (auch Wochenenden — DATEV
-          ignoriert dort automatisch). {spanDays > 0 ? `Zeitraum: ${spanDays} Tag${spanDays === 1 ? "" : "e"}.` : ""}
+          {spanDays > 0
+            ? `Zeitraum: ${spanDays} Tag${spanDays === 1 ? "" : "e"}.`
+            : "Bitte Datumsbereich wählen."}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1246,47 +1228,7 @@ function AbwesenheitTab({
               className={inputCls}
             />
           </Field>
-          <Field label="Stunden / Tag">
-            <input
-              type="number"
-              step="0.5"
-              min="0"
-              max="24"
-              value={hoursPerDay}
-              onChange={(e) => setHoursPerDay(e.target.value)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Lohnart">
-            <input
-              type="number"
-              value={salaryType}
-              onChange={(e) => setSalaryType(e.target.value)}
-              className={`${inputCls} font-mono`}
-            />
-          </Field>
         </div>
-
-        <details className="mt-3 text-xs text-slate-500">
-          <summary className="cursor-pointer hover:text-slate-700">
-            Anderer Grund (z.B. Mutterschutz, Elternzeit, Unbezahlt)
-          </summary>
-          <div className="mt-2">
-            <Field label="DATEV-Reason-Code">
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className={inputCls}
-              >
-                {Object.entries(ABSENCE_REASONS).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {id} – {label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </details>
 
         {info ? (
           <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
